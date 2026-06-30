@@ -1,0 +1,7 @@
+pack.sh
+docker.sh
+eaglerX-1.8-server.zip
+__pycache__/
+web/
+server/
+data/

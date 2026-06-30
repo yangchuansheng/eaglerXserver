@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EaglercraftX 管理面板</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='8' fill='%231a1a2e'/%3E%3Crect x='6' y='6' width='52' height='52' rx='6' fill='%2316213e'/%3E%3Ctext x='32' y='46' text-anchor='middle' font-size='36' font-weight='bold' font-family='monospace' fill='%23e94560'%3EE%3C/text%3E%3Ccircle cx='48' cy='20' r='8' fill='%2339ff14'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+<div id="header">
+  <div class="header-left">
+    <div class="header-logo"><span>E</span></div>
+    <div>
+      <h1>EaglercraftX 控制台</h1>
+      <p>Server Command Center</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="header-status">
+      <span id="ver-tag">--</span>
+      <span id="status-dot" class="off"></span>
+      <span id="status-text">未连接</span>
+    </div>
+    <button id="logout-btn" type="button" onclick="logout()">退出登录</button>
+  </div>
+</div>
+
+<div id="wrap">
+  <div id="left">
+    <div class="hero-card">
+      <div>
+        <span class="eyebrow">Minecraft Web Server</span>
+        <h2>服务器控制中心</h2>
+        <p>管理玩家、世界、规则和 Dynmap；所有操作都会通过 RCON 写入控制台日志。</p>
+      </div>
+      <div class="hero-actions">
+        <button onclick="send('list')">刷新玩家</button>
+        <button onclick="send('save-all')">保存世界</button>
+      </div>
+    </div>
+    <div class="console-wrap">
+      <div class="console-title"><span>终端输出</span><span class="console-hint">Enter 发送命令</span></div>
+      <div id="console"><span class="info">EaglercraftX 管理控制台已就绪</span></div>
+      <div id="cmd-bar">
+        <span class="cmd-prefix">/</span>
+        <input id="cmd" placeholder="输入 Minecraft / Bukkit / Paper 命令，回车发送..." onkeydown="if(event.key==='Enter'){exec()}">
+        <button onclick="exec()">发送</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="right">
+
+    <div class="card" id="card-world">
+      <div class="card-head"><span class="card-title">🌍 世界状态</span></div>
+      <div class="card-note">显示当前世界的版本、在线人数、天气、时间和时段；修改命令后会自动刷新。</div>
+      <div id="world-info"><div class="empty-state">登录后显示世界基础信息</div></div>
+    </div>
+
+    <div class="card" id="card-players">
+      <div class="card-head">
+        <span class="card-title">🟢 在线玩家</span>
+        <span class="card-badge" id="player-count">0</span>
+      </div>
+      <div id="players"><div class="empty-state">加载中...</div></div>
+    </div>
+
+    <div class="card" id="card-tps">
+      <div class="card-head"><span class="card-title">⚡ TPS</span></div>
+      <div id="tps-bars"><div class="empty-state">--</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-title">🌤️ 天气</span></div>
+      <div class="qbtns">
+        <button onclick="send('weather clear')">晴天</button>
+        <button onclick="send('weather rain')">下雨</button>
+        <button onclick="send('weather thunder')">雷暴</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-title">⏰ 时间</span></div>
+      <div class="qbtns">
+        <button onclick="setTimeValue('0','日出')">日出</button>
+        <button onclick="setTimeValue('6000','正午')">正午</button>
+        <button onclick="setTimeValue('13000','黄昏')">黄昏</button>
+        <button onclick="setTimeValue('18000','午夜')">午夜</button>
+        <button onclick="setTimeValue()">自定义时间</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-title">⚔️ 难度</span></div>
+      <div class="qbtns">
+        <button onclick="setDifficulty('peaceful','和平')">和平</button>
+        <button onclick="setDifficulty('easy','简单')">简单</button>
+        <button onclick="setDifficulty('normal','普通')">普通</button>
+        <button onclick="setDifficulty('hard','困难')">困难</button>
+        <button onclick="setDifficulty()">自定义难度</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-title">🎮 模式</span></div>
+      <div class="qbtns">
+        <button onclick="setDefaultGamemode('survival','默认生存')">默认生存</button>
+        <button onclick="setDefaultGamemode('creative','默认创造')">默认创造</button>
+        <button onclick="setDefaultGamemode('adventure','默认冒险')">默认冒险</button>
+        <button onclick="setDefaultGamemode('spectator','默认旁观')">默认旁观</button>
+      </div>
+    </div>
+
+    <div class="card" id="card-rules">
+      <div class="card-head"><span class="card-title">📜 游戏规则</span></div>
+      <div class="rule-list">
+        <div class="rule-row"><span>昼夜循环</span><div class="toggle" data-rule="doDaylightCycle" onclick="toggleRule('doDaylightCycle',this)"><input type="checkbox" checked><span class="slider"></span></div></div>
+        <div class="rule-row"><span>天气循环</span><div class="toggle" data-rule="doWeatherCycle" onclick="toggleRule('doWeatherCycle',this)"><input type="checkbox" checked><span class="slider"></span></div></div>
+        <div class="rule-row"><span>火焰蔓延</span><div class="toggle" data-rule="doFireTick" onclick="toggleRule('doFireTick',this)"><input type="checkbox" checked><span class="slider"></span></div></div>
+        <div class="rule-row"><span>怪物生成</span><div class="toggle" data-rule="doMobSpawning" onclick="toggleRule('doMobSpawning',this)"><input type="checkbox" checked><span class="slider"></span></div></div>
+        <div class="rule-row"><span>怪物掉落</span><div class="toggle" data-rule="doMobLoot" onclick="toggleRule('doMobLoot',this)"><input type="checkbox" checked><span class="slider"></span></div></div>
+        <div class="rule-row"><span>实体掉落</span><div class="toggle" data-rule="doEntityDrops" onclick="toggleRule('doEntityDrops',this)"><input type="checkbox" checked><span class="slider"></span></div></div>
+        <div class="rule-row"><span>方块掉落</span><div class="toggle" data-rule="doTileDrops" onclick="toggleRule('doTileDrops',this)"><input type="checkbox" checked><span class="slider"></span></div></div>
+        <div class="rule-row"><span>死亡保留背包</span><div class="toggle" data-rule="keepInventory" onclick="toggleRule('keepInventory',this)"><input type="checkbox"><span class="slider"></span></div></div>
+        <div class="rule-row"><span>苦力怕/末影人破坏方块</span><div class="toggle" data-rule="mobGriefing" onclick="toggleRule('mobGriefing',this)"><input type="checkbox" checked><span class="slider"></span></div></div>
+        <div class="rule-row"><span>TNT 爆炸破坏方块</span><div class="toggle" id="tnt-unsupported-toggle" onclick="toggleUnsupported(this,'TNT 爆炸不是原版 gamerule，请改 server/spigot 配置后重启')"><input type="checkbox" checked><span class="slider"></span></div></div>
+        <div class="rule-row"><span>自然回血</span><div class="toggle" data-rule="naturalRegeneration" onclick="toggleRule('naturalRegeneration',this)"><input type="checkbox" checked><span class="slider"></span></div></div>
+        <div class="rule-row"><span>PVP</span><div class="toggle" id="pvp-unsupported-toggle" onclick="toggleUnsupported(this,'PVP 不是原版 gamerule，请改 server.properties 后重启')"><input type="checkbox" checked><span class="slider"></span></div></div>
+        <div class="rule-row"><span>命令方块输出</span><div class="toggle" data-rule="commandBlockOutput" onclick="toggleRule('commandBlockOutput',this)"><input type="checkbox" checked><span class="slider"></span></div></div>
+        <div class="rule-row"><span>显示死亡信息</span><div class="toggle" data-rule="showDeathMessages" onclick="toggleRule('showDeathMessages',this)"><input type="checkbox" checked><span class="slider"></span></div></div>
+        <div class="rule-row"><span>自动保存</span><div class="toggle" id="autosave-toggle" onclick="toggleSave(this)"><input type="checkbox" checked><span class="slider"></span></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-title">👥 玩家管理</span></div>
+      <div class="qbtns">
+        <button onclick="send('list')">在线列表</button>
+        <button onclick="locatePlayerInfo()">查看坐标</button>
+        <button onclick="messagePlayer()">对玩家说话</button>
+        <button onclick="opPlayer()">设为 OP</button>
+        <button onclick="deopPlayer()">取消 OP</button>
+        <button onclick="setPlayerGamemode('survival','生存')">玩家生存</button>
+        <button onclick="setPlayerGamemode('creative','创造')">玩家创造</button>
+        <button onclick="setPlayerGamemode('adventure','冒险')">玩家冒险</button>
+        <button onclick="setPlayerGamemode('spectator','旁观')">玩家旁观</button>
+        <button onclick="clearPlayerInventory()">清空背包</button>
+        <button onclick="killPlayer()">击杀玩家</button>
+        <button onclick="kickPlayer()">踢出</button>
+        <button onclick="banPlayer()">封禁</button>
+        <button onclick="pardonPlayer()">解封</button>
+      </div>
+    </div>
+
+    <div class="card" id="card-whitelist">
+      <div class="card-head"><span class="card-title">📋 白名单 &amp; 封禁</span></div>
+      <div class="rule-list">
+        <div class="rule-row"><span>白名单</span><div class="toggle" id="whitelist-toggle" onclick="toggleWL(this)"><input type="checkbox"><span class="slider"></span></div></div>
+      </div>
+      <div class="qbtns mt6">
+        <button onclick="whitelistAddPlayer()">加白名单</button>
+        <button onclick="whitelistRemovePlayer()">删白名单</button>
+        <button onclick="banIpAddress()">封禁 IP</button>
+        <button onclick="pardonIpAddress()">解封 IP</button>
+        <button onclick="send('whitelist reload')">重载白名单</button>
+        <button onclick="send('whitelist list')">白名单列表</button>
+        <button onclick="send('banlist')">封禁列表</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-title">🔧 世界 &amp; 传送</span></div>
+      <div class="qbtns">
+        <button onclick="send('seed')">种子</button>
+        <button onclick="send('save-all')">保存世界</button>
+        <button onclick="send('worldborder get')">查看边界</button>
+        <button onclick="setWorldBorder()">设置边界</button>
+        <button onclick="setWorldSpawnCommand()">设世界出生</button>
+        <button onclick="setPlayerSpawnpointCommand()">设重生点</button>
+        <button onclick="teleportPlayerToPlayer()">TP 玩家→玩家</button>
+        <button onclick="teleportPlayerToCoords()">TP 到玩家/坐标</button>
+        <button onclick="teleportPlayerToTarget()">TP 玩家→目标</button>
+        <button onclick="send('toggledownfall')">切换雨/晴</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-title">🧰 命令工坊</span></div>
+      <div class="card-note">把高频原版命令做成了参数面板：发物品、效果、经验、附魔、召唤、方块操作都能点；更复杂的命令仍可直接在左侧控制台输入。</div>
+      <div class="qbtns">
+        <button onclick="giveItemToPlayer()">发放物品</button>
+        <button onclick="applyStatusEffect()">状态效果</button>
+        <button onclick="grantExperience()">经验 / 等级</button>
+        <button onclick="enchantPlayerItem()">附魔手持</button>
+        <button onclick="summonEntity()">召唤实体</button>
+        <button onclick="setBlockCommand()">放置方块</button>
+        <button onclick="fillAreaCommand()">区域填充</button>
+        <button onclick="runCustomCommandDialog()">自定义命令</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-title">📊 信息</span></div>
+      <div class="qbtns">
+        <button onclick="send('tps')">TPS</button>
+        <button onclick="send('version')">版本</button>
+        <button onclick="send('plugins')">插件</button>
+        <button onclick="broadcast()">广播</button>
+        <button onclick="messagePlayer()">私聊玩家</button>
+        <button onclick="restartServer()">重启服务器</button>
+        <button onclick="send('reload')">重载插件</button>
+        <button class="danger-btn" onclick="stopServer()">关服</button>
+      </div>
+    </div>
+
+    <div class="card" id="card-config">
+      <div class="card-head"><span class="card-title">⚙️ 服务器设置</span></div>
+      <div class="card-note">以下设置会写入 <code>server.properties</code>，通常需要重启服务器后生效。</div>
+      <div class="qbtns setting-restart-row">
+        <button onclick="restartServer()">保存后重启服务器</button>
+      </div>
+      <div class="rule-list setting-list">
+        <div class="rule-row"><span>PVP</span><div class="toggle" data-config-key="pvp" onclick="toggleConfigBool(this,'PVP 设置已写入配置，重启后生效')"><input type="checkbox" checked><span class="slider"></span></div></div>
+        <div class="rule-row"><span>允许飞行</span><div class="toggle" data-config-key="allow-flight" onclick="toggleConfigBool(this,'允许飞行设置已写入配置，重启后生效')"><input type="checkbox"><span class="slider"></span></div></div>
+        <div class="rule-row"><span>命令方块</span><div class="toggle" data-config-key="enable-command-block" onclick="toggleConfigBool(this,'命令方块设置已写入配置，重启后生效')"><input type="checkbox"><span class="slider"></span></div></div>
+        <div class="rule-row"><span>怪物生成</span><div class="toggle" data-config-key="spawn-monsters" onclick="toggleConfigBool(this)"><input type="checkbox" checked><span class="slider"></span></div></div>
+        <div class="rule-row"><span>动物生成</span><div class="toggle" data-config-key="spawn-animals" onclick="toggleConfigBool(this)"><input type="checkbox" checked><span class="slider"></span></div></div>
+        <div class="rule-row"><span>NPC 生成</span><div class="toggle" data-config-key="spawn-npcs" onclick="toggleConfigBool(this)"><input type="checkbox" checked><span class="slider"></span></div></div>
+        <div class="rule-row"><span>极限模式</span><div class="toggle" data-config-key="hardcore" onclick="toggleConfigBool(this,'极限模式设置已写入配置，重启后生效')"><input type="checkbox"><span class="slider"></span></div></div>
+      </div>
+      <div class="setting-grid mt6">
+        <label class="setting-field">
+          <span>MOTD</span>
+          <div class="setting-actions">
+            <input id="cfg-motd" class="setting-input" placeholder="服务器公告 / MOTD">
+            <button class="pill-btn" onclick="saveConfigField('motd','cfg-motd','MOTD 已写入配置，重启后生效')">保存</button>
+          </div>
+        </label>
+        <label class="setting-field">
+          <span>最大玩家数</span>
+          <div class="setting-actions">
+            <input id="cfg-max-players" class="setting-input" type="number" min="1" max="200" placeholder="20">
+            <button class="pill-btn" onclick="saveConfigField('max-players','cfg-max-players')">保存</button>
+          </div>
+        </label>
+        <label class="setting-field">
+          <span>视距</span>
+          <div class="setting-actions">
+            <input id="cfg-view-distance" class="setting-input" type="number" min="2" max="32" placeholder="4">
+            <button class="pill-btn" onclick="saveConfigField('view-distance','cfg-view-distance')">保存</button>
+          </div>
+        </label>
+        <label class="setting-field">
+          <span>出生点保护</span>
+          <div class="setting-actions">
+            <input id="cfg-spawn-protection" class="setting-input" type="number" min="0" max="128" placeholder="16">
+            <button class="pill-btn" onclick="saveConfigField('spawn-protection','cfg-spawn-protection')">保存</button>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <div class="card" id="card-seedmap">
+      <div class="card-head"><span class="card-title">🗺️ 地图</span></div>
+      <div class="card-note">Dynmap 看当前世界；下面会直接显示世界种子，并提供 mcseedmap.net 外部链接。原生结构查找结果仍然会直接列在面板里。</div>
+      <div class="dynmap-row">
+        <div class="toggle" onclick="toggleDynmap()">
+          <input type="checkbox" id="dynmap-toggle">
+          <span class="slider"></span>
+        </div>
+        <span class="dynmap-label">Dynmap 地图</span>
+      </div>
+      <div class="dynmap-container">
+        <iframe id="dynmap-frame"></iframe>
+        <button class="dynmap-full-btn" id="dynmap-full-btn" onclick="fullscreenDynmap()">全屏</button>
+      </div>
+      <div class="seedmap-panel">
+        <div class="seedmap-title">Seed Map / 世界种子</div>
+        <div class="seedmap-value" id="seed-value">未读取</div>
+        <div class="seedmap-hint" id="seed-hint">登录后自动读取，可一键打开 mcseedmap.net；点“搜索附近”会弹出悬浮框输入坐标</div>
+        <div class="seedmap-link-box mt6">
+          <div class="seedmap-link-head">
+            <span>外部 Seed Map</span>
+            <span class="seedmap-link-version" id="seedmap-version-tag">MC --</span>
+          </div>
+          <a id="seedmap-link" class="seedmap-link disabled" href="javascript:void(0)" target="_blank" rel="noopener noreferrer">读取种子后可在新标签页打开 mcseedmap.net</a>
+        </div>
+        <div class="qbtns mt6 seedmap-actions">
+          <button id="seed-copy-btn" onclick="copyWorldSeed()" disabled>复制种子</button>
+          <button id="seed-open-btn" onclick="openSeedMapInNewTab()" disabled>打开 Seed Map</button>
+        </div>
+        <div class="qbtns mt6 seedmap-search-actions">
+          <button id="seed-search-btn" onclick="openStructureSearchDialog()" disabled>搜索附近</button>
+          <button id="seed-last-result-btn" onclick="openLatestStructureResults()" disabled>查看最近结果</button>
+        </div>
+        <div class="seedmap-inline-summary mt6">
+          <span class="seedmap-status">结构搜索会在悬浮框中进行，主面板这里只保留种子和地图入口</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div id="modal-overlay" class="hidden">
+  <div id="modal-box">
+    <div id="modal-title">RCON 认证</div>
+    <div id="modal-body">
+      <p>请输入 RCON 密码以连接服务器</p>
+      <input type="password" id="modal-pw" placeholder="密码..." onkeydown="if(event.key==='Enter')modalConfirm()">
+      <div id="modal-btns">
+        <button class="btn-cancel" onclick="modalCancel()">取消</button>
+        <button class="btn-ok" onclick="modalConfirm()">确定</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="action-overlay" class="hidden" onclick="actionDialogBackdrop(event)">
+  <div id="action-box">
+    <div class="dialog-head">
+      <div>
+        <div class="dialog-kicker" id="action-kicker">快捷操作</div>
+        <div class="dialog-title" id="action-title">输入参数</div>
+      </div>
+      <button class="dialog-close" type="button" onclick="actionDialogCancel()">×</button>
+    </div>
+    <div class="dialog-body">
+      <p id="action-desc">请填写命令参数</p>
+      <form id="action-form" onsubmit="submitActionDialog(event)">
+        <div id="action-fields"></div>
+        <div id="action-preview-wrap" class="dialog-preview hidden">
+          <span>将发送命令</span>
+          <code id="action-preview"></code>
+        </div>
+        <div class="dialog-btns">
+          <button class="btn-cancel" type="button" onclick="actionDialogCancel()">取消</button>
+          <button class="btn-ok" id="action-confirm" type="submit">确定</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div id="structure-overlay" class="hidden" onclick="structureOverlayBackdrop(event)">
+  <div id="structure-box">
+    <div class="dialog-head">
+      <div>
+        <div class="dialog-kicker">原生结构查找</div>
+        <div class="dialog-title">附近结构结果</div>
+      </div>
+      <button class="dialog-close" type="button" onclick="closeStructureOverlay()">×</button>
+    </div>
+    <div class="dialog-body structure-dialog-body">
+      <p>这里会显示你刚刚输入坐标后的搜索结果；如果要换中心点，再点一次“重新搜索”。</p>
+      <div class="seedmap-toolbar">
+        <span class="seedmap-status" id="seedmap-status">等待读取世界种子</span>
+        <span class="seedmap-summary" id="seedmap-summary"></span>
+      </div>
+      <div class="seedmap-source hidden" id="seedmap-source"></div>
+      <div class="seedmap-spawn" id="seedmap-spawn"><div class="empty-state">搜索完成后会显示世界出生点</div></div>
+      <div class="seedmap-results" id="seedmap-results"><div class="empty-state">点击“搜索附近”后，这里会显示当前范围内的结构坐标列表</div></div>
+      <div class="dialog-btns structure-actions">
+        <button class="btn-cancel" type="button" onclick="closeStructureOverlay()">关闭</button>
+        <button class="btn-cancel" id="seed-overlay-open-btn" type="button" onclick="openSeedMapInNewTab()" disabled>打开 Seed Map</button>
+        <button class="btn-ok" type="button" onclick="openStructureSearchDialog()">重新搜索</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="admin.js?v=no-runtime-poll-20260529"></script>
+</body>
+</html>
