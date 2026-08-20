@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Admin i18n
-current_phase: 1
-current_phase_name: Bilingual Locale Contract and Inventory
-status: ready_for_verification
-stopped_at: Phase 1 gap closure executed; separate re-verification pending
-last_updated: "2026-08-20T14:13:33Z"
+current_phase: 2
+current_phase_name: Bilingual Static Shell and Preference
+status: ready_to_plan
+stopped_at: Phase 2 context gathered
+last_updated: "2026-08-20T15:12:04.250Z"
 last_activity: 2026-08-20
-last_activity_desc: Executed Phase 1 gap-closure plan 01-03; separate re-verification pending
+last_activity_desc: Verified Phase 1 and transitioned to Phase 2
 progress:
-  total_phases: 4
-  completed_phases: 0
-  total_plans: 2
-  completed_plans: 2
+  total_phases: 2
+  completed_phases: 1
+  total_plans: 4
+  completed_plans: 4
 ---
 
 # Project State
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-20)
 
 **Core value:** Operators can reliably administer either supported server version through one browser-based control plane.
-**Current focus:** Phase 1 — Bilingual Locale Contract and Inventory
+**Current focus:** Phase 2 — Bilingual Static Shell and Preference
 
 ## Current Position
 
-Phase: 1 of 4 (Bilingual Locale Contract and Inventory)
-Plan: 3 of 3 in current phase
-Status: Gap closure executed — separate re-verification pending
-Last activity: 2026-08-20 — Executed Phase 1 gap-closure plan 01-03
+Phase: 2 of 4 (Bilingual Static Shell and Preference)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-08-20 — Phase 1 complete, transitioned to Phase 2
 
 Progress: [██░░░░░░░░] 25%
 
@@ -38,7 +38,7 @@ Progress: [██░░░░░░░░] 25%
 
 **Velocity:**
 
-- Total plans completed: 3
+- Total plans completed: 4
 - Average duration: under 1 minute
 - Total execution time: under 1 minute
 
@@ -46,12 +46,12 @@ Progress: [██░░░░░░░░] 25%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1 | 3 | under 1 min | under 1 min |
+| 1 | 4 | - | - |
 
 **Recent Trend:**
 
-- Last 3 plans: 01-01, 01-02, 01-03
-- Trend: Gap closure awaits re-verification
+- Last 4 plans: 01-01, 01-02, 01-03, 01-04
+- Trend: Phase 1 verified; Phase 2 ready for planning
 
 *Updated after each plan completion*
 
@@ -86,6 +86,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-20T14:13:33Z
-Stopped at: Phase 1 gap closure executed; separate re-verification pending.
-Resume file: .planning/phases/01-locale-contract-and-inventory/01-03-SUMMARY.md
+Last session: 2026-08-20T15:12:04.240Z
+Stopped at: Phase 2 context gathered
+Resume file: .planning/phases/02-bilingual-static-shell-and-preference/02-CONTEXT.md
