@@ -25,7 +25,7 @@
 | 端口 | 用途 |
 |------|------|
 | 5200 | WebSocket 游戏连接 + HTTP 静态文件（EaglercraftXBungee 插件） |
-| 5201 | HTTP 回退 + RCON API（http_server.py） |
+| 5201 | 本机管理面 + HTTP 回退 + Dynmap 代理（http_server.py） |
 | 25565 | Paper 内部端口（仅 localhost） |
 | 25575 | RCON（仅 localhost，通过 `RCON_PASSWORD` 环境变量启用） |
 
@@ -38,6 +38,7 @@
 1. 先 bungee，后 server（顺序不能错）。
 2. Docker: `start_server.sh` 要求先显式传 `MINECRAFT_VERSION`，然后自动完成版本选择 → 软链接 → EULA → RCON → tmux 分屏。
 3. 访问端口是 5200（WebSocket），不是 25565。
+4. 入口脚本持续监控 Bungee、Paper、HTTP；任一核心服务退出时执行有序停服并返回失败状态。
 
 ## 运行机制
 
@@ -68,6 +69,7 @@ bungee 插件的 `listeners.yml` 中 `root: '../../../web'` 和 server 的 `run.
 
 - 推荐直接把整个运行目录挂载到 `/eaglerX-1.8-server`，而不是只挂世界目录。
 - 如果宿主机挂载目录是空的，`start_server.sh` 会先把镜像内置的 `/opt/eaglerX-1.8-server-image` 初始化复制到挂载目录，再继续启动。
+- 如果宿主机挂载目录已有内容且结构残缺，入口脚本会保留原数据并退出。
 - 旧的 `server-data/world*` 仍兼容，但只是可选兼容路径，不再是主方案。
 - 如果要并行运行两个版本，请分别挂载到不同宿主机目录，例如 `/data/eagler-1.8` 和 `/data/eagler-1.12`。
 
@@ -79,11 +81,12 @@ bungee 插件的 `listeners.yml` 中 `root: '../../../web'` 和 server 的 `run.
 |------|------|------|
 | `/` | GET | 静态文件服务（`web/` 目录） |
 | `/api/status` | GET | RCON 连接状态，`RCON_PASSWORD` 未设时 404 |
-| `/api/rcon` | POST | RCON 命令桥接，body: `{"command":"list","password":"xxx"}` |
+| `/api/login` | POST | 用 RCON 密码换取管理令牌 |
+| `/api/rcon` | POST | RCON 命令桥接，body: `{"command":"list","token":"xxx"}` |
 | `/admin` | GET | 302 重定向到 `/admin.html` |
 | `/dynmap/` | GET | 反向代理到 `localhost:8123`，无需额外暴露端口 |
 
-`RCON_PASSWORD` 环境变量不设时，`/api/status` 和 `/api/rcon` 不注册，RCON 完全关闭。
+`RCON_PASSWORD` 环境变量留空时，管理 API 保持关闭。管理 API 请求体上限为 64 KiB，读取超时为 10 秒。同一来源连续 5 次登录失败后锁定 10 分钟。
 
 ### admin.html 管理面板
 
@@ -91,6 +94,8 @@ bungee 插件的 `listeners.yml` 中 `root: '../../../web'` 和 server 的 `run.
 
 功能：
 - 页面加载时探测 `/api/status`，RCON 启用则弹出自定义密码输入框
+- 密码仅用于 `/api/login`，管理请求统一使用默认有效期 8 小时的令牌
+- 令牌保存在 `sessionStorage`，浏览器会话结束时清理本地登录态
 - 命令控制台（底部输入栏，回车发送）
 - 天气/时间/难度/模式按钮组
 - 游戏规则开关（13 项：昼夜循环、天气循环、火焰蔓延、怪物生成、掉落、死亡保留背包、苦力怕破坏方块、TNT 爆炸、自然回血、PVP、命令方块输出、死亡信息、自动保存）
@@ -110,6 +115,8 @@ bungee 插件的 `listeners.yml` 中 `root: '../../../web'` 和 server 的 `run.
 |------|--------|------|
 | `MINECRAFT_VERSION` | (必填) | 选择服务端版本：`1.8` 或 `1.12` |
 | `RCON_PASSWORD` | (空) | 设置后启用 RCON，管理面板弹窗需输入此密码 |
+| `ADMIN_AUTH_TOKEN_TTL` | `28800` | 管理令牌有效期，单位为秒 |
+| `ADMIN_AUTH_SECRET` | 从 RCON 密码派生 | 可选的令牌签名密钥 |
 
 ### 启动示例
 
@@ -120,27 +127,27 @@ docker run -d -p 5200:5200 \
   <image>
 
 # Paper 1.8.8 + RCON
-docker run -d -p 5200:5200 -p 5201:5201 \
+docker run -d -p 5200:5200 -p 127.0.0.1:5201:5201 \
   -e MINECRAFT_VERSION=1.8 \
   -e RCON_PASSWORD=yourpass \
   <image>
 
 # 推荐：完整目录挂载（1.12）
-docker run -d -p 5200:5200 -p 5201:5201 \
+docker run -d -p 5200:5200 -p 127.0.0.1:5201:5201 \
   -v /data/eagler-1.12:/eaglerX-1.8-server \
   -e MINECRAFT_VERSION=1.12 \
   -e RCON_PASSWORD=yourpass \
   <image>
 
 # 推荐：完整目录挂载（1.8）
-docker run -d -p 5200:5200 -p 5201:5201 \
+docker run -d -p 5200:5200 -p 127.0.0.1:5201:5201 \
   -v /data/eagler-1.8:/eaglerX-1.8-server \
   -e MINECRAFT_VERSION=1.8 \
   -e RCON_PASSWORD=yourpass \
   <image>
 ```
 
-游戏访问 `http://host:5200`，管理面板 `http://host:5201/admin`。
+游戏访问 `http://host:5200`，管理面板 `http://127.0.0.1:5201/admin`。远程管理使用 HTTPS 反向代理、VPN 或 SSH 隧道，5201 保持绑定宿主机回环地址。
 
 ### 构建与推送
 

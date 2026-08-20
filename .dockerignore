@@ -1,0 +1,12 @@
+.git
+.codegraph
+/web
+/server
+/data
+/eaglerX-1.8-server.zip
+**/__pycache__
+*.py[cod]
+.env
+.env.*
+*.log
+.DS_Store
