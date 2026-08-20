@@ -330,5 +330,72 @@ class I18nInventoryTests(unittest.TestCase):
         self.assertIn("String(s).replace(/[&<>'\"]", source)
 
 
+class I18nRuntimeTests(unittest.TestCase):
+    RUNTIME_PATHS = [
+        ROOT / 'web-1.8' / 'admin-i18n.js',
+        ROOT / 'web-1.12' / 'admin-i18n.js',
+    ]
+    INVENTORY_PATH = ROOT / 'web-1.8' / 'admin-i18n-inventory.json'
+
+    def run_runtime(self, body):
+        script = """
+const fs = require('fs');
+const vm = require('vm');
+const warnings = [];
+const window = { console: { warn: function (message) { warnings.push(message); } } };
+vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), { window: window });
+const i18n = window.EaglerXI18n;
+%s
+""" % body
+        result = subprocess.run(
+            ['node', '-e', script, str(self.RUNTIME_PATHS[0])],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        return json.loads(result.stdout)
+
+    def test_registry_metadata_catalog_coverage_and_parity(self):
+        inventory = json.loads(self.INVENTORY_PATH.read_text(encoding='utf-8'))
+        presentation_keys = sorted(
+            key for key, value in inventory['messages'].items()
+            if value['classification'] == 'presentation'
+        )
+        result = self.run_runtime("""
+console.log(JSON.stringify({
+  defaults: [i18n.DEFAULT_LOCALE, i18n.FALLBACK_LOCALE, i18n.PREFERENCE_KEY],
+  locales: Object.keys(i18n.locales),
+  labels: [i18n.locales.en.label, i18n.locales['zh-CN'].label],
+  en: Object.keys(i18n.locales.en.messages).sort(),
+  zh: Object.keys(i18n.locales['zh-CN'].messages).sort()
+}));
+""")
+        self.assertEqual(['en', 'en', 'eaglerx_admin_locale'], result['defaults'])
+        self.assertEqual(['en', 'zh-CN'], result['locales'])
+        self.assertEqual(['English', '简体中文'], result['labels'])
+        self.assertEqual(presentation_keys, result['en'])
+        self.assertEqual(result['en'], result['zh'])
+        self.assertEqual(self.RUNTIME_PATHS[0].read_bytes(), self.RUNTIME_PATHS[1].read_bytes())
+
+    def test_fallback_missing_diagnostic_and_plain_text_interpolation(self):
+        result = self.run_runtime("""
+i18n.setLocale('zh-CN');
+delete i18n.locales['zh-CN'].messages['header.title'];
+const fallback = i18n.t('header.title');
+const interpolation = i18n.t('validation.requiredField', { name: '<strong>Alex</strong>' });
+const first = i18n.t('missing.key');
+const second = i18n.t('missing.key');
+const selected = i18n.setLocale('invalid-locale');
+console.log(JSON.stringify({ fallback: fallback, interpolation: interpolation, first: first, second: second, selected: selected, warnings: warnings }));
+""")
+        self.assertEqual('EaglercraftX Console', result['fallback'])
+        self.assertEqual('请填写“<strong>Alex</strong>”。', result['interpolation'])
+        self.assertEqual('[[missing:missing.key]]', result['first'])
+        self.assertEqual(result['first'], result['second'])
+        self.assertEqual('en', result['selected'])
+        self.assertEqual(['[EaglerX i18n] missing key: missing.key'], result['warnings'])
+
+
 if __name__ == '__main__':
     unittest.main()
