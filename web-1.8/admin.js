@@ -18,11 +18,73 @@ let LAST_STRUCTURE_RESULT = null;
 let LAST_STRUCTURE_CONTEXT = '';
 let ONLINE_PLAYERS = [];
 let REFRESH_IN_FLIGHT = {};
+let HERO_PULSE_TIMER = null;
 const REFRESH_INTERVALS = {
   players: 20000,
   tps: 30000,
   world: 30000
 };
+
+function isRegisteredLocale(localeId) {
+  return !!(window.EaglerXI18n && Object.prototype.hasOwnProperty.call(EaglerXI18n.locales, localeId));
+}
+
+function readLocalePreference() {
+  var fallback = EaglerXI18n.DEFAULT_LOCALE;
+  try {
+    var stored = localStorage.getItem(EaglerXI18n.PREFERENCE_KEY);
+    if (isRegisteredLocale(stored)) return stored;
+    if (stored !== null) localStorage.removeItem(EaglerXI18n.PREFERENCE_KEY);
+  } catch (e) { }
+  return fallback;
+}
+
+function persistLocalePreference(localeId) {
+  try {
+    localStorage.setItem(EaglerXI18n.PREFERENCE_KEY, localeId);
+  } catch (e) { }
+}
+
+function applyStaticLocale(localeId) {
+  if (!window.EaglerXI18n) return;
+  var activeLocale = EaglerXI18n.setLocale(isRegisteredLocale(localeId) ? localeId : EaglerXI18n.DEFAULT_LOCALE);
+  var bindingAttributes = [
+    ['data-i18n', 'textContent'],
+    ['data-i18n-title', 'title'],
+    ['data-i18n-placeholder', 'placeholder'],
+    ['data-i18n-aria-label', 'aria-label']
+  ];
+  document.documentElement.lang = activeLocale;
+  document.title = EaglerXI18n.t('header.title');
+  bindingAttributes.forEach(function (binding) {
+    Array.prototype.forEach.call(document.querySelectorAll('[' + binding[0] + ']'), function (element) {
+      var value = EaglerXI18n.t(element.getAttribute(binding[0]));
+      if (binding[1] === 'textContent') element.textContent = value;
+      else element.setAttribute(binding[1], value);
+    });
+  });
+  var selector = document.getElementById('locale-select');
+  if (selector) selector.value = activeLocale;
+}
+
+function setupLocalePreference() {
+  if (!window.EaglerXI18n) return;
+  var selector = document.getElementById('locale-select');
+  if (!selector) return;
+  selector.textContent = '';
+  Object.keys(EaglerXI18n.locales).forEach(function (localeId) {
+    var option = document.createElement('option');
+    option.value = localeId;
+    option.textContent = EaglerXI18n.locales[localeId].label;
+    selector.appendChild(option);
+  });
+  applyStaticLocale(readLocalePreference());
+  selector.addEventListener('change', function () {
+    var localeId = isRegisteredLocale(selector.value) ? selector.value : EaglerXI18n.DEFAULT_LOCALE;
+    applyStaticLocale(localeId);
+    persistLocalePreference(localeId);
+  });
+}
 
 var LOADING_CARD_IDS = ['card-world','card-players','card-tps','card-rules','card-config','card-whitelist','card-seedmap'];
 function setCardLoading(id,on){var el=document.getElementById(id);if(!el)return;if(on){el.classList.add('card-loading');el.style.position='relative'}else{el.classList.remove('card-loading')}}
@@ -58,13 +120,115 @@ function setStatus(state, text) {
   var d = document.getElementById('status-dot');
   d.className = state;
   document.getElementById('status-text').textContent = text;
+  var heroConnection = document.getElementById('hero-connection');
+  if (heroConnection) heroConnection.textContent = text || (state === 'on' ? '已连接' : '未连接');
+  var heroSignal = document.getElementById('hero-signal');
+  var heroSignalNote = document.getElementById('hero-signal-note');
+  if (heroSignal) heroSignal.textContent = state === 'on' ? '稳定' : (state === 'auth' ? '待认证' : '离线');
+  if (heroSignalNote) heroSignalNote.textContent = state === 'on' ? '管理通道运行正常' : (state === 'auth' ? '系统正在等待认证' : '管理通道当前不可用');
 }
 
 function setVersion(v) {
   document.getElementById('ver-tag').textContent = v || '--';
 }
 
+function startHeroPulse() {
+  var pulse = document.getElementById('hero-pulse-text');
+  if (!pulse) return;
+  clearInterval(HERO_PULSE_TIMER);
+  var index = 0;
+  var render = function () {
+    var players = document.getElementById('hero-player-count');
+    var tps = document.getElementById('hero-tps');
+    var version = SERVER_INFO.minecraftVersion || '--';
+    var messages = [
+      TOKEN ? 'RCON 连接正常' : '等待 RCON 认证',
+      'Paper ' + version + ' · 管理通道已就绪',
+      (players ? players.textContent : '0') + ' 名玩家在线',
+      'TPS 当前为 ' + (tps ? tps.textContent : '--')
+    ];
+    pulse.textContent = messages[index % messages.length];
+    index += 1;
+  };
+  render();
+  HERO_PULSE_TIMER = setInterval(render, 3800);
+}
+
+function initRevealMotion() {
+  var links = Array.prototype.slice.call(document.querySelectorAll('.control-nav-link'));
+  var setActiveLink = function (link) {
+    links.forEach(function (item) { item.classList.toggle('is-active', item === link); });
+    if (window.innerWidth <= 820 && link.parentElement) {
+      link.parentElement.scrollTo({ left: link.offsetLeft - (link.parentElement.clientWidth - link.clientWidth) / 2, behavior: 'smooth' });
+    }
+  };
+  links.forEach(function (link) {
+    link.addEventListener('click', function () { setActiveLink(link); });
+  });
+  if ('IntersectionObserver' in window) {
+    var sectionObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        var link = links.find(function (item) { return item.getAttribute('href') === '#' + entry.target.id; });
+        if (link) setActiveLink(link);
+      });
+    }, { rootMargin: '-24% 0px -70% 0px', threshold: 0 });
+    links.forEach(function (link) {
+      var targetId = link.getAttribute('href').slice(1);
+      var target = document.getElementById(targetId);
+      if (target) sectionObserver.observe(target);
+    });
+  }
+
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var targets = Array.prototype.slice.call(document.querySelectorAll('.reveal-item'));
+  if (window.gsap && window.ScrollTrigger) {
+    window.gsap.registerPlugin(window.ScrollTrigger);
+    window.gsap.timeline({ defaults: { duration: .68, ease: 'power2.out' } })
+      .from('.hero-card .eyebrow, .hero-card h2, .hero-card p, .hero-actions', { opacity: 0, y: 24, stagger: .08 })
+      .from('.hero-side', { opacity: 0, x: 24 }, '-=.42')
+      .from('.overview-stat', { opacity: 0, y: 18, stagger: .06, duration: .48 }, '-=.3');
+    Array.prototype.slice.call(document.querySelectorAll('.workspace-section')).forEach(function (section) {
+      var cards = Array.prototype.slice.call(section.querySelectorAll('.reveal-item'));
+      if (!cards.length) return;
+      window.gsap.from(cards, {
+        scrollTrigger: { trigger: section, start: 'top 78%', once: true },
+        opacity: 0,
+        y: function (index, card) { return card.classList.contains('stack-card') ? 24 + index * 7 : 24; },
+        scale: .985,
+        duration: .58,
+        stagger: .07,
+        ease: 'power2.out',
+        clearProps: 'opacity,transform'
+      });
+    });
+    var drawer = document.querySelector('.console-drawer');
+    if (drawer) drawer.addEventListener('toggle', function () {
+      if (drawer.open) window.gsap.from(drawer.querySelector('.console-wrap'), { opacity: 0, y: 12, duration: .3, ease: 'power2.out' });
+    });
+    return;
+  }
+
+  if (!targets.length) return;
+  document.body.classList.add('motion-enabled');
+  if (!('IntersectionObserver' in window)) {
+    targets.forEach(function (el) { el.classList.add('is-visible'); });
+    return;
+  }
+  var observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('is-visible');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: .12, rootMargin: '0px 0px -8% 0px' });
+  targets.forEach(function (el) { observer.observe(el); });
+}
+
 async function init() {
+  initRevealMotion();
+  startHeroPulse();
   try {
     var r = await fetch(BASE + '/api/status');
     if (!r.ok) throw new Error();
@@ -210,8 +374,12 @@ function resetAuthUi() {
   ONLINE_PLAYERS = [];
   WORLD_INFO_CACHE = null;
   document.getElementById('player-count').textContent = '0';
+  var heroPlayerCount = document.getElementById('hero-player-count');
+  if (heroPlayerCount) heroPlayerCount.textContent = '0';
   document.getElementById('players').innerHTML = '<div class="empty-state">请先登录后查看玩家列表</div>';
   document.getElementById('tps-bars').innerHTML = '<div class="empty-state">请先登录后查看 TPS</div>';
+  var heroTps = document.getElementById('hero-tps');
+  if (heroTps) heroTps.textContent = '--';
   setWorldInfoPlaceholder('请先登录后查看世界基础信息');
   setSeedState('', '请先登录后读取世界种子');
   setStructureSource('');
@@ -1752,6 +1920,8 @@ async function refreshPlayers() {
       var m = resp.match(/(\d+)\/(\d+)/);
       if (m) {
         document.getElementById('player-count').textContent = m[1];
+        var heroPlayerCount = document.getElementById('hero-player-count');
+        if (heroPlayerCount) heroPlayerCount.textContent = m[1];
         var namesStr = resp.split(':')[1] || '';
         var names = namesStr.trim() ? namesStr.split(',').map(function (s) { return s.trim(); }) : [];
         ONLINE_PLAYERS = names.slice();
@@ -1764,6 +1934,7 @@ async function refreshPlayers() {
         } else {
           el.innerHTML = '<div class="empty-state">暂无在线玩家</div>';
           document.getElementById('player-count').textContent = '0';
+          if (heroPlayerCount) heroPlayerCount.textContent = '0';
           ONLINE_PLAYERS = [];
         }
         rerenderWorldInfo();
@@ -1774,6 +1945,8 @@ async function refreshPlayers() {
   } catch (e) {
     ONLINE_PLAYERS = [];
     document.getElementById('player-count').textContent = '0';
+    var heroPlayerCount = document.getElementById('hero-player-count');
+    if (heroPlayerCount) heroPlayerCount.textContent = '0';
     document.getElementById('players').innerHTML = '<div class="empty-state">读取在线玩家失败</div>';
   } finally {
     setCardLoading('card-players', false);
@@ -1798,6 +1971,8 @@ async function refreshTPS() {
       var ms = tail.match(/\*?\d+\.?\d*/g);
       if (ms && ms.length >= 3) {
         var labels = ['1m', '5m', '15m'];
+        var heroTps = document.getElementById('hero-tps');
+        if (heroTps) heroTps.textContent = parseFloat(ms.slice(-3)[0].replace('*', '')).toFixed(1);
         el.innerHTML = ms.slice(-3).map(function (v, i) {
           v = parseFloat(v.replace('*', ''));
           var pct = Math.min(100, v * 5);
@@ -1809,6 +1984,8 @@ async function refreshTPS() {
       handleAuthFailure(d.error);
     }
   } catch (e) {
+    var heroTps = document.getElementById('hero-tps');
+    if (heroTps) heroTps.textContent = '--';
     document.getElementById('tps-bars').innerHTML = '<div class="empty-state">读取 TPS 失败</div>';
   } finally {
     setCardLoading('card-tps', false);
@@ -2086,4 +2263,5 @@ async function toggleWL(el) {
   }
 }
 
+setupLocalePreference();
 init();
