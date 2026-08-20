@@ -55,7 +55,8 @@ function applyStaticLocale(localeId) {
     ['data-i18n-aria-label', 'aria-label']
   ];
   document.documentElement.lang = activeLocale;
-  document.title = EaglerXI18n.t('header.title');
+  var documentTitle = document.querySelector('title[data-i18n]');
+  document.title = EaglerXI18n.t(documentTitle ? documentTitle.getAttribute('data-i18n') : 'header.title');
   bindingAttributes.forEach(function (binding) {
     Array.prototype.forEach.call(document.querySelectorAll('[' + binding[0] + ']'), function (element) {
       var value = EaglerXI18n.t(element.getAttribute(binding[0]));

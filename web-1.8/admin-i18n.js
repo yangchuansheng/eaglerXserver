@@ -8,10 +8,12 @@
   var missingKeys = Object.create(null);
   var activeLocale = DEFAULT_LOCALE;
   var en = {
-  "document.surface.adminhtml.l6.c21": "Admin panel",
+  "document.surface.adminhtml.l6.c21": "EaglercraftX Admin Console",
   "document.surface.adminhtml.l13.c43": "Skip to main content",
   "header.title": "EaglercraftX Admin Console",
   "header.localeLabel": "Language",
+  "header.subtitle": "Server command center",
+  "accessibility.close": "Close",
   "accessibility.dynmapFrame": "Dynmap map",
   "document.surface.adminhtml.l27.c30": "Not connected",
   "document.surface.adminhtml.l29.c62": "Log out",
@@ -918,10 +920,12 @@
   "console.surface.adminjs.l2171.c10": "Configuration request failed"
 };
   var zhCN = {
-  "document.surface.adminhtml.l6.c21": "管理面板",
+  "document.surface.adminhtml.l6.c21": "EaglercraftX 管理台",
   "document.surface.adminhtml.l13.c43": "跳到主要内容",
   "header.title": "EaglercraftX 管理台",
   "header.localeLabel": "语言",
+  "header.subtitle": "服务器指挥中心",
+  "accessibility.close": "关闭",
   "accessibility.dynmapFrame": "Dynmap 地图",
   "document.surface.adminhtml.l27.c30": "未连接",
   "document.surface.adminhtml.l29.c62": "退出登录",
