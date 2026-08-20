@@ -78,34 +78,34 @@ Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | Pending | Pending |
-| CORE-02 | Pending | Pending |
-| CORE-03 | Pending | Pending |
-| CORE-04 | Pending | Pending |
-| CORE-05 | Pending | Pending |
-| PREF-01 | Pending | Pending |
-| PREF-02 | Pending | Pending |
-| PREF-03 | Pending | Pending |
-| PREF-04 | Pending | Pending |
-| COVR-01 | Pending | Pending |
-| COVR-02 | Pending | Pending |
-| COVR-03 | Pending | Pending |
-| COVR-04 | Pending | Pending |
-| COVR-05 | Pending | Pending |
-| COVR-06 | Pending | Pending |
-| SAFE-01 | Pending | Pending |
-| SAFE-02 | Pending | Pending |
-| SAFE-03 | Pending | Pending |
-| SAFE-04 | Pending | Pending |
-| PARI-01 | Pending | Pending |
-| PARI-02 | Pending | Pending |
-| PARI-03 | Pending | Pending |
+| CORE-01 | Phase 1 | Pending |
+| CORE-02 | Phase 1 | Pending |
+| CORE-03 | Phase 1 | Pending |
+| CORE-04 | Phase 1 | Pending |
+| CORE-05 | Phase 1 | Pending |
+| PREF-01 | Phase 2 | Pending |
+| PREF-02 | Phase 2 | Pending |
+| PREF-03 | Phase 2 | Pending |
+| PREF-04 | Phase 2 | Pending |
+| COVR-01 | Phase 2 | Pending |
+| COVR-02 | Phase 3 | Pending |
+| COVR-03 | Phase 3 | Pending |
+| COVR-04 | Phase 3 | Pending |
+| COVR-05 | Phase 2 | Pending |
+| COVR-06 | Phase 3 | Pending |
+| SAFE-01 | Phase 3 | Pending |
+| SAFE-02 | Phase 3 | Pending |
+| SAFE-03 | Phase 1 | Pending |
+| SAFE-04 | Phase 3 | Pending |
+| PARI-01 | Phase 4 | Pending |
+| PARI-02 | Phase 4 | Pending |
+| PARI-03 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 22 total
-- Mapped to phases: 0
-- Unmapped: 22
+- Mapped to phases: 22
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-08-20*
-*Last updated: 2026-08-20 after requirement confirmation*
+*Last updated: 2026-08-20 after roadmap creation*
