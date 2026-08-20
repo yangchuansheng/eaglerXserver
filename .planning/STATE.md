@@ -5,15 +5,15 @@ milestone_name: Admin i18n
 current_phase: 2
 current_phase_name: Bilingual Static Shell and Preference
 status: ready_to_plan
-stopped_at: Phase 2 context gathered
-last_updated: "2026-08-20T15:12:04.250Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-08-20T15:50:41.304Z"
 last_activity: 2026-08-20
 last_activity_desc: Verified Phase 1 and transitioned to Phase 2
 progress:
   total_phases: 2
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  completed_phases: 2
+  total_plans: 6
+  completed_plans: 6
 ---
 
 # Project State
@@ -32,7 +32,7 @@ Plan: Not started
 Status: Ready to plan
 Last activity: 2026-08-20 — Phase 1 complete, transitioned to Phase 2
 
-Progress: [██░░░░░░░░] 25%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -54,6 +54,12 @@ Progress: [██░░░░░░░░] 25%
 - Trend: Phase 1 verified; Phase 2 ready for planning
 
 *Updated after each plan completion*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 02 P01 | completed inline | 3 tasks | 8 files |
+| Phase 02 P02 | completed inline | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -68,6 +74,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [v1.0]: Locale switching immediately preserves authentication, inputs, focus, dialogs, selections, cached data, polling, and server-operation state.
 - [v1.0]: Server-originated output remains unchanged.
 - [v1.0]: The 1.8 and 1.12 administration assets remain mirrored.
+- [Phase ?]: Locale changes stay within explicit static DOM bindings and metadata.
+- [Phase ?]: Static binding evidence records exact English source locations separately from deferred dynamic literals.
 
 ### Pending Todos
 
@@ -86,6 +94,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-20T15:12:04.240Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-bilingual-static-shell-and-preference/02-CONTEXT.md
+Last session: 2026-08-20T15:50:41.299Z
+Stopped at: Completed 02-02-PLAN.md
+Resume file: None

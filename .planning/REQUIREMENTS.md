@@ -17,18 +17,18 @@ Requirements for milestone v1.0 Admin i18n. The milestone delivers complete Engl
 
 ### Locale Preference
 
-- [ ] **PREF-01**: The admin interface displays English on first visit.
-- [ ] **PREF-02**: The header always provides a native locale selector populated from the bundled locale registry, with BCP 47 values `en` and `zh-CN` and display names `English` and `简体中文`.
-- [ ] **PREF-03**: A valid locale selection persists across browser sessions under the `eaglerx_admin_locale` key in origin-scoped `localStorage`.
-- [ ] **PREF-04**: Missing, invalid, stale, or inaccessible locale preferences recover safely to English.
+- [x] **PREF-01**: The admin interface displays English on first visit.
+- [x] **PREF-02**: The header always provides a native locale selector populated from the bundled locale registry, with BCP 47 values `en` and `zh-CN` and display names `English` and `简体中文`.
+- [x] **PREF-03**: A valid locale selection persists across browser sessions under the `eaglerx_admin_locale` key in origin-scoped `localStorage`.
+- [x] **PREF-04**: Missing, invalid, stale, or inaccessible locale preferences recover safely to English.
 
 ### Translation Coverage
 
-- [ ] **COVR-01**: Static headings, labels, buttons, hints, empty states, and navigation use translation keys.
+- [x] **COVR-01**: Static headings, labels, buttons, hints, empty states, and navigation use translation keys.
 - [ ] **COVR-02**: Dynamic authentication, status, player, world, TPS, and configuration messages use translation keys.
 - [ ] **COVR-03**: Dialog titles, descriptions, fields, placeholders, validation messages, and actions use translation keys.
 - [ ] **COVR-04**: Toasts, loading states, success messages, warnings, and client-authored errors use translation keys.
-- [ ] **COVR-05**: The document language, page title, element titles, iframe title, form labels, and ARIA text update with the active locale.
+- [x] **COVR-05**: The document language, page title, element titles, iframe title, form labels, and ARIA text update with the active locale.
 - [ ] **COVR-06**: UI-owned numbers and dates use native `Intl` formatting with the active locale.
 
 ### Operational Safety
@@ -78,30 +78,31 @@ Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | Phase 1 | Implemented — verify-work pending |
-| CORE-02 | Phase 1 | Implemented — verify-work pending |
-| CORE-03 | Phase 1 | Implemented — verify-work pending |
-| CORE-04 | Phase 1 | Implemented — verify-work pending |
-| CORE-05 | Phase 1 | Implemented — verify-work pending |
-| PREF-01 | Phase 2 | Pending |
-| PREF-02 | Phase 2 | Pending |
-| PREF-03 | Phase 2 | Pending |
-| PREF-04 | Phase 2 | Pending |
-| COVR-01 | Phase 2 | Pending |
+| CORE-01 | Phase 1 | Verified — Phase 1 |
+| CORE-02 | Phase 1 | Verified — Phase 1 |
+| CORE-03 | Phase 1 | Verified — Phase 1 |
+| CORE-04 | Phase 1 | Verified — Phase 1 |
+| CORE-05 | Phase 1 | Verified — Phase 1 |
+| PREF-01 | Phase 2 | Complete |
+| PREF-02 | Phase 2 | Complete |
+| PREF-03 | Phase 2 | Complete |
+| PREF-04 | Phase 2 | Complete |
+| COVR-01 | Phase 2 | Complete |
 | COVR-02 | Phase 3 | Pending |
 | COVR-03 | Phase 3 | Pending |
 | COVR-04 | Phase 3 | Pending |
-| COVR-05 | Phase 2 | Pending |
+| COVR-05 | Phase 2 | Complete |
 | COVR-06 | Phase 3 | Pending |
 | SAFE-01 | Phase 3 | Pending |
 | SAFE-02 | Phase 3 | Pending |
-| SAFE-03 | Phase 1 | Implemented — verify-work pending |
+| SAFE-03 | Phase 1 | Verified — Phase 1 |
 | SAFE-04 | Phase 3 | Pending |
 | PARI-01 | Phase 4 | Pending |
 | PARI-02 | Phase 4 | Pending |
 | PARI-03 | Phase 4 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 22 total
 - Mapped to phases: 22
 - Unmapped: 0
