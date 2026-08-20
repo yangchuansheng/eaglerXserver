@@ -281,5 +281,54 @@ class StartupOrderingTests(unittest.TestCase):
         self.assertLess(readiness.start(), paper_start.start())
 
 
+class I18nInventoryTests(unittest.TestCase):
+    INVENTORY_PATHS = [
+        ROOT / 'web-1.8' / 'admin-i18n-inventory.json',
+        ROOT / 'web-1.12' / 'admin-i18n-inventory.json',
+    ]
+    ADMIN_ASSETS = ('admin.html', 'admin.js', 'admin.css')
+
+    def load_inventory(self):
+        return json.loads(self.INVENTORY_PATHS[0].read_text(encoding='utf-8'))
+
+    def test_inventory_is_mirrored_and_valid_json(self):
+        self.assertEqual(
+            self.INVENTORY_PATHS[0].read_bytes(),
+            self.INVENTORY_PATHS[1].read_bytes(),
+        )
+        self.assertIn('messages', self.load_inventory())
+
+    def test_message_schema_and_source_locators(self):
+        inventory = self.load_inventory()
+        allowed_kinds = {'text', 'attribute', 'renderer', 'dialog', 'toast', 'log', 'state', 'client-prefix'}
+        allowed_classifications = {'presentation', 'operational'}
+        for key, message in inventory['messages'].items():
+            with self.subTest(key=key):
+                self.assertRegex(key, r'^(document|accessibility|header|nav|hero|section|card|action|option|dialog|field|validation|status|toast|console|world|operational)\.')
+                self.assertIn(message['kind'], allowed_kinds)
+                self.assertIn(message['classification'], allowed_classifications)
+                source = message['source']
+                self.assertEqual({'file', 'locator'}, set(source))
+                self.assertIn(source['file'], {'admin.html', 'admin.js', 'admin.css'})
+                content = (ROOT / 'web-1.8' / source['file']).read_text(encoding='utf-8')
+                self.assertIn(source['locator'], content)
+
+    def test_admin_assets_remain_mirrored(self):
+        for asset in self.ADMIN_ASSETS:
+            with self.subTest(asset=asset):
+                self.assertEqual(
+                    (ROOT / 'web-1.8' / asset).read_bytes(),
+                    (ROOT / 'web-1.12' / asset).read_bytes(),
+                )
+
+    def test_operational_boundaries_keep_raw_values_and_safe_sinks(self):
+        source = (ROOT / 'web-1.8' / 'admin.js').read_text(encoding='utf-8')
+        self.assertRegex(source, r"async function setDifficulty\(mode, label\)[\s\S]+?send\('difficulty ' \+ mode\)")
+        self.assertRegex(source, r"async function setPlayerGamemode\(mode, label\)[\s\S]+?return 'gamemode ' \+ mode \+ ' ' \+ values\.player")
+        self.assertRegex(source, r"function log\(msg, cls\)[\s\S]+?body\.textContent = msg")
+        self.assertIn('function escapeHtml(s)', source)
+        self.assertIn("String(s).replace(/[&<>'\"]", source)
+
+
 if __name__ == '__main__':
     unittest.main()
