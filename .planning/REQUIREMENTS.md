@@ -78,11 +78,11 @@ Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | Phase 1 | Pending |
-| CORE-02 | Phase 1 | Pending |
-| CORE-03 | Phase 1 | Pending |
-| CORE-04 | Phase 1 | Pending |
-| CORE-05 | Phase 1 | Pending |
+| CORE-01 | Phase 1 | Implemented — verify-work pending |
+| CORE-02 | Phase 1 | Implemented — verify-work pending |
+| CORE-03 | Phase 1 | Implemented — verify-work pending |
+| CORE-04 | Phase 1 | Implemented — verify-work pending |
+| CORE-05 | Phase 1 | Implemented — verify-work pending |
 | PREF-01 | Phase 2 | Pending |
 | PREF-02 | Phase 2 | Pending |
 | PREF-03 | Phase 2 | Pending |
@@ -95,7 +95,7 @@ Populated during roadmap creation.
 | COVR-06 | Phase 3 | Pending |
 | SAFE-01 | Phase 3 | Pending |
 | SAFE-02 | Phase 3 | Pending |
-| SAFE-03 | Phase 1 | Pending |
+| SAFE-03 | Phase 1 | Implemented — verify-work pending |
 | SAFE-04 | Phase 3 | Pending |
 | PARI-01 | Phase 4 | Pending |
 | PARI-02 | Phase 4 | Pending |
