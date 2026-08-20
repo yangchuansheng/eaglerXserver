@@ -313,6 +313,21 @@ class I18nInventoryTests(unittest.TestCase):
                 content = (ROOT / 'web-1.8' / source['file']).read_text(encoding='utf-8')
                 self.assertIn(source['locator'], content)
 
+    def test_client_authored_source_coverage_is_regressible(self):
+        inventory = self.load_inventory()
+        expected = inventory['sourceCoverage']['files']
+        for filename, evidence in expected.items():
+            with self.subTest(filename=filename):
+                lines = (ROOT / 'web-1.8' / filename).read_text(encoding='utf-8').splitlines()
+                scoped = [
+                    '%d:%s' % (number, line)
+                    for number, line in enumerate(lines, 1)
+                    if re.search(r'[\u4e00-\u9fff]', line)
+                ]
+                digest = hashlib.sha256('\n'.join(scoped).encode('utf-8')).hexdigest()
+                self.assertEqual(evidence['lines'], len(scoped))
+                self.assertEqual(evidence['sha256'], digest)
+
     def test_admin_assets_remain_mirrored(self):
         for asset in self.ADMIN_ASSETS:
             with self.subTest(asset=asset):

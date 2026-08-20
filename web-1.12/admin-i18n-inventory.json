@@ -1,5 +1,12 @@
 {
-  "version": 1,
+  "version": 2,
+  "sourceCoverage": {
+    "scope": "client-authored Han-script lines in the protected admin HTML and JavaScript sources",
+    "files": {
+      "admin.html": {"lines": 89, "sha256": "850f4307d9e94c2ec2be7fb88feceae2037f6f31d81455ead85ed1c27b9879b8"},
+      "admin.js": {"lines": 383, "sha256": "a6922610878878340ea4e67868e4ccb2320f57b9cb79afd6fe93760e9befdbeb"}
+    }
+  },
   "messages": {
     "document.title": {"source": {"file": "admin.html", "locator": "<title>EaglercraftX 管理面板</title>"}, "kind": "text", "classification": "presentation"},
     "accessibility.skipLink": {"source": {"file": "admin.html", "locator": "class=\"skip-link\""}, "kind": "text", "classification": "presentation"},
