@@ -15,4 +15,7 @@ ENV CUBIOMES_SHIM_PATH=/usr/local/lib/libcubiomes_shim.so
 # RCON_PASSWORD 可选，设置后启用 RCON 远程管理
 # ENV RCON_PASSWORD=yourpassword
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+    CMD python3 -c "import socket; [socket.create_connection(('127.0.0.1', port), 3).close() for port in (5200, 5201, 25565)]"
+
 ENTRYPOINT ["/usr/local/bin/eaglerx-start"]

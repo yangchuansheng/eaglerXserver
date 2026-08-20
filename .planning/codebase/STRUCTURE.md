@@ -1,6 +1,6 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-08-19
+**Analysis Date:** 2026-08-20
 
 ## Directory Layout
 
@@ -14,6 +14,7 @@ eaglerXserver/
 ├── server-1.12/                       # Paper 1.12.2 runtime tree
 ├── web-1.8/                           # EaglercraftX 1.8 client and admin UI
 ├── web-1.12/                          # EaglercraftX 1.12 client and admin UI
+├── tests/                             # Standard-library regression tests
 ├── misc/                              # Optional server/plugin binaries
 ├── main.sh                            # Legacy build/update/launch workflow
 ├── selsrv.sh                           # Legacy server software selector
@@ -47,6 +48,11 @@ eaglerXserver/
 - Contains: Carbon, ProtocolLib, and npaper jars.
 - Key files: `misc/Carbon.jar`, `misc/Carbon-ProtocolLib.jar`, `misc/npaper-1.7.jar`.
 
+**`tests/`:**
+- Purpose: Protect HTTP boundaries, authentication, startup safety, process ordering, and tmux lifecycle behavior.
+- Contains: Python standard-library `unittest` regression tests.
+- Key files: `tests/test_regressions.py`.
+
 **`.planning/codebase/`:**
 - Purpose: Store generated mapper reference documents.
 - Contains: Architecture, structure, technology, quality, and concerns documents created by GSD mappers.
@@ -74,8 +80,7 @@ eaglerXserver/
 - `web-1.8/admin.js`, `web-1.12/admin.js`: admin dashboard behavior.
 
 **Testing:**
-- Dedicated test directories and test files: Not detected.
-- Runtime verification surfaces: `script/http_server.py` API endpoints and the Docker startup path.
+- `tests/test_regressions.py`: regression coverage for HTTP input boundaries, authentication, startup safety, process ordering, and tmux lifecycle primitives.
 
 ## Naming Conventions
 
@@ -137,4 +142,4 @@ eaglerXserver/
 
 ---
 
-*Structure analysis: 2026-08-19*
+*Structure analysis: 2026-08-20*

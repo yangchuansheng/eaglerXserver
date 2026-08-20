@@ -1,4 +1,3 @@
-let PASSWORD = '';
 let TOKEN = '';
 const BASE = window.location.origin;
 let CONFIG_CACHE = {};
@@ -30,7 +29,7 @@ function setCardLoading(id,on){var el=document.getElementById(id);if(!el)return;
 function setAllCardsLoading(on){for(var i=0;i<LOADING_CARD_IDS.length;i++)setCardLoading(LOADING_CARD_IDS[i],on)}
 function beginRefresh(name){if(REFRESH_IN_FLIGHT[name])return false;REFRESH_IN_FLIGHT[name]=true;return true}
 function endRefresh(name){REFRESH_IN_FLIGHT[name]=false}
-function shouldAutoPoll(){return !document.hidden && !!(TOKEN || PASSWORD)}
+function shouldAutoPoll(){return !document.hidden && !!TOKEN}
 
 function log(msg, cls) {
   const c = document.getElementById('console');
@@ -172,8 +171,10 @@ var _modalCb = null;
 var ACTION_DIALOG = null;
 function getStoredToken() {
   try {
-    var token = localStorage.getItem(AUTH_TOKEN_KEY) || '';
-    var exp = parseInt(localStorage.getItem(AUTH_TOKEN_EXP_KEY) || '0', 10);
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_TOKEN_EXP_KEY);
+    var token = sessionStorage.getItem(AUTH_TOKEN_KEY) || '';
+    var exp = parseInt(sessionStorage.getItem(AUTH_TOKEN_EXP_KEY) || '0', 10);
     if (exp && Date.now() / 1000 >= exp) {
       clearStoredToken();
       return '';
@@ -186,20 +187,21 @@ function getStoredToken() {
 
 function saveStoredToken(token, expiresAt) {
   try {
-    localStorage.setItem(AUTH_TOKEN_KEY, token || '');
-    if (expiresAt) localStorage.setItem(AUTH_TOKEN_EXP_KEY, String(expiresAt));
+    sessionStorage.setItem(AUTH_TOKEN_KEY, token || '');
+    if (expiresAt) sessionStorage.setItem(AUTH_TOKEN_EXP_KEY, String(expiresAt));
   } catch (e) { }
 }
 
 function clearStoredToken() {
   try {
+    sessionStorage.removeItem(AUTH_TOKEN_KEY);
+    sessionStorage.removeItem(AUTH_TOKEN_EXP_KEY);
     localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(AUTH_TOKEN_EXP_KEY);
   } catch (e) { }
 }
 
 function clearAuthState() {
-  PASSWORD = '';
   TOKEN = '';
 }
 
@@ -288,7 +290,7 @@ function openLatestStructureResults() {
 }
 
 async function openStructureSearchDialog(preset) {
-  if (!TOKEN && !PASSWORD) return;
+  if (!TOKEN) return;
   if (!WORLD_SEED) {
     toast('暂未读取到世界种子');
     return;
@@ -557,7 +559,7 @@ async function waitForRuntimeToggleValue(kind, name, expected, el) {
 }
 
 async function refreshRuntimeToggles() {
-  if (!TOKEN && !PASSWORD) return;
+  if (!TOKEN) return;
   if (!beginRefresh('runtime')) return;
   try {
     var d = await runtimeStateRequest({});
@@ -579,7 +581,7 @@ async function refreshRuntimeToggles() {
 }
 
 async function refreshServerVersion() {
-  if (!TOKEN && !PASSWORD) return;
+  if (!TOKEN) return;
   try {
     var r = await fetch(BASE + '/api/rcon', {
       method: 'POST',
@@ -627,7 +629,7 @@ function renderStructurePlaceholder(text) {
 }
 
 async function teleportPlayerToPoint(x, z, label) {
-  if (!TOKEN && !PASSWORD) return;
+  if (!TOKEN) return;
   var pointLabel = String(label || '该点位');
   var values = await showActionDialog({
     kicker: '世界传送',
@@ -733,7 +735,7 @@ function renderStructureResults(data) {
 }
 
 async function refreshStructureFinder(queryOverride) {
-  if (!TOKEN && !PASSWORD) return;
+  if (!TOKEN) return;
   if (!WORLD_SEED) {
     toast('暂未读取到世界种子');
     return;
@@ -775,7 +777,6 @@ async function refreshStructureFinder(queryOverride) {
 function buildAuthPayload(payload) {
   var body = Object.assign({}, payload || {});
   if (TOKEN) body.token = TOKEN;
-  else if (PASSWORD) body.password = PASSWORD;
   return body;
 }
 
@@ -794,7 +795,7 @@ function startAutoRefresh() {
 }
 
 document.addEventListener('visibilitychange', function () {
-  if (document.hidden || !TOKEN && !PASSWORD) return;
+  if (document.hidden || !TOKEN) return;
   refreshPlayers();
   refreshTPS();
   refreshWorldInfo(false);
@@ -844,7 +845,6 @@ async function loginWithPassword(pw) {
       clearStoredToken();
       return { success: false, error: d.error || 'login failed' };
     }
-    PASSWORD = '';
     TOKEN = d.token;
     saveStoredToken(d.token, d.expires_at);
     return { success: true };
@@ -871,7 +871,7 @@ async function restoreStoredAuth() {
     });
     var d = await r.json();
     if (d.success) {
-      finishAuthenticated('已从浏览器恢复登录，无需重新输入密码');
+      finishAuthenticated('已从当前浏览器会话恢复登录');
       return true;
     }
   } catch (e) { }
@@ -931,7 +931,7 @@ function openLoginModal() {
     log('正在验证密码并创建浏览器登录态', 'info');
     var result = await loginWithPassword(pw);
     if (result.success) {
-      finishAuthenticated('认证成功，登录态已默认保存到浏览器');
+      finishAuthenticated('认证成功，登录态将在当前浏览器会话中保持');
     } else {
       setStatus('off', '密码错误');
       log('认证失败：' + (result.error || 'unknown'), 'err');
@@ -1648,7 +1648,7 @@ async function runCustomCommandDialog() {
 }
 
 async function send(cmd, opts) {
-  if (!TOKEN && !PASSWORD) { toast('请先输入 RCON 密码'); openLoginModal(); return; }
+  if (!TOKEN) { toast('请先登录'); openLoginModal(); return; }
   opts = opts || {};
   log('> ' + cmd, 'cmd');
   try {
@@ -1719,7 +1719,7 @@ function syncConfigControls() {
 }
 
 async function refreshConfig() {
-  if (!TOKEN && !PASSWORD) return;
+  if (!TOKEN) return;
   if (!beginRefresh('config')) return;
   try {
     var d = await configRequest({ action: 'get' });
@@ -1737,7 +1737,7 @@ async function refreshConfig() {
 }
 
 async function refreshPlayers() {
-  if (!TOKEN && !PASSWORD) return;
+  if (!TOKEN) return;
   if (!beginRefresh('players')) return;
   try {
     var r = await fetch(BASE + '/api/rcon', {
@@ -1782,7 +1782,7 @@ async function refreshPlayers() {
 }
 
 async function refreshTPS() {
-  if (!TOKEN && !PASSWORD) return;
+  if (!TOKEN) return;
   if (!beginRefresh('tps')) return;
   try {
     var r = await fetch(BASE + '/api/rcon', {
@@ -1817,7 +1817,7 @@ async function refreshTPS() {
 }
 
 async function refreshWorldInfo(forceRefresh) {
-  if (!TOKEN && !PASSWORD) return;
+  if (!TOKEN) return;
   if (!beginRefresh('world')) return;
   try {
     var d = await worldStateRequest(forceRefresh ? { force_refresh: true } : {});
@@ -1833,7 +1833,7 @@ async function refreshWorldInfo(forceRefresh) {
 }
 
 async function refreshSeedMap() {
-  if (!TOKEN && !PASSWORD) return;
+  if (!TOKEN) return;
   if (!beginRefresh('seedmap')) return;
   setSeedState('', '正在读取当前世界种子...');
   try {
@@ -1974,7 +1974,7 @@ async function restartServer() {
       setTimeout(refreshTPS, 16000);
       setTimeout(refreshSeedMap, 16000);
       setTimeout(function () {
-        if (TOKEN || PASSWORD) setStatus('on', '已连接');
+        if (TOKEN) setStatus('on', '已连接');
       }, 18000);
     } else {
       log('服务器重启失败: ' + (d.error || 'unknown'), 'err');
@@ -2008,7 +2008,7 @@ function toggleUnsupported(el, msg) {
 async function toggleConfigBool(el, msg) {
   var key = el.getAttribute('data-config-key');
   var cb = el.querySelector('input[type=checkbox]');
-  if (!key || !cb || (!TOKEN && !PASSWORD)) return;
+  if (!key || !cb || !TOKEN) return;
   cb.checked = !cb.checked;
   try {
     var d = await configRequest({
@@ -2031,7 +2031,7 @@ async function toggleConfigBool(el, msg) {
 }
 
 async function saveConfigField(key, inputId, msg) {
-  if (!TOKEN && !PASSWORD) return;
+  if (!TOKEN) return;
   var input = document.getElementById(inputId);
   if (!input) return;
   var value = input.value.trim();

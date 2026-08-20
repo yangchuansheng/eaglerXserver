@@ -1,7 +1,7 @@
-<!-- refreshed: 2026-08-19 -->
+<!-- refreshed: 2026-08-20 -->
 # Architecture
 
-**Analysis Date:** 2026-08-19
+**Analysis Date:** 2026-08-20
 
 ## System Overview
 
@@ -92,8 +92,8 @@
 1. Docker invokes `/usr/local/bin/eaglerx-start`, copied from `script/start_server.sh` (`Dockerfile`).
 2. The script requires `MINECRAFT_VERSION`, validates `1.8` or `1.12`, and initializes a mounted application directory (`script/start_server.sh`).
 3. It links `web/` and `server/` to the selected version trees, writes EULA/RCON properties, and optionally links legacy worlds.
-4. It creates tmux session `mcserver`, starts `bungee/run.sh`, then starts the selected `server/run.sh`.
-5. It starts `script/http_server.py` from the selected `web/` directory and keeps the container alive with `tail -f /dev/null`.
+4. It creates tmux session `mcserver`, starts `bungee/run.sh`, waits for port 5200, then starts the selected `server/run.sh`.
+5. It starts `script/http_server.py`, monitors Bungee, Paper, and HTTP, and shuts all services down in order when a core process exits or the container receives `TERM`/`INT`.
 
 ### Client Request Path
 
@@ -139,7 +139,7 @@
 **Runtime shell entrypoint:**
 - Location: `script/start_server.sh`
 - Triggers: Docker or direct shell invocation.
-- Responsibilities: Select version, configure persistence, start tmux, start HTTP bridge.
+- Responsibilities: Select version, configure persistence, start services in order, monitor them, and coordinate shutdown.
 
 **Proxy process:**
 - Location: `bungee/run.sh`
@@ -158,7 +158,7 @@
 
 ## Architectural Constraints
 
-- **Threading:** The control plane uses stdlib `HTTPServer`; request handling is synchronous, with a small lock around RCON timing (`script/http_server.py`).
+- **Threading:** The control plane uses stdlib `ThreadingHTTPServer`; locks serialize shared server-property writes, restarts, login-attempt state, and RCON timing (`script/http_server.py`).
 - **Process order:** Bungee must start before Paper so the proxy route is ready (`script/start_server.sh`).
 - **Port boundaries:** Public game/web traffic uses 5200; admin/fallback HTTP uses 5201; Paper and RCON bind to localhost ports 25565 and 25575.
 - **Version coupling:** Each container selects one version pair; parallel versions require separate containers and persistent directories.
@@ -196,4 +196,4 @@
 
 ---
 
-*Architecture analysis: 2026-08-19*
+*Architecture analysis: 2026-08-20*

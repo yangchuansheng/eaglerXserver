@@ -1,6 +1,6 @@
 # External Integrations
 
-**Analysis Date:** 2026-08-19
+**Analysis Date:** 2026-08-20
 
 ## APIs & External Services
 
@@ -47,8 +47,9 @@
 **Auth Provider:**
 - Built-in EaglercraftXBungee account system configured in `bungee/plugins/EaglercraftXBungee/authservice.yml`.
   - Implementation: SQLite-backed password registration/login through the `/eagler` command and login prompt.
-- Administration API authentication is local RCON password authentication in `script/http_server.py`.
-  - Secret: `RCON_PASSWORD`; optional `ADMIN_AUTH_SECRET` derives the admin token signing seed.
+- Administration API authentication uses `RCON_PASSWORD` for `/api/login`, then signed bearer tokens for management requests in `script/http_server.py`.
+  - Secret: `ADMIN_AUTH_SECRET` optionally supplies the token signing seed; its default is derived from `RCON_PASSWORD`.
+  - Controls: Tokens default to an eight-hour lifetime, and five failed logins from one source trigger a ten-minute lockout.
 
 ## Monitoring & Observability
 
@@ -90,7 +91,7 @@
 
 **Incoming:**
 - HTTP requests to EaglercraftXBungee on port 5200.
-- HTTP requests to the Python fallback/admin service on port 5201, including `/api/login`, `/api/rcon`, `/api/config`, `/api/seed`, `/api/structures`, `/api/player-location`, `/api/runtime-state`, `/api/world-state`, `/api/system`, and `/dynmap/`.
+- HTTP requests to the Python fallback/admin service on port 5201, including `/api/status`, `/api/login`, `/api/rcon`, `/api/config`, `/api/seed`, `/api/structures`, `/api/player-location`, `/api/runtime-state`, `/api/world-state`, `/api/system`, and `/dynmap/`.
 
 **Outgoing:**
 - RCON TCP requests from `script/http_server.py` to `127.0.0.1:25575`.
@@ -100,4 +101,4 @@
 
 ---
 
-*Integration audit: 2026-08-19*
+*Integration audit: 2026-08-20*

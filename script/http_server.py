@@ -19,7 +19,7 @@ import re
 import math
 import ctypes
 import threading
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from http.client import HTTPConnection
 from urllib.parse import urlparse
 
@@ -34,7 +34,7 @@ RCON_ENABLED = bool(RCON_PASSWORD)
 MINECRAFT_VERSION = os.environ.get('MINECRAFT_VERSION', '')
 DYNMAP_HOST = os.environ.get('DYNMAP_HOST', '127.0.0.1')
 DYNMAP_PORT = int(os.environ.get('DYNMAP_PORT', '8123'))
-AUTH_TOKEN_TTL = int(os.environ.get('ADMIN_AUTH_TOKEN_TTL', str(30 * 24 * 3600)))
+AUTH_TOKEN_TTL = int(os.environ.get('ADMIN_AUTH_TOKEN_TTL', str(8 * 3600)))
 _auth_secret_seed = os.environ.get('ADMIN_AUTH_SECRET') or f'eaglerx-admin::{RCON_PASSWORD}'
 AUTH_SECRET = hashlib.sha256(_auth_secret_seed.encode('utf-8')).digest()
 TMUX_SESSION = os.environ.get('TMUX_SESSION', 'mcserver')
@@ -42,6 +42,10 @@ SERVER_PANE = os.environ.get('TMUX_SERVER_PANE', f'{TMUX_SESSION}:0.1')
 CUBIOMES_SHIM_PATH = os.environ.get('CUBIOMES_SHIM_PATH', '/usr/local/lib/libcubiomes_shim.so')
 RCON_CONNECT_INTERVAL = float(os.environ.get('RCON_CONNECT_INTERVAL', '0.08'))
 RCON_SOCKET_TIMEOUT = float(os.environ.get('RCON_SOCKET_TIMEOUT', '5'))
+MAX_JSON_BODY = 64 * 1024
+REQUEST_READ_TIMEOUT = 10
+LOGIN_MAX_FAILURES = 5
+LOGIN_LOCKOUT_SECONDS = 10 * 60
 
 MIN_LONG = -(1 << 63)
 MAX_LONG = (1 << 63) - 1
@@ -89,6 +93,11 @@ _runtime_flags = {
     'save_enabled': True,
     'whitelist_enabled': None,
 }
+_login_attempts = {}
+_login_attempts_lock = threading.Lock()
+# ponytail: process-wide locks fit one active server; use per-resource locks for multi-server control.
+_server_properties_lock = threading.Lock()
+_restart_lock = threading.Lock()
 
 PANEL_GAMERULES = [
     'doDaylightCycle',
@@ -104,12 +113,6 @@ PANEL_GAMERULES = [
     'commandBlockOutput',
     'showDeathMessages',
 ]
-
-CORS_HEADERS = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-}
 
 MANAGED_CONFIG = {
     'pvp': {'type': 'bool'},
@@ -236,18 +239,19 @@ def _server_properties_path():
 
 
 def read_server_properties():
-    props = {}
-    path = _server_properties_path()
-    if not os.path.exists(path):
+    with _server_properties_lock:
+        props = {}
+        path = _server_properties_path()
+        if not os.path.exists(path):
+            return props
+        with open(path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.rstrip('\n')
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                key, value = line.split('=', 1)
+                props[key] = value
         return props
-    with open(path, 'r', encoding='utf-8') as f:
-        for line in f:
-            line = line.rstrip('\n')
-            if not line or line.startswith('#') or '=' not in line:
-                continue
-            key, value = line.split('=', 1)
-            props[key] = value
-    return props
 
 
 def get_level_name():
@@ -264,27 +268,28 @@ def get_level_playerdata_dir():
 
 
 def write_server_properties(updates):
-    path = _server_properties_path()
-    lines = []
-    seen = set()
-    if os.path.exists(path):
-        with open(path, 'r', encoding='utf-8') as f:
-            for raw in f.readlines():
-                line = raw.rstrip('\n')
-                if '=' in line and not line.startswith('#'):
-                    key, _ = line.split('=', 1)
-                    if key in updates:
-                        lines.append(f'{key}={updates[key]}\n')
-                        seen.add(key)
+    with _server_properties_lock:
+        path = _server_properties_path()
+        lines = []
+        seen = set()
+        if os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                for raw in f.readlines():
+                    line = raw.rstrip('\n')
+                    if '=' in line and not line.startswith('#'):
+                        key, _ = line.split('=', 1)
+                        if key in updates:
+                            lines.append(f'{key}={updates[key]}\n')
+                            seen.add(key)
+                        else:
+                            lines.append(raw)
                     else:
                         lines.append(raw)
-                else:
-                    lines.append(raw)
-    for key, value in updates.items():
-        if key not in seen:
-            lines.append(f'{key}={value}\n')
-    with open(path, 'w', encoding='utf-8') as f:
-        f.writelines(lines)
+        for key, value in updates.items():
+            if key not in seen:
+                lines.append(f'{key}={value}\n')
+        with open(path, 'w', encoding='utf-8') as f:
+            f.writelines(lines)
 
 
 def normalize_config_value(key, value):
@@ -999,36 +1004,61 @@ def verify_auth_token(token):
         return False, 'token required'
     try:
         header, payload, signature = token.split('.', 2)
-    except ValueError:
-        return False, 'token invalid'
-    signing_input = f'{header}.{payload}'.encode('ascii')
-    expected = _b64url_encode(hmac.new(AUTH_SECRET, signing_input, hashlib.sha256).digest())
-    if not hmac.compare_digest(signature, expected):
-        return False, 'token invalid'
-    try:
+        signing_input = f'{header}.{payload}'.encode('ascii')
+        expected = _b64url_encode(hmac.new(AUTH_SECRET, signing_input, hashlib.sha256).digest())
+        if not hmac.compare_digest(signature, expected):
+            return False, 'token invalid'
         payload_data = json.loads(_b64url_decode(payload).decode('utf-8'))
+        if not isinstance(payload_data, dict):
+            return False, 'token invalid'
+        expires_at = int(payload_data.get('exp', 0))
     except Exception:
         return False, 'token invalid'
     if payload_data.get('kind') != 'admin':
         return False, 'token invalid'
-    if int(payload_data.get('exp', 0)) < int(time.time()):
+    if expires_at <= int(time.time()):
         return False, 'token expired'
     return True, payload_data
 
 
 def authenticate_request(data):
     token = str(data.get('token', '')).strip()
-    if token:
-        ok, detail = verify_auth_token(token)
-        if ok:
-            return True, None, 'token'
-        return False, detail, None
-    pw = data.get('password', '')
-    if not pw:
-        return False, 'password required', None
-    if pw != RCON_PASSWORD:
-        return False, 'password mismatch', None
-    return True, None, 'password'
+    ok, detail = verify_auth_token(token)
+    if ok:
+        return True, None, 'token'
+    return False, detail, None
+
+
+def login_retry_after(client_ip, now=None):
+    now = time.time() if now is None else now
+    with _login_attempts_lock:
+        state = _login_attempts.get(client_ip)
+        if not state:
+            return 0
+        if state['locked_until'] > now:
+            return max(1, math.ceil(state['locked_until'] - now))
+        if state['locked_until'] or now - state['window_started'] >= LOGIN_LOCKOUT_SECONDS:
+            _login_attempts.pop(client_ip, None)
+        return 0
+
+
+def record_login_failure(client_ip, now=None):
+    now = time.time() if now is None else now
+    with _login_attempts_lock:
+        state = _login_attempts.get(client_ip)
+        if not state or now - state['window_started'] >= LOGIN_LOCKOUT_SECONDS:
+            state = {'failures': 0, 'window_started': now, 'locked_until': 0}
+            _login_attempts[client_ip] = state
+        state['failures'] += 1
+        if state['failures'] >= LOGIN_MAX_FAILURES:
+            state['locked_until'] = now + LOGIN_LOCKOUT_SECONDS
+            return LOGIN_LOCKOUT_SECONDS
+        return 0
+
+
+def clear_login_failures(client_ip):
+    with _login_attempts_lock:
+        _login_attempts.pop(client_ip, None)
 
 
 def tmux_run(args):
@@ -1049,10 +1079,16 @@ def server_pane_command():
     return tmux_run(['display-message', '-p', '-t', SERVER_PANE, '#{pane_current_command}'])
 
 
+def server_pane_dead():
+    return tmux_run(['display-message', '-p', '-t', SERVER_PANE, '#{pane_dead}']) == '1'
+
+
 def wait_for_server_stop(timeout=60):
     deadline = time.time() + timeout
     last_cmd = ''
     while time.time() < deadline:
+        if server_pane_dead():
+            return 'dead'
         last_cmd = server_pane_command().lower()
         if last_cmd not in ('java', 'java.bin'):
             return last_cmd
@@ -1061,14 +1097,26 @@ def wait_for_server_stop(timeout=60):
 
 
 def restart_server_process():
-    current_cmd = server_pane_command().lower()
-    if current_cmd in ('java', 'java.bin'):
-        try:
-            rcon_send('stop', retries=1)
-        except Exception:
-            tmux_run(['send-keys', '-t', SERVER_PANE, 'stop', 'C-m'])
-        wait_for_server_stop(timeout=60)
-    tmux_run(['send-keys', '-t', SERVER_PANE, f'cd "{SERVER_ROOT}"; ./run.sh', 'C-m'])
+    if not _restart_lock.acquire(blocking=False):
+        return False
+    try:
+        if not server_pane_dead() and server_pane_command().lower() in ('java', 'java.bin'):
+            try:
+                rcon_send('stop', retries=1)
+            except Exception:
+                tmux_run(['send-keys', '-t', SERVER_PANE, 'stop', 'C-m'])
+            wait_for_server_stop(timeout=60)
+        tmux_run(['respawn-pane', '-k', '-t', SERVER_PANE, f'cd "{SERVER_ROOT}"; exec ./run.sh'])
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            if server_pane_dead():
+                raise RuntimeError('server exited during restart')
+            if server_pane_command().lower() in ('java', 'java.bin'):
+                return True
+            time.sleep(1)
+        raise RuntimeError('server did not start in time')
+    finally:
+        _restart_lock.release()
 
 
 def _is_retryable_rcon_error(err):
@@ -1173,11 +1221,6 @@ class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=WEB_ROOT, **kwargs)
 
-    def do_OPTIONS(self):
-        self.send_response(204)
-        self._send_cors_headers()
-        self.end_headers()
-
     def do_POST(self):
         parsed = urlparse(self.path)
         if RCON_ENABLED and parsed.path == '/api/login':
@@ -1220,15 +1263,62 @@ class Handler(SimpleHTTPRequestHandler):
         else:
             super().do_GET()
 
-    def _handle_rcon(self):
-        length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(length)
+    def _read_json_body(self, allow_empty=False):
+        raw_length = self.headers.get('Content-Length')
+        try:
+            length = int(raw_length or '0')
+        except ValueError:
+            self._json(400, {'success': False, 'error': 'invalid content length'})
+            return None
+        if length < 0:
+            self._json(400, {'success': False, 'error': 'invalid content length'})
+            return None
+        if length > MAX_JSON_BODY:
+            self._json(413, {'success': False, 'error': 'request body too large'})
+            return None
+        if length == 0:
+            if allow_empty:
+                return {}
+            self._json(400, {'success': False, 'error': 'request body required'})
+            return None
+        previous_timeout = self.connection.gettimeout()
+        try:
+            self.connection.settimeout(REQUEST_READ_TIMEOUT)
+            body = self.rfile.read(length)
+        except socket.timeout:
+            self._json(408, {'success': False, 'error': 'request body timeout'})
+            return None
+        finally:
+            self.connection.settimeout(previous_timeout)
+        if len(body) != length:
+            self._json(400, {'success': False, 'error': 'incomplete request body'})
+            return None
         try:
             data = json.loads(body)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             self._json(400, {'success': False, 'error': 'invalid json'})
+            return None
+        if not isinstance(data, dict):
+            self._json(400, {'success': False, 'error': 'json object required'})
+            return None
+        return data
+
+    def _send_login_lockout(self, retry_after):
+        self._json(429, {
+            'success': False,
+            'error': 'too many login attempts',
+            'retry_after': retry_after,
+        }, {'Retry-After': str(retry_after)})
+
+    def _handle_rcon(self):
+        data = self._read_json_body()
+        if data is None:
             return
-        cmd = data.get('command', '').strip()
+        cmd = data.get('command', '')
+        if not isinstance(cmd, str):
+            self._json(400, {'success': False, 'error': 'command must be a string'})
+            return
+        cmd = cmd.strip()
         if not cmd:
             self._json(400, {'success': False, 'error': 'command required'})
             return
@@ -1244,12 +1334,8 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(rcon_http_status(e), {'success': False, 'error': str(e)})
 
     def _handle_config(self):
-        length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(length)
-        try:
-            data = json.loads(body)
-        except json.JSONDecodeError:
-            self._json(400, {'success': False, 'error': 'invalid json'})
+        data = self._read_json_body()
+        if data is None:
             return
 
         authed, error, _ = authenticate_request(data)
@@ -1289,12 +1375,8 @@ class Handler(SimpleHTTPRequestHandler):
         })
 
     def _handle_seed(self):
-        length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(length)
-        try:
-            data = json.loads(body)
-        except json.JSONDecodeError:
-            self._json(400, {'success': False, 'error': 'invalid json'})
+        data = self._read_json_body()
+        if data is None:
             return
 
         authed, error, _ = authenticate_request(data)
@@ -1314,12 +1396,8 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(500, {'success': False, 'error': str(e)})
 
     def _handle_structures(self):
-        length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(length)
-        try:
-            data = json.loads(body)
-        except json.JSONDecodeError:
-            self._json(400, {'success': False, 'error': 'invalid json'})
+        data = self._read_json_body()
+        if data is None:
             return
 
         authed, error, _ = authenticate_request(data)
@@ -1340,12 +1418,8 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(500, {'success': False, 'error': str(e)})
 
     def _handle_player_location(self):
-        length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(length)
-        try:
-            data = json.loads(body)
-        except json.JSONDecodeError:
-            self._json(400, {'success': False, 'error': 'invalid json'})
+        data = self._read_json_body()
+        if data is None:
             return
 
         authed, error, _ = authenticate_request(data)
@@ -1365,12 +1439,8 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(500, {'success': False, 'error': str(e)})
 
     def _handle_world_state(self):
-        length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(length)
-        try:
-            data = json.loads(body) if body else {}
-        except json.JSONDecodeError:
-            self._json(400, {'success': False, 'error': 'invalid json'})
+        data = self._read_json_body(allow_empty=True)
+        if data is None:
             return
 
         authed, error, _ = authenticate_request(data)
@@ -1385,12 +1455,8 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(500, {'success': False, 'error': str(e)})
 
     def _handle_runtime_state(self):
-        length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(length)
-        try:
-            data = json.loads(body) if body else {}
-        except json.JSONDecodeError:
-            self._json(400, {'success': False, 'error': 'invalid json'})
+        data = self._read_json_body(allow_empty=True)
+        if data is None:
             return
 
         authed, error, _ = authenticate_request(data)
@@ -1405,20 +1471,30 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(500, {'success': False, 'error': str(e)})
 
     def _handle_login(self):
-        length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(length)
-        try:
-            data = json.loads(body)
-        except json.JSONDecodeError:
-            self._json(400, {'success': False, 'error': 'invalid json'})
+        data = self._read_json_body()
+        if data is None:
             return
-        pw = data.get('password', '')
+        client_ip = self.client_address[0]
+        retry_after = login_retry_after(client_ip)
+        if retry_after:
+            self._send_login_lockout(retry_after)
+            return
+        pw = str(data.get('password', ''))
         if not pw:
-            self._json(403, {'success': False, 'error': 'password required'})
+            retry_after = record_login_failure(client_ip)
+            if retry_after:
+                self._send_login_lockout(retry_after)
+            else:
+                self._json(403, {'success': False, 'error': 'password required'})
             return
-        if pw != RCON_PASSWORD:
-            self._json(403, {'success': False, 'error': 'password mismatch'})
+        if not hmac.compare_digest(pw.encode('utf-8'), RCON_PASSWORD.encode('utf-8')):
+            retry_after = record_login_failure(client_ip)
+            if retry_after:
+                self._send_login_lockout(retry_after)
+            else:
+                self._json(403, {'success': False, 'error': 'password mismatch'})
             return
+        clear_login_failures(client_ip)
         token, expires_at = create_auth_token()
         self._json(200, {
             'success': True,
@@ -1429,12 +1505,8 @@ class Handler(SimpleHTTPRequestHandler):
         })
 
     def _handle_system(self):
-        length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(length)
-        try:
-            data = json.loads(body)
-        except json.JSONDecodeError:
-            self._json(400, {'success': False, 'error': 'invalid json'})
+        data = self._read_json_body()
+        if data is None:
             return
 
         authed, error, _ = authenticate_request(data)
@@ -1448,7 +1520,9 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         try:
-            restart_server_process()
+            if not restart_server_process():
+                self._json(409, {'success': False, 'error': 'server restart already in progress'})
+                return
             self._json(200, {
                 'success': True,
                 'message': '服务器正在重启，通常 10-30 秒后恢复连接',
@@ -1457,12 +1531,16 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception as e:
             self._json(500, {'success': False, 'error': str(e)})
 
-    def _json(self, code, data):
+    def _json(self, code, data, headers=None):
+        body = json.dumps(data, ensure_ascii=False).encode('utf-8')
         self.send_response(code)
         self.send_header('Content-Type', 'application/json')
-        self._send_cors_headers()
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', 'no-store')
+        for key, value in (headers or {}).items():
+            self.send_header(key, value)
         self.end_headers()
-        self.wfile.write(json.dumps(data, ensure_ascii=False).encode('utf-8'))
+        self.wfile.write(body)
 
     def _proxy_dynmap(self, path, query):
         try:
@@ -1485,10 +1563,6 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_error(502, f'Dynmap unavailable at {DYNMAP_HOST}:{DYNMAP_PORT}: {e}')
 
-    def _send_cors_headers(self):
-        for k, v in CORS_HEADERS.items():
-            self.send_header(k, v)
-
     def log_message(self, format, *args):
         msg = format % args if args else format
         print(f'[http:5201] {msg}')
@@ -1496,7 +1570,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 if __name__ == '__main__':
     os.chdir(WEB_ROOT)
-    server = HTTPServer(('0.0.0.0', PORT), Handler)
+    server = ThreadingHTTPServer(('0.0.0.0', PORT), Handler)
     status = 'RCON enabled' if RCON_ENABLED else 'RCON disabled'
     print(f'[http:5201] listening, {status}')
     server.serve_forever()

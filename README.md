@@ -1,94 +1,64 @@
 # EaglercraftX Server
-- fork from https://github.com/burgerhugger/ALL-server
-## Credits
-eaglercraft and eaglercraftx: lax1dude (calder young)
-<br>
-eaglercraft server: ayunami2000
-<br>
-## Setup Guide
-Welcome to the EaglercraftX server project! Here is how you can setup your very own eaglercraft server:
-<br>
-<br>
-First, go to the top of the repo and click on code > codespaces > create codespace
-<br>
-now you have your own free server instance to host eaglercraft. Next you need to run the setup commands:
-<br>
-<br>
-create 2 terminal tabs and paste in the following snipits:
-<br>
-<br>
-first tab: `cd server && sudo java -jar server.jar`
-<br>
-<br>
-second tab: `cd bungee && sudo java -jar bungee.jar`
-<br>
-<br>
-Now go to the ports area and forward (and make public) ports `25565` and `8081`
-<br>
-Your eaglercraft server is setup!
----
-# 教程参考 https://www.cnblogs.com/chenxuan520/p/18212461 重要
-# 视频教程 [最简单的MC我的世界网页版联机服务器搭建\_我的世界](https://www.bilibili.com/video/BV1ey411q7mf/)
-# 注意点
-1. server文件夹的plugins目录可以直接删除,避免登录需要密码的问题
-2. 最好用tmux进行分屏处理,服务端用的是paper,部署的时候先启动 bungee 再启动 server,顺序不能错
----
-# 我修改的特性
-1. 默认5200端口
-2. Docker 直接部署
-3. 双版本支持：Paper 1.8.8 + Paper 1.12.2，通过 `MINECRAFT_VERSION` 环境变量切换
 
----
+单镜像包含 EaglercraftX 1.8 / 1.12 客户端与 Paper 1.8.8 / 1.12.2 服务端。启动时通过 `MINECRAFT_VERSION` 选择一套运行资源。
 
-# Docker 部署
+## 端口
 
-## 双版本镜像说明
+| 端口 | 用途 | 部署边界 |
+|------|------|----------|
+| 5200 | WebSocket 游戏连接与公开静态文件 | 对玩家发布 |
+| 5201 | 管理面、HTTP 回退与 Dynmap 代理 | 绑定宿主机 `127.0.0.1` |
+| 25565 | Paper | 容器内 localhost |
+| 25575 | RCON | 容器内 localhost |
 
-- 当前 Docker 镜像是**单镜像双版本**设计：同一个镜像同时包含 `server-1.8/`、`server-1.12/`、`web-1.8/`、`web-1.12/` 四套资源。
-- 启动容器时必须**显式传入** `MINECRAFT_VERSION` 选择版本，入口脚本会把统一入口目录切到对应版本：
-  - `web/ -> web-1.8/` 或 `web-1.12/`
-  - `server/ -> server-1.8/` 或 `server-1.12/`
-- 因此：**同一个镜像可以跑 1.8，也可以跑 1.12；但单个容器实例一次只能选择一个版本。**
-- 如果你要同时运行 1.8 和 1.12，请起两个容器，并把宿主机数据目录分开挂载，避免世界数据和插件配置互相污染。
-- 如果未传 `-e MINECRAFT_VERSION=1.8` 或 `-e MINECRAFT_VERSION=1.12`，容器会直接报错退出。
+## 快速启动
 
-## 拉取镜像
 ```bash
 docker pull registry.cn-hangzhou.aliyuncs.com/chenxuan/eaglerx1.8server:2.1
-```
 
-## 启动
-
-### Paper 1.12.2
-```bash
+# Paper 1.12.2
 docker run -d -p 5200:5200 \
   -e MINECRAFT_VERSION=1.12 \
   registry.cn-hangzhou.aliyuncs.com/chenxuan/eaglerx1.8server:2.1
+
+# Paper 1.8.8
+docker run -d -p 5200:5200 \
+  -e MINECRAFT_VERSION=1.8 \
+  registry.cn-hangzhou.aliyuncs.com/chenxuan/eaglerx1.8server:2.1
 ```
 
-### Paper 1.8.8
-```bash
-docker run -d -p 5200:5200 -e MINECRAFT_VERSION=1.8 registry.cn-hangzhou.aliyuncs.com/chenxuan/eaglerx1.8server:2.1
-```
+游戏入口为 `http://<host>:5200`。启动必须显式提供 `MINECRAFT_VERSION=1.8` 或 `MINECRAFT_VERSION=1.12`。
 
-### 开启 RCON
+## 本机管理面
+
+设置 `RCON_PASSWORD` 后启用管理 API，并把 5201 发布到宿主机回环地址：
+
 ```bash
-docker run -d -p 5200:5200 -p 5201:5201 \
+docker run -d \
+  -p 5200:5200 \
+  -p 127.0.0.1:5201:5201 \
   -e MINECRAFT_VERSION=1.12 \
   -e RCON_PASSWORD=你的密码 \
   registry.cn-hangzhou.aliyuncs.com/chenxuan/eaglerx1.8server:2.1
 ```
 
-管理面板: `http://<host>:5201/admin`
+管理面板地址为 `http://127.0.0.1:5201/admin`。管理员密码仅发送到 `/api/login`；登录成功后，浏览器把令牌保存在 `sessionStorage`，管理请求统一使用令牌。令牌默认有效 8 小时，关闭浏览器会话会清理本地登录态。
 
-### 推荐：挂载完整数据目录
+远程管理采用以下任一受信任通道：
 
-当前镜像支持把整个运行目录挂载出来。第一次挂载空目录时，容器会自动初始化完整文件；后续世界、插件、配置和前端文件都会保存在宿主机。
+- HTTPS 反向代理，上游指向 `127.0.0.1:5201`
+- VPN 访问宿主机管理网络
+- SSH 隧道：`ssh -L 5201:127.0.0.1:5201 <host>`
+
+## 持久化运行目录
+
+推荐把整个运行目录挂载到 `/eaglerX-1.8-server`。首次使用空目录时，入口脚本从镜像模板初始化完整资源；已有内容且结构残缺时，入口脚本保留原数据并退出。
 
 ```bash
 # 1.12
 docker run -d \
-  -p 5200:5200 -p 5201:5201 \
+  -p 5200:5200 \
+  -p 127.0.0.1:5201:5201 \
   -v /data/eagler-1.12:/eaglerX-1.8-server \
   -e MINECRAFT_VERSION=1.12 \
   -e RCON_PASSWORD=你的密码 \
@@ -96,26 +66,58 @@ docker run -d \
 
 # 1.8
 docker run -d \
-  -p 5200:5200 -p 5201:5201 \
+  -p 5200:5200 \
+  -p 127.0.0.1:5201:5201 \
   -v /data/eagler-1.8:/eaglerX-1.8-server \
   -e MINECRAFT_VERSION=1.8 \
   -e RCON_PASSWORD=你的密码 \
   registry.cn-hangzhou.aliyuncs.com/chenxuan/eaglerx1.8server:2.1
 ```
 
-如果要同时开两个版本，请把端口错开，例如把第二个容器改成 `-p 5300:5200 -p 5301:5201`。
+并行运行两个版本时，为每个容器配置独立挂载目录和宿主机端口，例如第二个容器使用 `-p 5300:5200 -p 127.0.0.1:5301:5201`。
+
+## 管理 API
+
+请求体上限为 64 KiB，读取超时为 10 秒。
+登录失败按来源地址累计；共享本机回环、SSH 隧道或反向代理来源时，管理员共享同一个 10 分钟锁定窗口。
+
+```bash
+# 1. 登录并取得令牌
+curl -s http://127.0.0.1:5201/api/login \
+  -H 'Content-Type: application/json' \
+  -d '{"password":"你的密码"}'
+
+# 2. 使用返回的 token 调用管理 API
+curl -s http://127.0.0.1:5201/api/rcon \
+  -H 'Content-Type: application/json' \
+  -d '{"command":"list","token":"登录返回的令牌"}'
+```
+
+同一来源连续 5 次登录失败后锁定 10 分钟。
+
+## 生命周期
+
+入口脚本按 Bungee、Paper、HTTP 的顺序启动服务并持续监控。任一核心服务退出时，容器依次停止其余服务并返回失败状态；收到 `SIGTERM` 或 `SIGINT` 时执行有序停服。
 
 ## 环境变量
 
-| 变量 | 默认 | 说明 |
-|------|------|------|
-| `MINECRAFT_VERSION` | 无默认值，必填 | 服务端版本: `1.8` 或 `1.12` |
-| `RCON_PASSWORD` | 无 | 设置后启用 RCON |
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `MINECRAFT_VERSION` | 必填 | `1.8` 或 `1.12` |
+| `RCON_PASSWORD` | 空 | 设置后启用 RCON 与管理 API |
+| `ADMIN_AUTH_TOKEN_TTL` | `28800` | 管理令牌有效期，单位为秒 |
+| `ADMIN_AUTH_SECRET` | 从 RCON 密码派生 | 可选的令牌签名密钥 |
 
 ## 构建
+
 ```bash
 docker build -t eaglerx1.8server .
+./build.sh 2.1
 ./build.sh 2.1 push
 ```
 
-构建出来的是**双版本通用镜像**，不是分别构建两个镜像。
+## Credits
+
+- Eaglercraft / EaglercraftX: lax1dude (Calder Young)
+- Eaglercraft server: ayunami2000
+- Upstream: https://github.com/burgerhugger/ALL-server

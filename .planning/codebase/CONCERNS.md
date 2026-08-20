@@ -1,6 +1,6 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-08-19
+**Analysis Date:** 2026-08-20
 
 ## Tech Debt
 
@@ -25,22 +25,16 @@
 ## Known Bugs
 
 **RCON is exposed through an unauthenticated-looking public HTTP surface:**
-- Symptoms: Port 5201 binds to `0.0.0.0`; API authentication relies on a password/token sent by the browser, and CORS allows every origin.
+- Symptoms: Port 5201 binds to `0.0.0.0`; API authentication relies on a password/token sent by the browser.
 - Files: `script/http_server.py:108-112`, `script/http_server.py:1499`, `README.md:76-113`
 - Trigger: Publish port 5201 and configure `RCON_PASSWORD`.
 - Workaround: Bind 5201 to a private interface or firewall it to trusted admin networks; use HTTPS at a reverse proxy.
 
-**Request bodies have no size limit:**
-- Symptoms: Handlers convert arbitrary `Content-Length` to an integer and read it into memory.
-- Files: `script/http_server.py:1181-1200`, `script/http_server.py:1224-1230`, `script/http_server.py:1248-1253`, `script/http_server.py:1293-1300`
-- Trigger: Send a large `Content-Length` to any POST endpoint.
-- Workaround: Keep port 5201 private until a bounded body reader and request timeout are added.
-
-**Restart state is not durable across server failure:**
-- Symptoms: `restart_server_process()` sends commands to a fixed tmux pane and assumes the pane command is `java` or `java.bin`.
-- Files: `script/http_server.py:1034-1071`, `script/start_server.sh:135-141`
-- Trigger: A manual tmux change, wrapper process, or crashed server changes the pane command.
-- Workaround: Restart the container when the fixed pane contract is broken.
+**Restart recovery depends on the live tmux session:**
+- Symptoms: `restart_server_process()` detects and respawns a dead server pane, while a missing or renamed tmux session/pane leaves the API without a recovery target.
+- Files: `script/http_server.py`, `script/start_server.sh`
+- Trigger: The tmux session is killed or its server pane is deleted or renamed.
+- Workaround: Restart the container to recreate the managed session and panes.
 
 ## Security Considerations
 
@@ -48,7 +42,7 @@
 - Risk: `RCON_PASSWORD` is submitted in JSON over HTTP and the generated token is accepted as bearer authority; port 5201 has no TLS.
 - Files: `script/http_server.py:1019-1031`, `script/http_server.py:1381-1431`, `Dockerfile:14-16`
 - Current mitigation: RCON endpoints are registered only when `RCON_PASSWORD` is set; RCON itself listens on `127.0.0.1`.
-- Recommendations: Require HTTPS or private binding, remove wildcard CORS, add origin/CSRF policy, and use a separately provisioned random `ADMIN_AUTH_SECRET`.
+- Recommendations: Require HTTPS or private binding and use a separately provisioned random `ADMIN_AUTH_SECRET`.
 
 **RCON command authority is broad:**
 - Risk: Any authenticated caller can submit arbitrary Minecraft commands, including destructive administration commands.
@@ -64,11 +58,11 @@
 
 ## Performance Bottlenecks
 
-**Single-threaded HTTP server blocks all management traffic:**
-- Problem: `HTTPServer` handles requests serially; RCON retries, Dynmap proxy calls, NBT reads, and structure scans run inline.
-- Files: `script/http_server.py:1172`, `script/http_server.py:411-450`, `script/http_server.py:1467-1488`, `script/http_server.py:1499-1503`
-- Cause: A structure scan can iterate thousands of regions and each request can wait up to five seconds for external/RCON operations.
-- Improvement path: Keep the simple server for private low-volume use, then add bounded worker handling plus per-operation timeouts and a scan queue when measurements show contention.
+**Thread-per-request HTTP service has no concurrency bound:**
+- Problem: `ThreadingHTTPServer` creates request threads while RCON retries, Dynmap proxy calls, NBT reads, and structure scans run inline.
+- Files: `script/http_server.py`, especially the structure scan, proxy, and server startup paths
+- Cause: Concurrent expensive requests can retain many threads even though shared mutations are protected by locks.
+- Improvement path: Keep the service private and low-volume; add bounded workers or a scan queue when measured concurrency requires it.
 
 **Structure search scales quadratically with radius:**
 - Problem: Region count grows with the square of `radius`; the maximum radius is 50,000 blocks across multiple structure types with viability checks.
@@ -85,10 +79,10 @@
 ## Fragile Areas
 
 **Symlink and mount initialization:**
-- Files: `script/start_server.sh:19-75`, `script/start_server.sh:120-133`
+- Files: `script/start_server.sh`
 - Why fragile: Startup mutates mount contents, refuses non-empty real directories, and legacy world linking depends on `level-name` and fallback names.
 - Safe modification: Test empty mounts, populated mounts, existing symlinks, both versions, custom `level-name`, and simultaneous containers.
-- Test coverage: No automated shell/integration tests detected.
+- Test coverage: `tests/test_regressions.py` covers invalid versions, preservation of incomplete mounts and regular active paths, Bungee-before-Paper ordering, and the tmux dead-pane respawn primitive.
 
 **Hand-rolled NBT parser:**
 - Files: `script/http_server.py:799-868`
@@ -132,20 +126,20 @@
 - Problem: World/plugin/config data is mutable and startup initialization can copy or rewrite mounted data, while no backup/restore workflow is documented or automated.
 - Blocks: Reliable recovery after corruption, accidental commands, or failed upgrades.
 
-**Health checks and graceful lifecycle:**
-- Problem: `Dockerfile` defines no `HEALTHCHECK`; `script/start_server.sh` backgrounds HTTP and keeps the container alive with `tail -f /dev/null`.
-- Blocks: Orchestrators from distinguishing a healthy Paper/Bungee pair from a running but failed process.
+**Container health metadata:**
+- Problem: `script/start_server.sh` monitors Bungee, Paper, and HTTP and exits on failure, while `Dockerfile` defines no `HEALTHCHECK`.
+- Blocks: Orchestrators from querying readiness or degraded state before a process exits.
 
 ## Test Coverage Gaps
 
 **HTTP authentication and admin authorization:**
-- What's not tested: Password/token validation, expiry, CORS behavior, raw command restrictions, malformed JSON, and oversized bodies.
+- What's not tested: Token expiry at the HTTP boundary, raw command authorization policy, and live RCON failure mapping.
 - Files: `script/http_server.py:981-1031`, `script/http_server.py:1172-1503`
 - Risk: A small auth or parser regression exposes RCON or crashes the management service.
 - Priority: High
 
 **Startup and persistence matrix:**
-- What's not tested: `MINECRAFT_VERSION` validation, empty/full bind mounts, symlink replacement, RCON property rewriting, legacy world links, and startup ordering.
+- What's not tested: Successful empty-mount initialization, EULA and RCON property writes, legacy world links, both successful version selections, real `TERM`/`INT` shutdown, and core-service failure propagation.
 - Files: `script/start_server.sh`, `Dockerfile`, `server-1.8/`, `server-1.12/`
 - Risk: Deployment failures or data loss appear only in production.
 - Priority: High
@@ -164,4 +158,4 @@
 
 ---
 
-*Concerns audit: 2026-08-19*
+*Concerns audit: 2026-08-20*

@@ -1,6 +1,6 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-08-19
+**Analysis Date:** 2026-08-20
 
 ## Naming Patterns
 
@@ -10,7 +10,7 @@
 
 **Functions:**
 - Python functions use snake_case. Private helpers use a leading underscore, for example `_read_json_file()` and `_handle_rcon()` in `script/http_server.py`.
-- JavaScript uses camelCase for functions and variables, for example `fetchDynmapPlayerLocation()` and `REFRESH_IN_FLIGHT` in `web-1.12/admin.js`.
+- JavaScript functions and local variables use camelCase, for example `fetchDynmapPlayerLocation()`; shared state uses uppercase snake case, for example `REFRESH_IN_FLIGHT` in `web-1.12/admin.js`.
 - Shell functions use lowercase snake_case, for example `safe_link_dir()` and `set_server_property()` in `script/start_server.sh`.
 
 **Variables:**
@@ -26,13 +26,13 @@
 
 **Formatting:**
 - Python follows four-space indentation and standard-library imports grouped at the top of `script/http_server.py`.
-- Shell scripts use two-space indentation in existing control blocks, quote paths and variable expansions, and begin executable entrypoints with a shebang.
+- Shell scripts use four-space indentation in existing control blocks, quote paths and variable expansions, and begin executable entrypoints with a shebang.
 - JavaScript mixes modern `const`/`let`/`async` syntax with legacy `var` and compressed helper functions in `web-1.12/admin.js`; preserve the local style when editing a mirrored admin file.
 - No repository formatter configuration is present. `web-1.8/admin.js` and `web-1.12/admin.js` are maintained as matching copies for the two client versions.
 
 **Linting:**
 - No ESLint, Prettier, Ruff, Black, ShellCheck, or equivalent configuration is present.
-- Syntax checks are the practical baseline: `python3 -m py_compile script/http_server.py`, `bash -n script/start_server.sh`, and `node --check web-1.12/admin.js` when Node.js is available.
+- Syntax checks are the practical baseline: `python3 -m py_compile script/http_server.py`, `bash -n script/start_server.sh && bash -n build.sh`, and `node --check web-1.12/admin.js` when Node.js is available.
 
 ## Import Organization
 
@@ -89,4 +89,4 @@
 
 ---
 
-*Convention analysis: 2026-08-19*
+*Convention analysis: 2026-08-20*

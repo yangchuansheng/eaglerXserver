@@ -1,6 +1,6 @@
 # Technology Stack
 
-**Analysis Date:** 2026-08-19
+**Analysis Date:** 2026-08-20
 
 ## Languages
 
@@ -36,7 +36,7 @@
 - Python `http.server` - Administration API, static fallback, and proxy in `script/http_server.py`.
 
 **Testing:**
-- Not detected.
+- Python standard-library `unittest` regression suite in `tests/test_regressions.py`.
 
 **Build/Dev:**
 - Docker - Image packaging in `Dockerfile`.
@@ -89,4 +89,4 @@
 
 ---
 
-*Stack analysis: 2026-08-19*
+*Stack analysis: 2026-08-20*
