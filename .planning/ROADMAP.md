@@ -66,7 +66,7 @@ Milestone v1.0 delivers complete English and Simplified Chinese (`zh-CN`) experi
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Locale Contract and Inventory | 2/2 | Executed — verify-work pending | - |
+| 1. Locale Contract and Inventory | 3/3 | Gap closure executed — re-verification pending | - |
 | 2. English-First Static Shell and Preference | 0/TBD | Not started | - |
 | 3. Dynamic Renderers and Raw-Output Boundary | 0/TBD | Not started | - |
 | 4. Mirror Gate and Release Matrix | 0/TBD | Not started | - |
