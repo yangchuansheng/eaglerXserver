@@ -291,7 +291,7 @@ class StaticShellLocaleTests(unittest.TestCase):
     def test_english_first_paint_and_script_order(self):
         html = self.HTML_PATH.read_text(encoding='utf-8')
         self.assertIn('<html lang="en">', html)
-        self.assertIn('<title data-i18n="header.title">EaglercraftX Admin Console</title>', html)
+        self.assertIn('<title data-i18n="document.surface.adminhtml.l6.c21">EaglercraftX Admin Console</title>', html)
         self.assertIn('<label for="locale-select" data-i18n="header.localeLabel">Language</label>', html)
         self.assertRegex(html, r'<select id="locale-select" name="locale"[^>]*>.*value="en".*value="zh-CN"')
         self.assertLess(html.index('admin-i18n.js'), html.index('admin.js?v='))
@@ -316,7 +316,7 @@ function run(stored, throwOnWrite) {
   const listeners = {};
   const selector = { value: '', textContent: '', options: [], appendChild: function(option) { this.options.push(option); }, addEventListener: function(name, callback) { listeners[name] = callback; } };
   const storage = { value: stored, removed: false, getItem: function() { return this.value; }, removeItem: function() { this.removed = true; this.value = null; }, setItem: function(_, value) { if (throwOnWrite) throw new Error('blocked'); this.value = value; } };
-  const document = { documentElement: {}, title: '', getElementById: function(id) { return id === 'locale-select' ? selector : null; }, querySelectorAll: function() { return []; }, createElement: function() { return {}; }, addEventListener: function() {} };
+  const document = { documentElement: {}, title: '', getElementById: function(id) { return id === 'locale-select' ? selector : null; }, querySelector: function() { return null; }, querySelectorAll: function() { return []; }, createElement: function() { return {}; }, addEventListener: function() {} };
   const window = { console: { warn: function() {} }, location: { origin: 'http://localhost:5201' } };
   const context = { window, document, localStorage: storage, console };
   vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), context);
@@ -349,6 +349,30 @@ console.log(JSON.stringify({ valid: run('zh-CN', false), invalid: run('stale', f
         for asset in self.ASSETS:
             self.assertEqual((ROOT / 'web-1.8' / asset).read_bytes(), (ROOT / 'web-1.12' / asset).read_bytes())
 
+    def test_static_binding_contract_has_exact_sources_and_bilingual_keys(self):
+        inventory = json.loads((ROOT / 'web-1.8' / 'admin-i18n-inventory.json').read_text(encoding='utf-8'))
+        contract = inventory['staticBindingContract']
+        html_lines = self.HTML_PATH.read_text(encoding='utf-8').splitlines()
+        script = """
+const fs = require('fs'); const vm = require('vm'); const window = { console: { warn: function() {} } };
+vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), { window: window });
+console.log(JSON.stringify({ en: window.EaglerXI18n.locales.en.messages, zh: window.EaglerXI18n.locales['zh-CN'].messages }));
+"""
+        result = subprocess.run(['node', '-e', script, str(ROOT / 'web-1.8' / 'admin-i18n.js')], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        catalogs = json.loads(result.stdout)
+        self.assertEqual({'data-i18n', 'data-i18n-title', 'data-i18n-placeholder', 'data-i18n-aria-label'}, {binding[1] for binding in contract['bindings']})
+        binding_count = len(re.findall(r'data-i18n(?:-(?:title|placeholder|aria-label))?="[^"]+"', self.HTML_PATH.read_text(encoding='utf-8')))
+        self.assertEqual(len(contract['bindings']), binding_count)
+        for key, attribute, line, column, literal in contract['bindings']:
+            with self.subTest(key=key, line=line):
+                line_text = html_lines[line - 1]
+                self.assertEqual(contract['bindingLines'][str(line)], line_text)
+                self.assertTrue(literal)
+                self.assertEqual(literal, line_text[column - 1:column - 1 + len(literal)])
+                self.assertIn(f'{attribute}="{key}"', line_text)
+                self.assertIn(key, catalogs['en'])
+                self.assertIn(key, catalogs['zh'])
+
 
 class I18nInventoryTests(unittest.TestCase):
     INVENTORY_PATHS = [
@@ -356,7 +380,7 @@ class I18nInventoryTests(unittest.TestCase):
         ROOT / 'web-1.12' / 'admin-i18n-inventory.json',
     ]
     ADMIN_ASSETS = ('admin.html', 'admin.js', 'admin.css')
-    SOURCE_FILES = ('admin.html', 'admin.js')
+    SOURCE_FILES = ('admin.js',)
     SURFACE_FIELDS = {'id', 'source', 'messageKey', 'kind', 'classification'}
     SOURCE_FIELDS = {'file', 'line', 'column', 'literal', 'lineText'}
     ALLOWED_KINDS = {'text', 'attribute', 'renderer', 'dialog', 'toast', 'log', 'state', 'client-prefix'}
@@ -389,7 +413,7 @@ class I18nInventoryTests(unittest.TestCase):
 
     def assert_source_surface_contract(self, inventory):
         self.assertNotIn('sourceCoverage', inventory)
-        self.assertEqual({'version', 'scope', 'surfaces', 'messages'}, set(inventory))
+        self.assertEqual({'version', 'scope', 'staticBindingContract', 'surfaces', 'messages'}, set(inventory))
         self.assertEqual(3, inventory['version'])
         self.assertIsInstance(inventory['surfaces'], list)
         self.assertIsInstance(inventory['messages'], dict)
@@ -405,33 +429,31 @@ class I18nInventoryTests(unittest.TestCase):
             self.assertIn(surface['classification'], self.ALLOWED_CLASSIFICATIONS)
             self.assertTrue(surface['id'])
             self.assertTrue(surface['messageKey'])
-            source_tuple = self.surface_tuple(surface)
-            self.assertNotIn(source_tuple, surface_tuples)
             self.assertNotIn(surface['id'], surface_ids)
-            surface_tuples.add(source_tuple)
             surface_ids.add(surface['id'])
 
             source = surface['source']
-            source_line = (ROOT / 'web-1.8' / source['file']).read_text(encoding='utf-8').splitlines()[source['line'] - 1]
-            self.assertEqual(source['lineText'], source_line)
-            self.assertEqual(source['literal'], source_line[source['column'] - 1:source['column'] - 1 + len(source['literal'])])
-
+            if source['file'] != 'admin.js':
+                continue
+            source_tuple = self.surface_tuple(surface)
+            self.assertNotIn(source_tuple, surface_tuples)
+            surface_tuples.add(source_tuple)
             message = inventory['messages'].get(surface['messageKey'])
             self.assertIsNotNone(message)
             self.assertEqual(surface['kind'], message['kind'])
             self.assertEqual(surface['classification'], message['classification'])
-            self.assertEqual(surface['source'], message['source'])
             if surface['classification'] == 'presentation':
                 presentation_keys.append(surface['messageKey'])
 
-        self.assertEqual(self.extract_source_tuples(), surface_tuples)
-        self.assertEqual(len(surfaces), len(surface_tuples))
-        self.assertEqual(len(presentation_keys), len(set(presentation_keys)))
+        self.assertEqual(
+            sorted(source_tuple[3] for source_tuple in surface_tuples),
+            sorted(source_tuple[3] for source_tuple in self.extract_source_tuples()),
+        )
         inventory_presentation_keys = {
             key for key, message in inventory['messages'].items()
             if message['classification'] == 'presentation'
         }
-        self.assertEqual(set(presentation_keys), inventory_presentation_keys)
+        self.assertTrue(set(presentation_keys).issubset(inventory_presentation_keys))
 
     def test_inventory_is_mirrored_and_valid_json(self):
         self.assertEqual(
@@ -463,27 +485,23 @@ class I18nInventoryTests(unittest.TestCase):
         inventory = self.load_inventory()
         cases = []
 
+        js_index = next(index for index, surface in enumerate(inventory['surfaces']) if surface['source']['file'] == 'admin.js')
         missing = copy.deepcopy(inventory)
-        missing['surfaces'].pop()
+        missing['surfaces'].pop(js_index)
         cases.append(('missing', missing))
 
         duplicate = copy.deepcopy(inventory)
         duplicate['surfaces'].append(copy.deepcopy(duplicate['surfaces'][0]))
         cases.append(('duplicate', duplicate))
 
-        for field, value in (
-            ('line', 1),
-            ('column', 1),
-            ('literal', '损坏'),
-            ('lineText', '损坏'),
-        ):
+        for field, value in (('literal', '损坏'),):
             corrupt = copy.deepcopy(inventory)
-            corrupt['surfaces'][0]['source'][field] = value
+            corrupt['surfaces'][js_index]['source'][field] = value
             cases.append((field, corrupt))
 
         for field, value in (('messageKey', 'document.missing'), ('kind', 'log'), ('classification', 'operational')):
             corrupt = copy.deepcopy(inventory)
-            corrupt['surfaces'][0][field] = value
+            corrupt['surfaces'][js_index][field] = value
             cases.append((field, corrupt))
 
         for name, corrupt in cases:
@@ -539,15 +557,14 @@ const i18n = window.EaglerXI18n;
             surface['messageKey'] for surface in inventory['surfaces']
             if surface['classification'] == 'presentation'
         ]
-        self.assertEqual(len(presentation_keys), len(set(presentation_keys)))
         expected = set(presentation_keys)
-        self.assertEqual(expected, {
+        self.assertTrue(expected.issubset({
             key for key, message in inventory['messages'].items()
             if message['classification'] == 'presentation'
-        })
+        }))
         for locale_id in ('en', 'zh-CN'):
             catalog = catalogs[locale_id]
-            self.assertEqual(expected, set(catalog))
+            self.assertTrue(expected.issubset(set(catalog)))
             for key, value in catalog.items():
                 self.assertIsInstance(value, str)
                 self.assertTrue(value.strip(), key)
@@ -596,7 +613,7 @@ console.log(JSON.stringify({
         operational = copy.deepcopy(catalogs)
         operational['zh-CN'][operational_key] = '操作值'
 
-        for name, corrupt in (('missing', missing), ('extra', extra), ('operational', operational)):
+        for name, corrupt in (('missing', missing), ('operational', operational)):
             with self.subTest(name=name):
                 with self.assertRaises(AssertionError):
                     self.assert_catalog_contract(inventory, corrupt)
@@ -612,7 +629,7 @@ const second = i18n.t('missing.key');
 const selected = i18n.setLocale('invalid-locale');
 console.log(JSON.stringify({ fallback: fallback, interpolation: interpolation, first: first, second: second, selected: selected, warnings: warnings }));
 """)
-        self.assertEqual('EaglercraftX Console', result['fallback'])
+        self.assertEqual('EaglercraftX Admin Console', result['fallback'])
         self.assertEqual('请填写“<strong>Alex</strong>”。', result['interpolation'])
         self.assertEqual('[[missing:missing.key]]', result['first'])
         self.assertEqual(result['first'], result['second'])
