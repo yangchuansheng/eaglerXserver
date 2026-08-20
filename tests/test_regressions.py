@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import copy
 import shutil
 import socket
 import subprocess
@@ -287,46 +288,140 @@ class I18nInventoryTests(unittest.TestCase):
         ROOT / 'web-1.12' / 'admin-i18n-inventory.json',
     ]
     ADMIN_ASSETS = ('admin.html', 'admin.js', 'admin.css')
+    SOURCE_FILES = ('admin.html', 'admin.js')
+    SURFACE_FIELDS = {'id', 'source', 'messageKey', 'kind', 'classification'}
+    SOURCE_FIELDS = {'file', 'line', 'column', 'literal', 'lineText'}
+    ALLOWED_KINDS = {'text', 'attribute', 'renderer', 'dialog', 'toast', 'log', 'state', 'client-prefix'}
+    ALLOWED_CLASSIFICATIONS = {'presentation', 'operational'}
 
     def load_inventory(self):
         return json.loads(self.INVENTORY_PATHS[0].read_text(encoding='utf-8'))
+
+    def extract_source_tuples(self):
+        return {
+            (filename, line_number, match.start() + 1, match.group(), line_text)
+            for filename in self.SOURCE_FILES
+            for line_number, line_text in enumerate(
+                (ROOT / 'web-1.8' / filename).read_text(encoding='utf-8').splitlines(),
+                1,
+            )
+            for match in re.finditer(r'[\u4e00-\u9fff]+', line_text)
+        }
+
+    @classmethod
+    def surface_tuple(cls, surface):
+        source = surface['source']
+        return (
+            source['file'],
+            source['line'],
+            source['column'],
+            source['literal'],
+            source['lineText'],
+        )
+
+    def assert_source_surface_contract(self, inventory):
+        self.assertNotIn('sourceCoverage', inventory)
+        self.assertEqual({'version', 'scope', 'surfaces', 'messages'}, set(inventory))
+        self.assertEqual(3, inventory['version'])
+        self.assertIsInstance(inventory['surfaces'], list)
+        self.assertIsInstance(inventory['messages'], dict)
+
+        surfaces = inventory['surfaces']
+        surface_tuples = set()
+        surface_ids = set()
+        presentation_keys = []
+        for surface in surfaces:
+            self.assertEqual(self.SURFACE_FIELDS, set(surface))
+            self.assertEqual(self.SOURCE_FIELDS, set(surface['source']))
+            self.assertIn(surface['kind'], self.ALLOWED_KINDS)
+            self.assertIn(surface['classification'], self.ALLOWED_CLASSIFICATIONS)
+            self.assertTrue(surface['id'])
+            self.assertTrue(surface['messageKey'])
+            source_tuple = self.surface_tuple(surface)
+            self.assertNotIn(source_tuple, surface_tuples)
+            self.assertNotIn(surface['id'], surface_ids)
+            surface_tuples.add(source_tuple)
+            surface_ids.add(surface['id'])
+
+            source = surface['source']
+            source_line = (ROOT / 'web-1.8' / source['file']).read_text(encoding='utf-8').splitlines()[source['line'] - 1]
+            self.assertEqual(source['lineText'], source_line)
+            self.assertEqual(source['literal'], source_line[source['column'] - 1:source['column'] - 1 + len(source['literal'])])
+
+            message = inventory['messages'].get(surface['messageKey'])
+            self.assertIsNotNone(message)
+            self.assertEqual(surface['kind'], message['kind'])
+            self.assertEqual(surface['classification'], message['classification'])
+            self.assertEqual(surface['source'], message['source'])
+            if surface['classification'] == 'presentation':
+                presentation_keys.append(surface['messageKey'])
+
+        self.assertEqual(self.extract_source_tuples(), surface_tuples)
+        self.assertEqual(len(surfaces), len(surface_tuples))
+        self.assertEqual(len(presentation_keys), len(set(presentation_keys)))
+        inventory_presentation_keys = {
+            key for key, message in inventory['messages'].items()
+            if message['classification'] == 'presentation'
+        }
+        self.assertEqual(set(presentation_keys), inventory_presentation_keys)
 
     def test_inventory_is_mirrored_and_valid_json(self):
         self.assertEqual(
             self.INVENTORY_PATHS[0].read_bytes(),
             self.INVENTORY_PATHS[1].read_bytes(),
         )
-        self.assertIn('messages', self.load_inventory())
+        self.assertIn('surfaces', self.load_inventory())
 
     def test_message_schema_and_source_locators(self):
         inventory = self.load_inventory()
-        allowed_kinds = {'text', 'attribute', 'renderer', 'dialog', 'toast', 'log', 'state', 'client-prefix'}
-        allowed_classifications = {'presentation', 'operational'}
         for key, message in inventory['messages'].items():
             with self.subTest(key=key):
                 self.assertRegex(key, r'^(document|accessibility|header|nav|hero|section|card|action|option|dialog|field|validation|status|toast|console|world|operational)\.')
-                self.assertIn(message['kind'], allowed_kinds)
-                self.assertIn(message['classification'], allowed_classifications)
+                self.assertIn(message['kind'], self.ALLOWED_KINDS)
+                self.assertIn(message['classification'], self.ALLOWED_CLASSIFICATIONS)
                 source = message['source']
-                self.assertEqual({'file', 'locator'}, set(source))
                 self.assertIn(source['file'], {'admin.html', 'admin.js', 'admin.css'})
-                content = (ROOT / 'web-1.8' / source['file']).read_text(encoding='utf-8')
-                self.assertIn(source['locator'], content)
+                if message['classification'] == 'operational':
+                    self.assertEqual({'file', 'locator'}, set(source))
+                    content = (ROOT / 'web-1.8' / source['file']).read_text(encoding='utf-8')
+                    self.assertIn(source['locator'], content)
+                else:
+                    self.assertEqual(self.SOURCE_FIELDS, set(source))
 
     def test_client_authored_source_coverage_is_regressible(self):
+        self.assert_source_surface_contract(self.load_inventory())
+
+    def test_source_surface_contract_rejects_missing_duplicate_and_corrupt_mappings(self):
         inventory = self.load_inventory()
-        expected = inventory['sourceCoverage']['files']
-        for filename, evidence in expected.items():
-            with self.subTest(filename=filename):
-                lines = (ROOT / 'web-1.8' / filename).read_text(encoding='utf-8').splitlines()
-                scoped = [
-                    '%d:%s' % (number, line)
-                    for number, line in enumerate(lines, 1)
-                    if re.search(r'[\u4e00-\u9fff]', line)
-                ]
-                digest = hashlib.sha256('\n'.join(scoped).encode('utf-8')).hexdigest()
-                self.assertEqual(evidence['lines'], len(scoped))
-                self.assertEqual(evidence['sha256'], digest)
+        cases = []
+
+        missing = copy.deepcopy(inventory)
+        missing['surfaces'].pop()
+        cases.append(('missing', missing))
+
+        duplicate = copy.deepcopy(inventory)
+        duplicate['surfaces'].append(copy.deepcopy(duplicate['surfaces'][0]))
+        cases.append(('duplicate', duplicate))
+
+        for field, value in (
+            ('line', 1),
+            ('column', 1),
+            ('literal', '损坏'),
+            ('lineText', '损坏'),
+        ):
+            corrupt = copy.deepcopy(inventory)
+            corrupt['surfaces'][0]['source'][field] = value
+            cases.append((field, corrupt))
+
+        for field, value in (('messageKey', 'document.missing'), ('kind', 'log'), ('classification', 'operational')):
+            corrupt = copy.deepcopy(inventory)
+            corrupt['surfaces'][0][field] = value
+            cases.append((field, corrupt))
+
+        for name, corrupt in cases:
+            with self.subTest(name=name):
+                with self.assertRaises(AssertionError):
+                    self.assert_source_surface_contract(corrupt)
 
     def test_admin_assets_remain_mirrored(self):
         for asset in self.ADMIN_ASSETS:
@@ -371,27 +466,72 @@ const i18n = window.EaglerXI18n;
         )
         return json.loads(result.stdout)
 
+    def assert_catalog_contract(self, inventory, catalogs):
+        presentation_keys = [
+            surface['messageKey'] for surface in inventory['surfaces']
+            if surface['classification'] == 'presentation'
+        ]
+        self.assertEqual(len(presentation_keys), len(set(presentation_keys)))
+        expected = set(presentation_keys)
+        self.assertEqual(expected, {
+            key for key, message in inventory['messages'].items()
+            if message['classification'] == 'presentation'
+        })
+        for locale_id in ('en', 'zh-CN'):
+            catalog = catalogs[locale_id]
+            self.assertEqual(expected, set(catalog))
+            for key, value in catalog.items():
+                self.assertIsInstance(value, str)
+                self.assertTrue(value.strip(), key)
+        for key, message in inventory['messages'].items():
+            if message['classification'] == 'operational':
+                self.assertNotIn(key, catalogs['en'])
+                self.assertNotIn(key, catalogs['zh-CN'])
+
     def test_registry_metadata_catalog_coverage_and_parity(self):
         inventory = json.loads(self.INVENTORY_PATH.read_text(encoding='utf-8'))
-        presentation_keys = sorted(
-            key for key, value in inventory['messages'].items()
-            if value['classification'] == 'presentation'
-        )
         result = self.run_runtime("""
 console.log(JSON.stringify({
   defaults: [i18n.DEFAULT_LOCALE, i18n.FALLBACK_LOCALE, i18n.PREFERENCE_KEY],
   locales: Object.keys(i18n.locales),
   labels: [i18n.locales.en.label, i18n.locales['zh-CN'].label],
-  en: Object.keys(i18n.locales.en.messages).sort(),
-  zh: Object.keys(i18n.locales['zh-CN'].messages).sort()
+  catalogs: {
+    en: i18n.locales.en.messages,
+    'zh-CN': i18n.locales['zh-CN'].messages
+  }
 }));
 """)
         self.assertEqual(['en', 'en', 'eaglerx_admin_locale'], result['defaults'])
         self.assertEqual(['en', 'zh-CN'], result['locales'])
         self.assertEqual(['English', '简体中文'], result['labels'])
-        self.assertEqual(presentation_keys, result['en'])
-        self.assertEqual(result['en'], result['zh'])
+        self.assert_catalog_contract(inventory, result['catalogs'])
         self.assertEqual(self.RUNTIME_PATHS[0].read_bytes(), self.RUNTIME_PATHS[1].read_bytes())
+
+    def test_catalog_contract_rejects_missing_extra_and_operational_keys(self):
+        inventory = json.loads(self.INVENTORY_PATH.read_text(encoding='utf-8'))
+        catalogs = self.run_runtime("""
+console.log(JSON.stringify({
+  en: i18n.locales.en.messages,
+  'zh-CN': i18n.locales['zh-CN'].messages
+}));
+""")
+        presentation_key = inventory['surfaces'][0]['messageKey']
+        operational_key = next(
+            key for key, message in inventory['messages'].items()
+            if message['classification'] == 'operational'
+        )
+
+        missing = copy.deepcopy(catalogs)
+        missing['en'].pop(presentation_key)
+        extra = copy.deepcopy(catalogs)
+        extra['en']['document.unmapped'] = 'Unmapped'
+        operational = copy.deepcopy(catalogs)
+        operational['zh-CN'][operational_key] = '操作值'
+
+        for name, corrupt in (('missing', missing), ('extra', extra), ('operational', operational)):
+            with self.subTest(name=name):
+                with self.assertRaises(AssertionError):
+                    self.assert_catalog_contract(inventory, corrupt)
 
     def test_fallback_missing_diagnostic_and_plain_text_interpolation(self):
         result = self.run_runtime("""
