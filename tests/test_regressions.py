@@ -282,6 +282,74 @@ class StartupOrderingTests(unittest.TestCase):
         self.assertLess(readiness.start(), paper_start.start())
 
 
+class StaticShellLocaleTests(unittest.TestCase):
+    HTML_PATH = ROOT / 'web-1.8' / 'admin.html'
+    JS_PATH = ROOT / 'web-1.8' / 'admin.js'
+    CSS_PATH = ROOT / 'web-1.8' / 'admin.css'
+    ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'admin-i18n-inventory.json')
+
+    def test_english_first_paint_and_script_order(self):
+        html = self.HTML_PATH.read_text(encoding='utf-8')
+        self.assertIn('<html lang="en">', html)
+        self.assertIn('<title data-i18n="header.title">EaglercraftX Admin Console</title>', html)
+        self.assertIn('<label for="locale-select" data-i18n="header.localeLabel">Language</label>', html)
+        self.assertRegex(html, r'<select id="locale-select" name="locale"[^>]*>.*value="en".*value="zh-CN"')
+        self.assertLess(html.index('admin-i18n.js'), html.index('admin.js?v='))
+
+    def test_locale_lifecycle_is_guarded_and_dom_only(self):
+        source = self.JS_PATH.read_text(encoding='utf-8')
+        self.assertIn('EaglerXI18n.PREFERENCE_KEY', source)
+        self.assertIn("['data-i18n', 'textContent']", source)
+        self.assertIn("['data-i18n-title', 'title']", source)
+        self.assertIn("['data-i18n-placeholder', 'placeholder']", source)
+        self.assertIn("['data-i18n-aria-label', 'aria-label']", source)
+        handler = re.search(r"selector\.addEventListener\('change', function \(\) \{([\s\S]*?)\n  \}\);", source)
+        self.assertIsNotNone(handler)
+        self.assertNotRegex(handler.group(1), r'\b(init|fetch|send|setInterval|setTimeout)\s*\(')
+        self.assertLess(source.rindex('setupLocalePreference();'), source.rindex('init();'))
+
+    def test_locale_recovery_and_current_session_write_failure(self):
+        script = """
+const fs = require('fs');
+const vm = require('vm');
+function run(stored, throwOnWrite) {
+  const listeners = {};
+  const selector = { value: '', textContent: '', options: [], appendChild: function(option) { this.options.push(option); }, addEventListener: function(name, callback) { listeners[name] = callback; } };
+  const storage = { value: stored, removed: false, getItem: function() { return this.value; }, removeItem: function() { this.removed = true; this.value = null; }, setItem: function(_, value) { if (throwOnWrite) throw new Error('blocked'); this.value = value; } };
+  const document = { documentElement: {}, title: '', getElementById: function(id) { return id === 'locale-select' ? selector : null; }, querySelectorAll: function() { return []; }, createElement: function() { return {}; }, addEventListener: function() {} };
+  const window = { console: { warn: function() {} }, location: { origin: 'http://localhost:5201' } };
+  const context = { window, document, localStorage: storage, console };
+  vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), context);
+  context.EaglerXI18n = window.EaglerXI18n;
+  const source = fs.readFileSync(process.argv[2], 'utf8').replace('setupLocalePreference();\\ninit();', 'setupLocalePreference();');
+  vm.runInNewContext(source, context);
+  const initialLang = document.documentElement.lang;
+  selector.value = 'zh-CN'; listeners.change();
+  return { selected: selector.value, initialLang: initialLang, lang: document.documentElement.lang, stored: storage.value, removed: storage.removed, labels: selector.options.map(function(option) { return [option.value, option.textContent]; }) };
+}
+console.log(JSON.stringify({ valid: run('zh-CN', false), invalid: run('stale', false), blocked: run(null, true) }));
+"""
+        result = subprocess.run(
+            ['node', '-e', script, str(ROOT / 'web-1.8' / 'admin-i18n.js'), str(self.JS_PATH)],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        data = json.loads(result.stdout)
+        self.assertEqual('zh-CN', data['valid']['lang'])
+        self.assertEqual('en', data['invalid']['initialLang'])
+        self.assertTrue(data['invalid']['removed'])
+        self.assertEqual('zh-CN', data['blocked']['lang'])
+        self.assertEqual([['en', 'English'], ['zh-CN', '简体中文']], data['valid']['labels'])
+
+    def test_selector_responsive_dimensions_and_mirrors(self):
+        css = self.CSS_PATH.read_text(encoding='utf-8')
+        self.assertRegex(css, r'#locale-select\s*\{[^}]*height:\s*38px')
+        mobile = re.search(r'@media \(max-width: 520px\) \{([\s\S]*)', css)
+        self.assertIsNotNone(mobile)
+        self.assertRegex(mobile.group(1), r'#locale-select\s*\{[^}]*height:\s*44px')
+        for asset in self.ASSETS:
+            self.assertEqual((ROOT / 'web-1.8' / asset).read_bytes(), (ROOT / 'web-1.12' / asset).read_bytes())
+
+
 class I18nInventoryTests(unittest.TestCase):
     INVENTORY_PATHS = [
         ROOT / 'web-1.8' / 'admin-i18n-inventory.json',
