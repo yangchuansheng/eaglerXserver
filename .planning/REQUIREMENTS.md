@@ -5,21 +5,21 @@
 
 ## v1 Requirements
 
-Requirements for milestone v1.0 Admin i18n.
+Requirements for milestone v1.0 Admin i18n. The milestone delivers complete English and Simplified Chinese (`zh-CN`) catalogs, with English as the first-visit default and primary fallback.
 
 ### i18n Core
 
-- [ ] **CORE-01**: The admin interface provides a complete English catalog for all client-authored interface text.
+- [ ] **CORE-01**: The admin interface provides complete English and Simplified Chinese (`zh-CN`) catalogs for all client-authored interface text.
 - [ ] **CORE-02**: Translation lookup falls back from the active locale to English and then to a visible missing-key marker.
 - [ ] **CORE-03**: The translation API supports named parameter interpolation and renders catalog values as safe plain text.
-- [ ] **CORE-04**: The locale registry supports adding future bundled locale catalogs without changing selector or renderer contracts.
+- [ ] **CORE-04**: The locale registry exposes `en` and `zh-CN` and supports adding future bundled locale catalogs without changing selector or renderer contracts.
 - [ ] **CORE-05**: Missing translation keys produce a visible diagnostic marker and a deduplicated console diagnostic.
 
 ### Locale Preference
 
 - [ ] **PREF-01**: The admin interface displays English on first visit.
-- [ ] **PREF-02**: The header provides a native locale selector populated from the bundled locale registry.
-- [ ] **PREF-03**: A valid locale selection persists across browser sessions through `localStorage`.
+- [ ] **PREF-02**: The header always provides a native locale selector populated from the bundled locale registry, with BCP 47 values `en` and `zh-CN` and display names `English` and `简体中文`.
+- [ ] **PREF-03**: A valid locale selection persists across browser sessions under the `eaglerx_admin_locale` key in origin-scoped `localStorage`.
 - [ ] **PREF-04**: Missing, invalid, stale, or inaccessible locale preferences recover safely to English.
 
 ### Translation Coverage
@@ -33,10 +33,10 @@ Requirements for milestone v1.0 Admin i18n.
 
 ### Operational Safety
 
-- [ ] **SAFE-01**: Changing locale preserves authentication, entered values, selections, focus, dialogs, and cached server state.
+- [ ] **SAFE-01**: Immediate locale changes preserve authentication, entered values, selections, focus, dialogs, and cached server state.
 - [ ] **SAFE-02**: Paper, plugin, and RCON response content remains byte-for-byte unchanged in the admin interface.
 - [ ] **SAFE-03**: Command arguments, configuration enums, and protocol values remain independent from translated display labels.
-- [ ] **SAFE-04**: Locale changes re-render from existing client state while preserving request, polling, and server-operation state.
+- [ ] **SAFE-04**: Locale changes re-render from existing client state while preserving request, polling, and server-operation state without duplicate requests or timers.
 
 ### Mirrored-Version Parity
 
@@ -46,11 +46,11 @@ Requirements for milestone v1.0 Admin i18n.
 
 ## v2 Requirements
 
-Deferred until the English-first foundation is verified.
+Deferred until the English and `zh-CN` foundation is verified.
 
 ### Additional Locale Support
 
-- **LOCALE-01**: The admin interface provides a second complete human-language catalog.
+- **LOCALE-01**: The admin interface provides an additional complete human-language catalog beyond English and `zh-CN`.
 - **LOCALE-02**: The project provides pseudo-locale and text-expansion checks for catalog review.
 - **LOCALE-03**: The translation runtime supports advanced plural and grammatical selection when a maintained locale requires it.
 
@@ -108,4 +108,4 @@ Populated during roadmap creation.
 
 ---
 *Requirements defined: 2026-08-20*
-*Last updated: 2026-08-20 after roadmap creation*
+*Last updated: 2026-08-20 after confirming bilingual milestone scope*

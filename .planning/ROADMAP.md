@@ -2,38 +2,38 @@
 
 ## Overview
 
-Milestone v1.0 establishes English as the durable default for the browser administration plane: first define a complete locale contract, then localize the static shell and preference, migrate stateful renderers while protecting operational output, and finally prove mirrored behavior across both web roots.
+Milestone v1.0 delivers complete English and Simplified Chinese (`zh-CN`) experiences for the browser administration plane, with English as the first-visit default and primary fallback: first define the bilingual locale contract, then localize the static shell and preference, migrate stateful renderers while protecting operational output, and finally prove mirrored behavior across both web roots.
 
 ## Phases
 
-- [ ] **Phase 1: Locale Contract and Inventory** - Establish the complete English catalog, safe locale runtime, and semantic message inventory.
-- [ ] **Phase 2: English-First Static Shell and Preference** - Deliver English first paint, persistent locale choice, and localized static accessibility surfaces.
+- [ ] **Phase 1: Locale Contract and Inventory** - Establish complete English and `zh-CN` catalogs, safe locale runtime, and semantic message inventory.
+- [ ] **Phase 2: Bilingual Static Shell and Preference** - Deliver English first paint, persistent locale choice, immediate switching, and localized static accessibility surfaces.
 - [ ] **Phase 3: Dynamic Renderers and Raw-Output Boundary** - Localize stateful UI while preserving operator context and exact server-originated output.
 - [ ] **Phase 4: Mirror Gate and Release Matrix** - Prove parity, catalog integrity, and end-to-end administration flows in both web roots.
 
 ## Phase Details
 
 ### Phase 1: Locale Contract and Inventory
-**Goal**: Operators have a reliable English locale foundation whose messages are safe, diagnosable, and separate from operational values.
+**Goal**: Operators have a reliable bilingual locale foundation whose messages are safe, diagnosable, and separate from operational values.
 **Depends on**: Nothing (first phase)
 **Requirements**: CORE-01, CORE-02, CORE-03, CORE-04, CORE-05, SAFE-03
 **Success Criteria** (what must be TRUE):
-  1. Every inventoried client-authored interface message has an English catalog entry that the locale runtime can resolve.
+  1. Every inventoried client-authored interface message has reviewed English and `zh-CN` catalog entries that the locale runtime can resolve.
   2. A missing active-locale value resolves to English, while an absent English key appears as a visible marker and produces one console diagnostic.
   3. Client-authored messages can show named values as plain text without interpreting catalog or interpolation content as markup.
-  4. The locale registry exposes bundled locales through one stable contract that future catalogs can join, and localized display labels leave command arguments, configuration enums, and protocol values unchanged.
+  4. The locale registry exposes `en` and `zh-CN` through one stable contract that future catalogs can join, and localized display labels leave command arguments, configuration enums, and protocol values unchanged.
 **Plans**: TBD
 **UI hint**: yes
 
-### Phase 2: English-First Static Shell and Preference
-**Goal**: Operators open an English administration shell and retain a valid language choice across browser sessions.
+### Phase 2: Bilingual Static Shell and Preference
+**Goal**: Operators open an English administration shell, switch immediately to `zh-CN`, and retain a valid language choice across browser sessions.
 **Depends on**: Phase 1
 **Requirements**: PREF-01, PREF-02, PREF-03, PREF-04, COVR-01, COVR-05
 **Success Criteria** (what must be TRUE):
   1. A first-time visitor sees the administration shell in English before signing in.
-  2. The header selector lists bundled locales, applies a valid choice, and restores that choice on a later visit to the same origin.
+  2. The always-visible header selector lists `English` and `简体中文`, applies a valid choice immediately, and restores that choice on a later visit to the same origin.
   3. Missing, stale, invalid, or unavailable stored preferences open the interface in English without preventing administration.
-  4. Static navigation, headings, labels, buttons, hints, and empty states resolve through translation keys.
+  4. Static navigation, headings, labels, buttons, hints, and empty states resolve through translation keys in both bundled locales.
   5. The active locale updates the document language and title plus UI-owned titles, iframe title, form labels, placeholders, and ARIA text.
 **Plans**: TBD
 **UI hint**: yes

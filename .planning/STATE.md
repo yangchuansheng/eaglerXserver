@@ -3,7 +3,7 @@ gsd_state_version: '1.0'
 milestone: v1.0
 milestone_name: Admin i18n
 status: planning
-last_updated: "2026-08-20T18:39:00+08:00"
+last_updated: "2026-08-20T18:45:00+08:00"
 last_activity: 2026-08-20
 progress:
   total_phases: 4
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-20)
 
 **Core value:** Operators can reliably administer either supported server version through one browser-based control plane.
-**Current focus:** Phase 1 — Locale Contract and Inventory
+**Current focus:** Phase 1 — Bilingual Locale Contract and Inventory
 
 ## Current Position
 
-Phase: 1 of 4 (Locale Contract and Inventory)
+Phase: 1 of 4 (Bilingual Locale Contract and Inventory)
 Plan: 0 of TBD in current phase
 Status: Ready to plan
-Last activity: 2026-08-20 — Created v1.0 Admin i18n roadmap
+Last activity: 2026-08-20 — Confirmed English + `zh-CN` v1.0 scope
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -56,8 +56,11 @@ Progress: [░░░░░░░░░░] 0%
 
 Decisions are logged in PROJECT.md Key Decisions table.
 
-- [v1.0]: English is the complete default and fallback locale.
+- [v1.0]: English and `zh-CN` are the complete v1.0 locales; English is the first-visit default and primary fallback.
 - [v1.0]: Locale choice persists through `localStorage`.
+- [v1.0]: Locale preference uses `eaglerx_admin_locale` and remains independent per browser origin.
+- [v1.0]: The header selector remains available before and after authentication.
+- [v1.0]: Locale switching immediately preserves authentication, inputs, focus, dialogs, selections, cached data, polling, and server-operation state.
 - [v1.0]: Server-originated output remains unchanged.
 - [v1.0]: The 1.8 and 1.12 administration assets remain mirrored.
 
@@ -74,10 +77,10 @@ None yet.
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| Locale scope | Second complete locale catalog | Deferred until v1 foundation is verified | 2026-08-20 |
+| Locale scope | Additional locale catalog beyond English and `zh-CN` | Deferred until the bilingual v1 foundation is verified | 2026-08-20 |
 
 ## Session Continuity
 
-Last session: 2026-08-20 18:39 CST
-Stopped at: Roadmap created; Phase 1 is ready for detailed planning.
+Last session: 2026-08-20 18:45 CST
+Stopped at: Bilingual scope confirmed; Phase 1 is ready for detailed planning.
 Resume file: None
