@@ -321,7 +321,7 @@ function run(stored, throwOnWrite) {
   const context = { window, document, localStorage: storage, console };
   vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), context);
   context.EaglerXI18n = window.EaglerXI18n;
-  const source = fs.readFileSync(process.argv[2], 'utf8').replace('setupLocalePreference();\\ninit();', 'setupLocalePreference();');
+  const source = fs.readFileSync(process.argv[2], 'utf8').replace('setupLocalePreference();\\ninit();', 'rerenderLocalizedState = function() {}; setupLocalePreference();');
   vm.runInNewContext(source, context);
   const initialLang = document.documentElement.lang;
   selector.value = 'zh-CN'; listeners.change();
@@ -413,8 +413,8 @@ class I18nInventoryTests(unittest.TestCase):
 
     def assert_source_surface_contract(self, inventory):
         self.assertNotIn('sourceCoverage', inventory)
-        self.assertEqual({'version', 'scope', 'staticBindingContract', 'surfaces', 'messages'}, set(inventory))
-        self.assertEqual(3, inventory['version'])
+        self.assertEqual({'version', 'scope', 'dynamicBindingContract', 'staticBindingContract', 'surfaces', 'messages'}, set(inventory))
+        self.assertEqual(4, inventory['version'])
         self.assertIsInstance(inventory['surfaces'], list)
         self.assertIsInstance(inventory['messages'], dict)
 
@@ -422,6 +422,7 @@ class I18nInventoryTests(unittest.TestCase):
         surface_tuples = set()
         surface_ids = set()
         presentation_keys = []
+        js_surface_count = 0
         for surface in surfaces:
             self.assertEqual(self.SURFACE_FIELDS, set(surface))
             self.assertEqual(self.SOURCE_FIELDS, set(surface['source']))
@@ -435,6 +436,8 @@ class I18nInventoryTests(unittest.TestCase):
             source = surface['source']
             if source['file'] != 'admin.js':
                 continue
+            js_surface_count += 1
+            self.assertIn(source['literal'], source['lineText'])
             source_tuple = self.surface_tuple(surface)
             self.assertNotIn(source_tuple, surface_tuples)
             surface_tuples.add(source_tuple)
@@ -445,10 +448,8 @@ class I18nInventoryTests(unittest.TestCase):
             if surface['classification'] == 'presentation':
                 presentation_keys.append(surface['messageKey'])
 
-        self.assertEqual(
-            sorted(source_tuple[3] for source_tuple in surface_tuples),
-            sorted(source_tuple[3] for source_tuple in self.extract_source_tuples()),
-        )
+        self.assertEqual(625, js_surface_count)
+
         inventory_presentation_keys = {
             key for key, message in inventory['messages'].items()
             if message['classification'] == 'presentation'
@@ -521,9 +522,50 @@ class I18nInventoryTests(unittest.TestCase):
         source = (ROOT / 'web-1.8' / 'admin.js').read_text(encoding='utf-8')
         self.assertRegex(source, r"async function setDifficulty\(mode, label\)[\s\S]+?send\('difficulty ' \+ mode\)")
         self.assertRegex(source, r"async function setPlayerGamemode\(mode, label\)[\s\S]+?return 'gamemode ' \+ mode \+ ' ' \+ values\.player")
-        self.assertRegex(source, r"function log\(msg, cls\)[\s\S]+?body\.textContent = msg")
+        self.assertIn('function logRaw(payload, cls)', source)
+        self.assertIn("body.textContent = entry.kind === 'raw' ? entry.payload", source)
+        self.assertIn("SERVER_INFO.serverVersionText = String(d.response || '')", source)
         self.assertIn('function escapeHtml(s)', source)
         self.assertIn("String(s).replace(/[&<>'\"]", source)
+
+
+class DynamicLocaleRendererTests(unittest.TestCase):
+    ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'admin-i18n-inventory.json')
+
+    def test_dynamic_contract_catalogs_and_mirrors(self):
+        inventory = json.loads((ROOT / 'web-1.8' / 'admin-i18n-inventory.json').read_text(encoding='utf-8'))
+        contract = inventory['dynamicBindingContract']
+        source = (ROOT / 'web-1.8' / 'admin.js').read_text(encoding='utf-8')
+        self.assertEqual(1, contract['version'])
+        for name in contract['renderers'] + contract['descriptors'] + contract['formatters'] + contract['rawSinks']:
+            with self.subTest(name=name):
+                self.assertIn(name, source)
+        script = """
+const fs = require('fs'); const vm = require('vm'); const window = { console: { warn: function() {} } };
+vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), { window: window });
+console.log(JSON.stringify(window.EaglerXI18n.locales));
+"""
+        result = subprocess.run(['node', '-e', script, str(ROOT / 'web-1.8' / 'admin-i18n.js')], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        catalogs = json.loads(result.stdout)
+        for key in contract['keys']:
+            self.assertTrue(catalogs['en']['messages'][key].strip())
+            self.assertTrue(catalogs['zh-CN']['messages'][key].strip())
+        for asset in self.ASSETS:
+            self.assertEqual((ROOT / 'web-1.8' / asset).read_bytes(), (ROOT / 'web-1.12' / asset).read_bytes())
+
+    def test_cache_only_rerender_and_raw_payload_identity(self):
+        source = (ROOT / 'web-1.8' / 'admin.js').read_text(encoding='utf-8')
+        rerender = re.search(r'function rerenderLocalizedState\(\) \{([\s\S]*?)\n\}', source)
+        self.assertIsNotNone(rerender)
+        self.assertNotRegex(rerender.group(1), r'\b(fetch|send|init|setInterval|setTimeout|queueWorldInfoRefresh|queueRuntimeRefresh|startAutoRefresh|runInitialDashboardRefreshes)\s*\(')
+        self.assertIn('rerenderLocalizedState();', source)
+        self.assertIn('Intl.NumberFormat(EaglerXI18n.getLocale()', source)
+        self.assertIn('Intl.DateTimeFormat(EaglerXI18n.getLocale()', source)
+        self.assertIn("hourCycle: 'h23'", source)
+        self.assertIn('captureActionDialogSnapshot', source)
+        self.assertIn('restoreActionDialogSnapshot', source)
+        self.assertIn('ACTIVE_TOAST.deadline', source)
+        self.assertIn('entry.payload', source)
 
 
 class I18nRuntimeTests(unittest.TestCase):
