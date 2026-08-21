@@ -917,7 +917,17 @@
   "console.surface.adminjs.l2165.c21": "Configuration has been updated",
   "console.surface.adminjs.l2167.c12": "Configuration update failed",
   "toast.surface.adminjs.l2168.c25": "Configuration update failed",
-  "console.surface.adminjs.l2171.c10": "Configuration request failed"
+  "console.surface.adminjs.l2171.c10": "Configuration request failed",
+  "hero.paperReady": "Paper {version} · management channel ready",
+  "hero.playersOnline": "{count} players online",
+  "hero.currentTps": "Current TPS: {value}",
+  "console.requestFailed": "Request failed: {error}",
+  "console.command": "Command: {command}",
+  "console.emptyOutput": "(no output)",
+  "dialog.action.defaultKicker": "Quick action",
+  "dialog.action.defaultTitle": "Enter parameters",
+  "dialog.action.defaultDescription": "Enter command parameters",
+  "dialog.action.confirm": "Confirm"
 };
   var zhCN = {
   "document.surface.adminhtml.l6.c21": "EaglercraftX 管理台",
@@ -1829,7 +1839,17 @@
   "console.surface.adminjs.l2165.c21": "配置已更新",
   "console.surface.adminjs.l2167.c12": "配置更新失败",
   "toast.surface.adminjs.l2168.c25": "配置更新失败",
-  "console.surface.adminjs.l2171.c10": "配置请求失败"
+  "console.surface.adminjs.l2171.c10": "配置请求失败",
+  "hero.paperReady": "Paper {version} · 管理通道已就绪",
+  "hero.playersOnline": "{count} 名玩家在线",
+  "hero.currentTps": "当前 TPS：{value}",
+  "console.requestFailed": "请求失败：{error}",
+  "console.command": "命令：{command}",
+  "console.emptyOutput": "（无输出）",
+  "dialog.action.defaultKicker": "快捷操作",
+  "dialog.action.defaultTitle": "输入参数",
+  "dialog.action.defaultDescription": "请填写命令参数",
+  "dialog.action.confirm": "确定"
 };
   var locales = {
     en: { id: 'en', label: 'English', messages: en },
