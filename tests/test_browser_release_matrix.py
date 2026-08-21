@@ -1,0 +1,436 @@
+import hashlib
+import json
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+import re
+import secrets
+import subprocess
+import tempfile
+import threading
+import time
+import unittest
+import urllib.error
+import urllib.request
+
+
+ROOT = Path(__file__).resolve().parents[1]
+WEB_ROOTS = (ROOT / 'web-1.8', ROOT / 'web-1.12')
+MOCK_API_BOUNDARY = 'browser-release-matrix: deterministic local Mock Admin API'
+DEPLOYMENT_BOUNDARY = 'deployment-boundary: live Docker/Paper/Waterfall/RCON not exercised'
+
+
+def fixture_text(*code_points):
+    return ''.join(chr(point) for point in code_points)
+
+
+class MockAdminServer:
+    def __init__(self, web_root):
+        self.web_root = Path(web_root).resolve()
+        if self.web_root not in {path.resolve() for path in WEB_ROOTS}:
+            raise AssertionError(f'unsupported direct web root: {self.web_root}')
+        self.fixture_password = secrets.token_urlsafe(24)
+        self.token = secrets.token_urlsafe(24)
+        self.raw_response = fixture_text(32, 32, 70, 105, 120, 116, 117, 114, 101, 32, 114, 97, 119, 32, 111, 117, 116, 112, 117, 116, 10, 85, 110, 105, 99, 111, 100, 101, 32, 10003, 32, 60, 111, 112, 97, 113, 117, 101, 32, 118, 97, 108, 117, 101, 62, 32, 32)
+        self.controlled_error = fixture_text(70, 105, 120, 116, 117, 114, 101, 32, 98, 97, 99, 107, 101, 110, 100, 32, 101, 114, 114, 111, 114, 58, 32, 60, 114, 101, 99, 111, 118, 101, 114, 121, 45, 114, 101, 113, 117, 105, 114, 101, 100, 62, 32, 10003)
+        self.records = []
+        self.server = None
+        self.thread = None
+        self.ready = threading.Event()
+
+    @property
+    def base_url(self):
+        return f'http://127.0.0.1:{self.server.server_port}'
+
+    def record(self, method, route, status, command='', raw=''):
+        entry = {'method': method, 'route': route, 'status': status, 'command': command}
+        if raw:
+            entry['raw_sha256'] = hashlib.sha256(raw.encode('utf-8')).hexdigest()
+            entry['raw_bytes'] = len(raw.encode('utf-8'))
+        self.records.append(entry)
+
+    def __enter__(self):
+        fixture = self
+
+        class Handler(SimpleHTTPRequestHandler):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, directory=str(fixture.web_root), **kwargs)
+
+            def log_message(self, *_args):
+                pass
+
+            def json(self, status, payload, command='', raw=''):
+                body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+                fixture.record(self.command, self.path.split('?', 1)[0], status, command, raw)
+                self.send_response(status)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Content-Length', str(len(body)))
+                self.send_header('Cache-Control', 'no-store')
+                self.end_headers()
+                self.wfile.write(body)
+
+            def read_json(self):
+                try:
+                    length = int(self.headers.get('Content-Length', '0'))
+                    return json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+                except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+                    return None
+
+            def authorized(self, payload):
+                return payload is not None and secrets.compare_digest(str(payload.get('token', '')), fixture.token)
+
+            def do_GET(self):
+                if self.path == '/api/status':
+                    self.json(200, {
+                        'success': True,
+                        'minecraft_version': '1.8.8',
+                        'rcon_port': 25575,
+                        'bridge_port': 5201,
+                        'native_seed_finder_ready': True,
+                    })
+                    return
+                if self.path in ('/admin', '/admin/'):
+                    fixture.record('GET', self.path, 302)
+                    self.send_response(302)
+                    self.send_header('Location', '/admin.html')
+                    self.end_headers()
+                    return
+                super().do_GET()
+
+            def do_POST(self):
+                route = self.path.split('?', 1)[0]
+                payload = self.read_json()
+                if payload is None:
+                    self.json(400, {'success': False, 'error': 'invalid json'})
+                    return
+                if route == '/api/login':
+                    if secrets.compare_digest(str(payload.get('password', '')), fixture.fixture_password):
+                        self.json(200, {'success': True, 'token': fixture.token, 'expires_at': int(time.time()) + 3600})
+                    else:
+                        self.json(403, {'success': False, 'error': 'password mismatch'})
+                    return
+                if route not in {
+                    '/api/rcon', '/api/config', '/api/world-state', '/api/runtime-state',
+                    '/api/seed', '/api/structures', '/api/player-location',
+                }:
+                    self.json(404, {'success': False, 'error': 'not found'})
+                    return
+                if not self.authorized(payload):
+                    self.json(403, {'success': False, 'error': 'token required'})
+                    return
+                if route == '/api/rcon':
+                    command = str(payload.get('command', '')).strip()
+                    responses = {
+                        'list': 'There are 1/20 players online: FixtureAlex',
+                        'tps': 'TPS from last 1m, 5m, 15m: 20.0, 19.9, 19.8',
+                        'version': 'This server is running FixturePaper 1.8.8',
+                        'op FixtureAlex': 'Made FixtureAlex a server operator',
+                        'raw-fixture': fixture.raw_response,
+                    }
+                    if command == 'controlled-error':
+                        self.json(200, {'success': False, 'error': fixture.controlled_error}, command, fixture.controlled_error)
+                    elif command in responses:
+                        self.json(200, {'success': True, 'response': responses[command]}, command, responses[command])
+                    else:
+                        self.json(200, {'success': True, 'response': f'Fixture accepted command: {command}'}, command)
+                    return
+                if route == '/api/config':
+                    if payload.get('action', 'get') == 'get':
+                        self.json(200, {'success': True, 'config': {
+                            'pvp': 'true', 'allow-flight': 'false', 'max-players': '20',
+                            'motd': 'Fixture MOTD', 'view-distance': '10', 'spawn-protection': '16',
+                        }})
+                    else:
+                        self.json(200, {'success': True, 'updated': payload.get('updates', {}), 'message': 'Fixture configuration saved'})
+                    return
+                if route == '/api/world-state':
+                    self.json(200, {'success': True, 'world': 'fixture-world', 'servertime': 6000, 'hasStorm': False, 'isThundering': False, 'timestamp': 1700000000000})
+                    return
+                if route == '/api/runtime-state':
+                    self.json(200, {'success': True, 'gamerules': {'doDaylightCycle': True}, 'save_enabled': True, 'whitelist_enabled': False, 'pvp_enabled': True})
+                    return
+                if route == '/api/seed':
+                    self.json(200, {'success': True, 'seed': '246813579', 'source': 'rcon', 'minecraft_version': '1.8.8'})
+                    return
+                if route == '/api/structures':
+                    self.json(200, {'success': True, 'spawn': {'x': 0, 'z': 0, 'distance': 0}, 'structures': [], 'effective_seed_kind': 'numeric'})
+                    return
+                self.json(200, {'success': True, 'player': 'FixtureAlex', 'world': 'fixture-world', 'x': 12.5, 'y': 64, 'z': -8.25, 'source': 'fixture'})
+
+        self.server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        def serve():
+            self.ready.set()
+            self.server.serve_forever()
+
+        self.thread = threading.Thread(target=serve, daemon=True)
+        self.thread.start()
+        if not self.ready.wait(timeout=5):
+            raise AssertionError(f'{self.web_root.name}: mock server did not become ready')
+        return self
+
+    def __exit__(self, _type, _value, _traceback):
+        try:
+            self.server.shutdown()
+            self.server.server_close()
+        finally:
+            self.thread.join(timeout=5)
+            if self.thread.is_alive():
+                raise AssertionError(f'{self.web_root.name}: mock server thread did not stop')
+
+
+class AgentBrowser:
+    ALLOWED_ACTIONS = ['launch', 'close', 'navigate', 'reload', 'snapshot', 'click', 'fill', 'type', 'press', 'focus', 'select', 'scroll', 'wait', 'get', 'viewport', 'screenshot', 'eval', 'evaluate', 'dialog', 'network', 'requests']
+
+    def __init__(self, root_name, profile, policy, screenshot_dir, deadline):
+        self.root_name = root_name
+        self.session = f'phase4-{root_name.replace(".", "_")}-{__import__("os").getpid()}'
+        self.profile = str(profile)
+        self.policy = str(policy)
+        self.screenshot_dir = str(screenshot_dir)
+        self.deadline = deadline
+        self.env = {
+            **__import__('os').environ,
+            'AGENT_BROWSER_CONTENT_BOUNDARIES': '1',
+            'AGENT_BROWSER_MAX_OUTPUT': '4000',
+            'AGENT_BROWSER_DEFAULT_TIMEOUT': '10000',
+            'AGENT_BROWSER_ALLOWED_DOMAINS': '127.0.0.1,localhost,fonts.googleapis.com,fonts.gstatic.com',
+            'AGENT_BROWSER_ACTION_POLICY': self.policy,
+            'AGENT_BROWSER_SCREENSHOT_DIR': self.screenshot_dir,
+        }
+
+    def run(self, stage, *command):
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            raise AssertionError(f'{self.root_name}:{stage}: scenario deadline exceeded')
+        invocation = ['agent-browser', '--session', self.session, '--session-name', self.session, '--profile', self.profile]
+        result = subprocess.run(
+            [*invocation, '--content-boundaries', '--max-output', '4000', '--action-policy', self.policy,
+             '--screenshot-dir', self.screenshot_dir, *(str(part) for part in command)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=self.env,
+            timeout=min(10, remaining),
+            check=False,
+        )
+        if result.returncode:
+            detail = re.sub(r'\s+', ' ', (result.stderr or result.stdout)[-400:]).strip()
+            raise AssertionError(f'{self.root_name}:{stage}: agent-browser failed ({result.returncode}): {detail}')
+        return result.stdout
+
+    def check(self, stage, expression):
+        output = self.run(stage, 'eval', expression)
+        if not any(line.strip().strip('"').lower() == 'true' for line in output.splitlines()):
+            raise AssertionError(f'{self.root_name}:{stage}: browser assertion failed ({output[-120:].strip()!r})')
+
+    def snapshot(self, stage):
+        self.run(stage, 'snapshot', '-i')
+
+    def batch(self, stage, commands):
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            raise AssertionError(f'{self.root_name}:{stage}: scenario deadline exceeded')
+        invocation = ['agent-browser', '--session', self.session, '--session-name', self.session, '--profile', self.profile]
+        result = subprocess.run(
+            [*invocation, '--content-boundaries', '--max-output', '4000', '--action-policy', self.policy,
+             '--screenshot-dir', self.screenshot_dir, 'batch', '--json'],
+            input=json.dumps(commands), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env=self.env, timeout=min(10, remaining), check=False,
+        )
+        if result.returncode:
+            detail = re.sub(r'\s+', ' ', (result.stderr or result.stdout)[-400:]).strip()
+            raise AssertionError(f'{self.root_name}:{stage}: browser batch failed ({result.returncode}): {detail}')
+        try:
+            results = json.loads(result.stdout)
+        except json.JSONDecodeError as error:
+            raise AssertionError(f'{self.root_name}:{stage}: browser batch returned invalid evidence') from error
+        if any(not item.get('success') for item in results):
+            raise AssertionError(f'{self.root_name}:{stage}: browser batch action failed')
+        return result.stdout
+
+    def close(self):
+        for command in (
+            ['agent-browser', '--session', self.session, 'close'],
+            ['agent-browser', 'state', 'clear', self.session],
+        ):
+            try:
+                subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True, timeout=10, check=False, env=self.env)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+
+
+class MockAdminServerTests(unittest.TestCase):
+    def request(self, server, route, payload=None):
+        data = None if payload is None else json.dumps(payload).encode('utf-8')
+        request = urllib.request.Request(server.base_url + route, data=data, method='GET' if data is None else 'POST')
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, json.loads(response.read().decode('utf-8'))
+        except urllib.error.HTTPError as error:
+            try:
+                return error.code, json.loads(error.read().decode('utf-8'))
+            finally:
+                error.close()
+
+    def test_routes_authentication_and_sanitized_raw_recording(self):
+        with MockAdminServer(WEB_ROOTS[0]) as server:
+            status, body = self.request(server, '/api/status')
+            self.assertEqual((200, True), (status, body['success']))
+            status, body = self.request(server, '/api/login', {'password': 'wrong'})
+            self.assertEqual((403, False), (status, body['success']))
+            status, body = self.request(server, '/api/login', {'password': server.fixture_password})
+            self.assertEqual((200, True), (status, body['success']))
+            token = body['token']
+            for route, payload in (
+                ('/api/rcon', {'command': 'list'}), ('/api/config', {'action': 'get'}),
+                ('/api/world-state', {}), ('/api/runtime-state', {}), ('/api/seed', {}),
+                ('/api/structures', {'x': 0, 'z': 0}), ('/api/player-location', {'player': 'FixtureAlex'}),
+            ):
+                status, body = self.request(server, route, payload)
+                self.assertEqual((403, False), (status, body['success']))
+                payload['token'] = token
+                status, body = self.request(server, route, payload)
+                self.assertEqual((200, True), (status, body['success']))
+            status, body = self.request(server, '/api/rcon', {'token': token, 'command': 'raw-fixture'})
+            self.assertEqual((200, server.raw_response), (status, body['response']))
+            raw_record = server.records[-1]
+            self.assertEqual(hashlib.sha256(server.raw_response.encode('utf-8')).hexdigest(), raw_record['raw_sha256'])
+            self.assertEqual(len(server.raw_response.encode('utf-8')), raw_record['raw_bytes'])
+            self.assertNotIn('raw', raw_record)
+            self.assertNotIn(server.token, repr(server.records))
+
+
+class BrowserReleaseMatrixTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        doctor = subprocess.run(['agent-browser', 'doctor'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30, check=False)
+        if doctor.returncode or 'Launch test\n  pass' not in doctor.stdout:
+            raise RuntimeError('agent-browser prerequisite failed: run agent-browser doctor and install a usable local Chrome')
+
+    def setUp(self):
+        self.evidence = []
+
+    def emit_evidence(self, root, stage, locale, route, viewport='', raw='', error='', screenshot=''):
+        row = {
+            'boundary': MOCK_API_BOUNDARY,
+            'root': root.name,
+            'stage': stage,
+            'locale': locale,
+            'route': route,
+        }
+        if viewport:
+            row['viewport'] = viewport
+        if raw:
+            row['raw_sha256'] = hashlib.sha256(raw.encode('utf-8')).hexdigest()
+            row['raw_bytes'] = len(raw.encode('utf-8'))
+        if error:
+            row['error_sha256'] = hashlib.sha256(error.encode('utf-8')).hexdigest()
+            row['error_bytes'] = len(error.encode('utf-8'))
+        if screenshot:
+            row['screenshot_sha256'] = screenshot
+        self.evidence.append(row)
+        print(f'browser-matrix-evidence {json.dumps(row, ensure_ascii=True, sort_keys=True)}')
+
+    def assert_recorded(self, server, route, command=None):
+        self.assertTrue(any(record['route'] == route and (command is None or record['command'] == command) for record in server.records), f'{server.web_root.name}: expected recorded route {route}')
+
+    def run_root_scenario(self, root):
+        stage = 'setup'
+        deadline = time.monotonic() + 60
+        temp = tempfile.TemporaryDirectory(prefix=f'phase4-{root.name}-')
+        server = MockAdminServer(root)
+        browser = None
+        try:
+            temp_path = Path(temp.name)
+            policy = temp_path / 'policy.json'
+            policy.write_text(json.dumps({'default': 'deny', 'allow': AgentBrowser.ALLOWED_ACTIONS}), encoding='utf-8')
+            screenshots = temp_path / 'screenshots'
+            screenshots.mkdir()
+            profile = temp_path / 'profile'
+            profile.mkdir()
+            with server:
+                browser = AgentBrowser(root.name, profile, policy, screenshots, deadline)
+                stage = 'open-admin'
+                browser.batch(stage, [['open', server.base_url + '/admin'], ['snapshot', '-i']])
+                browser.check(stage, "document.documentElement.lang === 'en' && document.title === 'EaglercraftX Admin Console' && document.querySelector('#locale-select').value === 'en' && Array.from(document.querySelector('#locale-select').options).map(x => x.textContent).join('|') === 'English|简体中文'")
+                self.emit_evidence(root, stage, 'en', '/admin')
+                stage = 'authenticate'
+                browser.batch(stage, [['fill', '#modal-pw', server.fixture_password], ['click', '#modal-btns .btn-ok'], ['wait', '1200'], ['snapshot', '-i']])
+                browser.check(stage, "document.querySelector('#players').innerText.includes('FixtureAlex') && document.querySelector('#world-info').innerText.includes('1.8.8') && document.querySelector('#cfg-motd').value === 'Fixture MOTD'")
+                for route in ('/api/login', '/api/rcon', '/api/world-state', '/api/runtime-state', '/api/config', '/api/seed'):
+                    self.assert_recorded(server, route)
+                self.emit_evidence(root, stage, 'en', '/api/login')
+                stage = 'locale-persist'
+                browser.batch(stage, [['select', '#locale-select', 'zh-CN'], ['snapshot', '-i']])
+                browser.check(stage, "document.documentElement.lang === 'zh-CN' && localStorage.getItem('eaglerx_admin_locale') === 'zh-CN' && document.querySelector('#locale-select').value === 'zh-CN'")
+                browser.batch(stage, [['reload'], ['wait', '500'], ['snapshot', '-i']])
+                browser.check(stage, "document.documentElement.lang === 'zh-CN' && document.querySelector('#locale-select').value === 'zh-CN'")
+                self.emit_evidence(root, stage, 'zh-CN', '/admin')
+                browser.run(stage, 'select', '#locale-select', 'en')
+                stage = 'dialog-validation-recovery'
+                browser.run(stage, 'eval', '(() => { opPlayer(); return true; })()')
+                browser.run(stage, 'wait', 200)
+                browser.snapshot(stage)
+                browser.run(stage, 'eval', '(() => { submitActionDialog({ preventDefault: function() {} }); return true; })()')
+                browser.check(stage, "document.querySelector('#toast').textContent.includes('Please complete')")
+                browser.run(stage, 'fill', '#action-fields [data-field="player"]', 'FixtureAlex')
+                browser.run(stage, 'focus', '#action-fields [data-field="player"]')
+                browser.run(stage, 'eval', "(function(){const e=document.querySelector('#action-fields [data-field=player]');e.setSelectionRange(0, 7);return true;}())")
+                browser.run(stage, 'select', '#locale-select', 'zh-CN')
+                browser.snapshot(stage)
+                browser.check(stage, "(function(){const e=document.querySelector('#action-fields [data-field=player]');return e.value === 'FixtureAlex' && document.activeElement === e && e.selectionStart === 0 && e.selectionEnd === 7 && !document.querySelector('#action-preview-wrap').classList.contains('hidden');}())")
+                browser.run(stage, 'click', '#action-confirm')
+                browser.run(stage, 'wait', 300)
+                browser.snapshot(stage)
+                self.assert_recorded(server, '/api/rcon', 'op FixtureAlex')
+                browser.check(stage, "document.querySelector('#console').textContent.includes('Made FixtureAlex a server operator')")
+                self.emit_evidence(root, stage, 'zh-CN', '/api/rcon')
+                browser.run(stage, 'select', '#locale-select', 'en')
+                stage = 'raw-error-recovery'
+                browser.run(stage, 'eval', "send('raw-fixture').then(function() { return true; })")
+                browser.snapshot(stage)
+                raw_literal = json.dumps(server.raw_response)
+                browser.check(stage, f"Array.from(document.querySelectorAll('#console .out')).some(e => e.textContent === {raw_literal})")
+                self.assert_recorded(server, '/api/rcon', 'raw-fixture')
+                browser.run(stage, 'eval', "send('controlled-error').then(function() { return true; })")
+                browser.snapshot(stage)
+                error_literal = json.dumps(server.controlled_error)
+                browser.check(stage, f"document.querySelector('#console').textContent.includes('Request failed') && document.querySelector('#console').textContent.includes({error_literal})")
+                browser.run(stage, 'eval', "send('list').then(function() { return true; })")
+                browser.snapshot(stage)
+                browser.check(stage, "document.querySelector('#console').textContent.includes('There are 1/20 players online: FixtureAlex')")
+                self.assert_recorded(server, '/api/rcon', 'list')
+                self.emit_evidence(root, stage, 'en', '/api/rcon', raw=server.raw_response, error=server.controlled_error)
+                for width, height, name in ((1440, 900, 'desktop'), (375, 812, 'mobile')):
+                    stage = f'viewport-{name}'
+                    browser.run(stage, 'set', 'viewport', str(width), str(height))
+                    image = screenshots / f'{name}.png'
+                    browser.run(stage, 'screenshot', str(image))
+                    browser.check(stage, "(function(){const s=document.querySelector('#locale-select'), p=document.querySelector('#cmd-bar button');return s.getBoundingClientRect().width > 0 && p.getBoundingClientRect().width > 0 && document.documentElement.scrollWidth <= window.innerWidth;}())")
+                    self.assertTrue(image.is_file(), f'{root.name}: missing {name} screenshot')
+                    screenshot_digest = hashlib.sha256(image.read_bytes()).hexdigest()
+                    self.assertTrue(screenshot_digest, f'{root.name}: empty {name} screenshot digest')
+                    self.emit_evidence(root, stage, 'en', '/admin.html', f'{width}x{height}', screenshot=screenshot_digest)
+                stage = 'network-boundary'
+                browser.run(stage, 'network', 'requests')
+                self.assertTrue(all(record['route'].startswith('/api/') or record['route'] in ('/admin', '/admin/') for record in server.records), f'{root.name}: unexpected mock route')
+                self.assertTrue(any(record.get('raw_sha256') for record in server.records), f'{root.name}: missing sanitized raw evidence')
+                self.emit_evidence(root, stage, 'en', '/api/rcon')
+        except Exception as error:
+            raise AssertionError(f'{root.name}:{stage}: {error}') from error
+        finally:
+            if browser:
+                browser.close()
+            temp.cleanup()
+
+    def test_admin_acceptance_for_both_web_roots(self):
+        for root in WEB_ROOTS:
+            with self.subTest(root=root.name):
+                self.run_root_scenario(root)
+        self.evidence.append({'boundary': DEPLOYMENT_BOUNDARY})
+        print(f'browser-matrix-evidence {DEPLOYMENT_BOUNDARY}')
+        self.assertEqual(17, len(self.evidence))
+        self.assertEqual({'boundary': DEPLOYMENT_BOUNDARY}, self.evidence[-1])
+
+
+if __name__ == '__main__':
+    unittest.main()
