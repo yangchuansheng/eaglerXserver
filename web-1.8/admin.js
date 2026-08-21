@@ -19,11 +19,45 @@ let LAST_STRUCTURE_CONTEXT = '';
 let ONLINE_PLAYERS = [];
 let REFRESH_IN_FLIGHT = {};
 let HERO_PULSE_TIMER = null;
+let STATUS_STATE = { state: 'off', text: '' };
+let TPS_VALUES = [];
+let ACTIVE_TOAST = null;
+let CONSOLE_HISTORY = [];
+let SOURCE_MESSAGE_KEYS = Object.create(null);
 const REFRESH_INTERVALS = {
   players: 20000,
   tps: 30000,
   world: 30000
 };
+
+function t(key, params) {
+  return window.EaglerXI18n ? EaglerXI18n.t(key, params) : key;
+}
+
+function localize(source) {
+  if (!window.EaglerXI18n) return String(source == null ? '' : source);
+  var value = String(source == null ? '' : source);
+  if (SOURCE_MESSAGE_KEYS[value]) return t(SOURCE_MESSAGE_KEYS[value]);
+  var messages = EaglerXI18n.locales['zh-CN'].messages;
+  var keys = Object.keys(messages);
+  for (var index = 0; index < keys.length; index += 1) {
+    if (messages[keys[index]] === value) {
+      SOURCE_MESSAGE_KEYS[value] = keys[index];
+      return t(keys[index]);
+    }
+  }
+  return value;
+}
+
+function formatNumber(value, options) {
+  return new Intl.NumberFormat(EaglerXI18n.getLocale(), options).format(Number(value || 0));
+}
+
+function formatUiTime(date) {
+  return new Intl.DateTimeFormat(EaglerXI18n.getLocale(), {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+  }).format(date || new Date());
+}
 
 function isRegisteredLocale(localeId) {
   return !!(window.EaglerXI18n && Object.prototype.hasOwnProperty.call(EaglerXI18n.locales, localeId));
@@ -66,6 +100,7 @@ function applyStaticLocale(localeId) {
   });
   var selector = document.getElementById('locale-select');
   if (selector) selector.value = activeLocale;
+  rerenderLocalizedState();
 }
 
 function setupLocalePreference() {
@@ -94,39 +129,88 @@ function beginRefresh(name){if(REFRESH_IN_FLIGHT[name])return false;REFRESH_IN_F
 function endRefresh(name){REFRESH_IN_FLIGHT[name]=false}
 function shouldAutoPoll(){return !document.hidden && !!TOKEN}
 
-function log(msg, cls) {
+function renderConsoleEntry(entry) {
   const c = document.getElementById('console');
   const div = document.createElement('div');
   const ts = document.createElement('span');
   ts.className = 'ts';
-  ts.textContent = new Date().toLocaleTimeString();
+  ts.textContent = formatUiTime(entry.date);
   div.appendChild(ts);
   const body = document.createElement('span');
-  body.className = cls || 'out';
-  body.textContent = msg;
+  body.className = entry.cls || 'out';
+  body.textContent = entry.kind === 'raw' ? entry.payload : (entry.key ? t(entry.key, entry.params) : localize(entry.source));
   div.appendChild(body);
   c.appendChild(div);
-  c.scrollTop = c.scrollHeight;
+}
+
+function renderConsoleHistory() {
+  const c = document.getElementById('console');
+  if (!c) return;
+  var wasAtBottom = c.scrollTop + c.clientHeight >= c.scrollHeight - 2;
+  c.textContent = '';
+  CONSOLE_HISTORY.forEach(renderConsoleEntry);
+  if (wasAtBottom) c.scrollTop = c.scrollHeight;
+}
+
+function log(msg, cls) {
+  CONSOLE_HISTORY.push({ kind: 'client', source: String(msg == null ? '' : msg), cls: cls || 'out', date: new Date() });
+  renderConsoleHistory();
+}
+
+function logClient(key, params, cls) {
+  CONSOLE_HISTORY.push({ kind: 'client', key: key, params: params || {}, cls: cls || 'out', date: new Date() });
+  renderConsoleHistory();
+}
+
+function logRaw(payload, cls) {
+  CONSOLE_HISTORY.push({ kind: 'raw', payload: String(payload == null ? '' : payload), cls: cls || 'out', date: new Date() });
+  renderConsoleHistory();
+}
+
+function renderToast() {
+  const toastElement = document.getElementById('toast');
+  if (!toastElement || !ACTIVE_TOAST) return;
+  toastElement.textContent = ACTIVE_TOAST.key ? t(ACTIVE_TOAST.key, ACTIVE_TOAST.params) : localize(ACTIVE_TOAST.source);
+  if (Date.now() >= ACTIVE_TOAST.deadline) {
+    toastElement.classList.remove('show');
+    return;
+  }
+  toastElement.classList.add('show');
 }
 
 function toast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  clearTimeout(t._t);
-  t._t = setTimeout(function () { t.classList.remove('show'); }, 2000);
+  ACTIVE_TOAST = { source: String(msg == null ? '' : msg), deadline: Date.now() + 2000 };
+  const toastElement = document.getElementById('toast');
+  renderToast();
+  clearTimeout(toastElement._t);
+  toastElement._t = setTimeout(function () { toastElement.classList.remove('show'); }, 2000);
+}
+
+function toastClient(key, params) {
+  ACTIVE_TOAST = { key: key, params: params || {}, deadline: Date.now() + 2000 };
+  const toastElement = document.getElementById('toast');
+  renderToast();
+  clearTimeout(toastElement._t);
+  toastElement._t = setTimeout(function () { toastElement.classList.remove('show'); }, 2000);
 }
 
 function setStatus(state, text) {
+  STATUS_STATE = { state: state, text: text || '' };
+  renderStatus();
+}
+
+function renderStatus() {
+  var state = STATUS_STATE.state;
+  var text = localize(STATUS_STATE.text);
   var d = document.getElementById('status-dot');
   d.className = state;
   document.getElementById('status-text').textContent = text;
   var heroConnection = document.getElementById('hero-connection');
-  if (heroConnection) heroConnection.textContent = text || (state === 'on' ? '已连接' : '未连接');
+  if (heroConnection) heroConnection.textContent = text || localize(state === 'on' ? '已连接' : '未连接');
   var heroSignal = document.getElementById('hero-signal');
   var heroSignalNote = document.getElementById('hero-signal-note');
-  if (heroSignal) heroSignal.textContent = state === 'on' ? '稳定' : (state === 'auth' ? '待认证' : '离线');
-  if (heroSignalNote) heroSignalNote.textContent = state === 'on' ? '管理通道运行正常' : (state === 'auth' ? '系统正在等待认证' : '管理通道当前不可用');
+  if (heroSignal) heroSignal.textContent = localize(state === 'on' ? '稳定' : (state === 'auth' ? '待认证' : '离线'));
+  if (heroSignalNote) heroSignalNote.textContent = localize(state === 'on' ? '管理通道运行正常' : (state === 'auth' ? '系统正在等待认证' : '管理通道当前不可用'));
 }
 
 function setVersion(v) {
@@ -143,10 +227,10 @@ function startHeroPulse() {
     var tps = document.getElementById('hero-tps');
     var version = SERVER_INFO.minecraftVersion || '--';
     var messages = [
-      TOKEN ? 'RCON 连接正常' : '等待 RCON 认证',
-      'Paper ' + version + ' · 管理通道已就绪',
-      (players ? players.textContent : '0') + ' 名玩家在线',
-      'TPS 当前为 ' + (tps ? tps.textContent : '--')
+      localize(TOKEN ? 'RCON 连接正常' : '等待 RCON 认证'),
+      t('hero.paperReady', { version: version }),
+      t('hero.playersOnline', { count: formatNumber(ONLINE_PLAYERS.length) }),
+      t('hero.currentTps', { value: tps ? tps.textContent : '--' })
     ];
     pulse.textContent = messages[index % messages.length];
     index += 1;
@@ -569,14 +653,10 @@ function setSeedState(seed, hint) {
   if (lastResultBtn) lastResultBtn.disabled = !LAST_STRUCTURE_RESULT;
 }
 
-function formatNumber(n) {
-  return Number(n || 0).toLocaleString('zh-CN');
-}
-
 function setWorldInfoPlaceholder(text) {
   var el = document.getElementById('world-info');
   if (!el) return;
-  el.innerHTML = '<div class="empty-state">' + escapeHtml(text || '暂无世界信息') + '</div>';
+  el.innerHTML = '<div class="empty-state">' + escapeHtml(localize(text || '暂无世界信息')) + '</div>';
 }
 
 function describeEnabled(value, onText, offText) {
@@ -640,14 +720,14 @@ function renderWorldInfo(info) {
   var ticks = Number(world && typeof world.servertime !== 'undefined' ? world.servertime : 0);
   var maxPlayers = CONFIG_CACHE['max-players'] || '--';
   var cards = [
-    { label: '世界', value: '主世界' },
-    { label: '游戏版本', value: SERVER_INFO.minecraftVersion ? ('MC ' + SERVER_INFO.minecraftVersion) : '--' },
-    { label: '在线玩家', value: String(ONLINE_PLAYERS.length) + ' / ' + String(maxPlayers) },
-    { label: '天气', value: weather },
-    { label: '时间', value: formatMinecraftClock(ticks) },
-    { label: '时段', value: describeMinecraftPhase(ticks) },
-    { label: '游戏刻', value: formatNumber(ticks) },
-    { label: '雷暴', value: world && world.isThundering ? '进行中' : '无' }
+    { label: localize('世界'), value: localize('主世界') },
+    { label: localize('游戏版本'), value: SERVER_INFO.minecraftVersion ? ('MC ' + SERVER_INFO.minecraftVersion) : '--' },
+    { label: localize('在线玩家'), value: formatNumber(ONLINE_PLAYERS.length) + ' / ' + String(maxPlayers) },
+    { label: localize('天气'), value: localize(weather) },
+    { label: localize('时间'), value: formatMinecraftClock(ticks) },
+    { label: localize('时段'), value: localize(describeMinecraftPhase(ticks)) },
+    { label: localize('游戏刻'), value: formatNumber(ticks) },
+    { label: localize('雷暴'), value: localize(world && world.isThundering ? '进行中' : '无') }
   ];
   el.innerHTML = '<div class="world-info-grid">' + cards.map(function (item) {
     return '<div class="world-info-item"><strong>' + escapeHtml(item.label) + '</strong><span>' + escapeHtml(item.value) + '</span></div>';
@@ -657,6 +737,51 @@ function renderWorldInfo(info) {
 function rerenderWorldInfo() {
   if (!WORLD_INFO_CACHE) return;
   renderWorldInfo(WORLD_INFO_CACHE);
+}
+
+function renderPlayers() {
+  var el = document.getElementById('players');
+  if (!el) return;
+  var count = formatNumber(ONLINE_PLAYERS.length);
+  document.getElementById('player-count').textContent = count;
+  var heroPlayerCount = document.getElementById('hero-player-count');
+  if (heroPlayerCount) heroPlayerCount.textContent = count;
+  el.innerHTML = ONLINE_PLAYERS.length ? ONLINE_PLAYERS.map(function (name, index) {
+    return '<div class="player-item"><div class="player-avatar" style="background:' + playerColor(index) + '">' + escapeHtml(name.charAt(0) || '?') + '</div><span class="player-name">' + escapeHtml(name) + '</span></div>';
+  }).join('') : '<div class="empty-state">' + escapeHtml(localize('暂无在线玩家')) + '</div>';
+}
+
+function renderTPS() {
+  var el = document.getElementById('tps-bars');
+  if (!el || !TPS_VALUES.length) return;
+  var labels = ['1m', '5m', '15m'];
+  var heroTps = document.getElementById('hero-tps');
+  if (heroTps) heroTps.textContent = formatNumber(TPS_VALUES[0], { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  el.innerHTML = TPS_VALUES.map(function (value, index) {
+    var pct = Math.min(100, value * 5);
+    var cls = value >= 19 ? 'good' : value >= 15 ? 'ok' : 'bad';
+    return '<div class="tps-row"><span class="tps-label">' + labels[index] + '</span><div class="tps-track"><div class="tps-fill ' + cls + '" style="width:' + pct + '%"></div></div><span class="tps-val">' + formatNumber(value, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '</span></div>';
+  }).join('');
+}
+
+function rerenderLocalizedState() {
+  if (!window.EaglerXI18n) return;
+  var dialogSnapshot = captureActionDialogSnapshot();
+  renderStatus();
+  setVersion(SERVER_INFO.minecraftVersion ? ('MC ' + SERVER_INFO.minecraftVersion) : '');
+  if (WORLD_INFO_CACHE) renderWorldInfo(WORLD_INFO_CACHE);
+  if (ONLINE_PLAYERS || TOKEN) renderPlayers();
+  if (TPS_VALUES.length) renderTPS();
+  updateSeedMapLink();
+  if (LAST_STRUCTURE_RESULT) {
+    var overlay = document.getElementById('structure-overlay');
+    var wasOpen = overlay && !overlay.classList.contains('hidden');
+    renderStructureResults(LAST_STRUCTURE_RESULT);
+    if (!wasOpen && overlay) overlay.classList.add('hidden');
+  }
+  if (ACTION_DIALOG) renderActionDialog(dialogSnapshot);
+  renderToast();
+  renderConsoleHistory();
 }
 
 function setToggleElementChecked(el, checked) {
@@ -759,7 +884,7 @@ async function refreshServerVersion() {
     });
     var d = await r.json();
     if (d.success) {
-      SERVER_INFO.serverVersionText = String(d.response || '').replace(/\s+/g, ' ').trim();
+      SERVER_INFO.serverVersionText = String(d.response || '');
       rerenderWorldInfo();
     } else if (isAuthError(d.error)) {
       handleAuthFailure(d.error);
@@ -1171,14 +1296,14 @@ function renderActionFields(fields) {
     label.className = 'dialog-field';
 
     var title = document.createElement('span');
-    title.textContent = field.label || field.name;
+    title.textContent = field.labelKey ? t(field.labelKey) : localize(field.label || field.name);
     label.appendChild(title);
 
     var input = document.createElement('input');
     input.className = 'dialog-input';
     input.type = field.type || 'text';
     input.autocomplete = 'off';
-    input.placeholder = field.placeholder || '';
+    input.placeholder = field.placeholderKey ? t(field.placeholderKey) : localize(field.placeholder || '');
     input.value = typeof field.value === 'undefined' ? '' : String(field.value);
     input.setAttribute('data-field', field.name);
     if (field.required) input.setAttribute('data-required', 'true');
@@ -1250,7 +1375,7 @@ function renderActionFields(fields) {
     if (field.hint) {
       var hint = document.createElement('small');
       hint.className = 'dialog-hint';
-      hint.textContent = field.hint;
+      hint.textContent = field.hintKey ? t(field.hintKey) : localize(field.hint);
       label.appendChild(hint);
     }
 
@@ -1266,16 +1391,63 @@ function focusFirstActionField() {
 function showActionDialog(config) {
   return new Promise(function (resolve) {
     ACTION_DIALOG = { config: config || {}, resolve: resolve };
-    document.getElementById('action-kicker').textContent = config.kicker || '快捷操作';
-    document.getElementById('action-title').textContent = config.title || '输入参数';
-    document.getElementById('action-desc').textContent = config.description || '请填写命令参数';
-    document.getElementById('action-confirm').textContent = config.confirmText || '确定';
-    document.getElementById('action-confirm').classList.toggle('danger-btn', !!config.danger);
-    renderActionFields(config.fields || []);
-    document.getElementById('action-overlay').classList.remove('hidden');
-    updateActionPreview();
+    renderActionDialog();
     setTimeout(focusFirstActionField, 0);
   });
+}
+
+function renderActionDialog(snapshot) {
+  if (!ACTION_DIALOG) return;
+  var config = ACTION_DIALOG.config;
+  document.getElementById('action-kicker').textContent = config.kickerKey ? t(config.kickerKey) : (config.kicker ? localize(config.kicker) : t('dialog.action.defaultKicker'));
+  document.getElementById('action-title').textContent = config.titleKey ? t(config.titleKey) : (config.title ? localize(config.title) : t('dialog.action.defaultTitle'));
+  document.getElementById('action-desc').textContent = config.descriptionKey ? t(config.descriptionKey) : (config.description ? localize(config.description) : t('dialog.action.defaultDescription'));
+  document.getElementById('action-confirm').textContent = config.confirmKey ? t(config.confirmKey) : (config.confirmText ? localize(config.confirmText) : t('dialog.action.confirm'));
+  document.getElementById('action-confirm').classList.toggle('danger-btn', !!config.danger);
+  renderActionFields(config.fields || []);
+  document.getElementById('action-overlay').classList.remove('hidden');
+  restoreActionDialogSnapshot(snapshot);
+  updateActionPreview();
+}
+
+function captureActionDialogSnapshot() {
+  if (!ACTION_DIALOG) return null;
+  var active = document.activeElement;
+  var fields = {};
+  Array.prototype.forEach.call(document.querySelectorAll('#action-fields .dialog-input'), function (input) {
+    fields[input.getAttribute('data-field')] = { value: input.value, checked: input.checked, selectedIndex: input.selectedIndex, required: input.required, min: input.min, max: input.max };
+  });
+  return {
+    fields: fields,
+    danger: document.getElementById('action-confirm').classList.contains('danger-btn'),
+    focus: active && active.getAttribute ? active.getAttribute('data-field') : '',
+    start: active && typeof active.selectionStart === 'number' ? active.selectionStart : null,
+    end: active && typeof active.selectionEnd === 'number' ? active.selectionEnd : null,
+    direction: active && active.selectionDirection ? active.selectionDirection : 'none'
+  };
+}
+
+function restoreActionDialogSnapshot(snapshot) {
+  if (!snapshot) return;
+  Object.keys(snapshot.fields).forEach(function (name) {
+    var input = getActionFieldElement(name);
+    var saved = snapshot.fields[name];
+    if (!input) return;
+    input.value = saved.value;
+    input.checked = saved.checked;
+    input.required = saved.required;
+    input.min = saved.min;
+    input.max = saved.max;
+    if (typeof saved.selectedIndex === 'number' && saved.selectedIndex >= 0) input.selectedIndex = saved.selectedIndex;
+  });
+  document.getElementById('action-confirm').classList.toggle('danger-btn', snapshot.danger);
+  if (snapshot.focus) {
+    var focused = getActionFieldElement(snapshot.focus);
+    if (focused) {
+      focused.focus();
+      if (snapshot.start !== null && snapshot.end !== null && focused.setSelectionRange) focused.setSelectionRange(snapshot.start, snapshot.end, snapshot.direction);
+    }
+  }
 }
 
 function closeActionDialog(result) {
@@ -1303,7 +1475,7 @@ function submitActionDialog(event) {
     }
   });
   if (missingField) {
-    toast('请填写“' + (missingField.label || missingField.name) + '”');
+    toastClient('validation.requiredField', { name: missingField.labelKey ? t(missingField.labelKey) : localize(missingField.label || missingField.name) });
     var input = getActionFieldElement(missingField.name);
     if (input) input.focus();
     return;
@@ -1819,7 +1991,7 @@ async function runCustomCommandDialog() {
 async function send(cmd, opts) {
   if (!TOKEN) { toast('请先登录'); openLoginModal(); return; }
   opts = opts || {};
-  log('> ' + cmd, 'cmd');
+  logRaw(cmd, 'cmd');
   try {
     var r = await fetch(BASE + '/api/rcon', {
       method: 'POST',
@@ -1828,7 +2000,7 @@ async function send(cmd, opts) {
     });
     var d = await r.json();
     if (d.success) {
-      log(d.response || '(无输出)', 'out');
+      logRaw(d.response || t('console.emptyOutput'), 'out');
       var effect = classifyCommandRefresh(cmd);
       if (!opts.skipAutoRefresh) {
         if (effect.world || effect.config) queueWorldInfoRefresh(500, true);
@@ -1840,11 +2012,11 @@ async function send(cmd, opts) {
         handleAuthFailure(d.error);
         return d;
       }
-      log('错误: ' + (d.error || 'unknown'), 'err');
+      logClient('console.requestFailed', { error: d.error || 'unknown' }, 'err');
       return d;
     }
   } catch (e) {
-    log('请求失败: ' + e.message, 'err');
+    logClient('console.requestFailed', { error: e.message }, 'err');
     return { success: false, error: e.message };
   }
 }
@@ -1916,28 +2088,13 @@ async function refreshPlayers() {
     });
     var d = await r.json();
     if (d.success) {
-      var el = document.getElementById('players');
       var resp = d.response || '';
       var m = resp.match(/(\d+)\/(\d+)/);
       if (m) {
-        document.getElementById('player-count').textContent = m[1];
-        var heroPlayerCount = document.getElementById('hero-player-count');
-        if (heroPlayerCount) heroPlayerCount.textContent = m[1];
         var namesStr = resp.split(':')[1] || '';
         var names = namesStr.trim() ? namesStr.split(',').map(function (s) { return s.trim(); }) : [];
         ONLINE_PLAYERS = names.slice();
-        if (names.length) {
-          el.innerHTML = names.map(function (n, i) {
-            var safe = escapeHtml(n);
-            var initial = escapeHtml(n.charAt(0) || '?');
-            return '<div class="player-item"><div class="player-avatar" style="background:' + playerColor(i) + '">' + initial + '</div><span class="player-name">' + safe + '</span></div>';
-          }).join('');
-        } else {
-          el.innerHTML = '<div class="empty-state">暂无在线玩家</div>';
-          document.getElementById('player-count').textContent = '0';
-          if (heroPlayerCount) heroPlayerCount.textContent = '0';
-          ONLINE_PLAYERS = [];
-        }
+        renderPlayers();
         rerenderWorldInfo();
       }
     } else if (isAuthError(d.error)) {
@@ -1945,10 +2102,10 @@ async function refreshPlayers() {
     }
   } catch (e) {
     ONLINE_PLAYERS = [];
-    document.getElementById('player-count').textContent = '0';
+    document.getElementById('player-count').textContent = formatNumber(0);
     var heroPlayerCount = document.getElementById('hero-player-count');
     if (heroPlayerCount) heroPlayerCount.textContent = '0';
-    document.getElementById('players').innerHTML = '<div class="empty-state">读取在线玩家失败</div>';
+    document.getElementById('players').innerHTML = '<div class="empty-state">' + escapeHtml(localize('读取在线玩家失败')) + '</div>';
   } finally {
     setCardLoading('card-players', false);
     endRefresh('players');
@@ -1966,20 +2123,12 @@ async function refreshTPS() {
     });
     var d = await r.json();
     if (d.success) {
-      var el = document.getElementById('tps-bars');
       var resp = d.response || '';
       var tail = resp.split(':').pop() || resp;
       var ms = tail.match(/\*?\d+\.?\d*/g);
       if (ms && ms.length >= 3) {
-        var labels = ['1m', '5m', '15m'];
-        var heroTps = document.getElementById('hero-tps');
-        if (heroTps) heroTps.textContent = parseFloat(ms.slice(-3)[0].replace('*', '')).toFixed(1);
-        el.innerHTML = ms.slice(-3).map(function (v, i) {
-          v = parseFloat(v.replace('*', ''));
-          var pct = Math.min(100, v * 5);
-          var cls = v >= 19 ? 'good' : v >= 15 ? 'ok' : 'bad';
-          return '<div class="tps-row"><span class="tps-label">' + labels[i] + '</span><div class="tps-track"><div class="tps-fill ' + cls + '" style="width:' + pct + '%"></div></div><span class="tps-val">' + v.toFixed(1) + '</span></div>';
-        }).join('');
+        TPS_VALUES = ms.slice(-3).map(function (value) { return parseFloat(value.replace('*', '')); });
+        renderTPS();
       }
     } else if (isAuthError(d.error)) {
       handleAuthFailure(d.error);
@@ -1987,7 +2136,7 @@ async function refreshTPS() {
   } catch (e) {
     var heroTps = document.getElementById('hero-tps');
     if (heroTps) heroTps.textContent = '--';
-    document.getElementById('tps-bars').innerHTML = '<div class="empty-state">读取 TPS 失败</div>';
+    document.getElementById('tps-bars').innerHTML = '<div class="empty-state">' + escapeHtml(localize('读取 TPS 失败')) + '</div>';
   } finally {
     setCardLoading('card-tps', false);
     endRefresh('tps');
