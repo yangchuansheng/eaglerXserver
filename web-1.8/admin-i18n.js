@@ -927,7 +927,11 @@
   "dialog.action.defaultKicker": "Quick action",
   "dialog.action.defaultTitle": "Enter parameters",
   "dialog.action.defaultDescription": "Enter command parameters",
-  "dialog.action.confirm": "Confirm"
+  "dialog.action.confirm": "Confirm",
+  "toast.serverRestarting": "Server is restarting",
+  "console.serverRestarting": "Server is restarting; the connection will recover shortly.",
+  "toast.configSaved": "Configuration saved; it takes effect after restart.",
+  "console.configUpdated": "Configuration updated: {key} [{value}]"
 };
   var zhCN = {
   "document.surface.adminhtml.l6.c21": "EaglercraftX 管理台",
@@ -1849,7 +1853,11 @@
   "dialog.action.defaultKicker": "快捷操作",
   "dialog.action.defaultTitle": "输入参数",
   "dialog.action.defaultDescription": "请填写命令参数",
-  "dialog.action.confirm": "确定"
+  "dialog.action.confirm": "确定",
+  "toast.serverRestarting": "服务器正在重启",
+  "console.serverRestarting": "服务器正在重启，连接将很快恢复。",
+  "toast.configSaved": "配置已保存，重启后生效。",
+  "console.configUpdated": "配置已更新：{key} [{value}]"
 };
   var locales = {
     en: { id: 'en', label: 'English', messages: en },
