@@ -564,8 +564,33 @@ console.log(JSON.stringify(window.EaglerXI18n.locales));
         self.assertIn("hourCycle: 'h23'", source)
         self.assertIn('captureActionDialogSnapshot', source)
         self.assertIn('restoreActionDialogSnapshot', source)
+        self.assertIn('selectedIndex: input.selectedIndex', source)
+        self.assertIn('input.required = saved.required', source)
+        self.assertIn('input.min = saved.min', source)
+        self.assertIn('input.max = saved.max', source)
+        self.assertIn('focused.setSelectionRange', source)
         self.assertIn('ACTIVE_TOAST.deadline', source)
         self.assertIn('entry.payload', source)
+
+    def test_node_vm_keeps_raw_console_bytes(self):
+        script = """
+const fs = require('fs'); const vm = require('vm');
+function node() { return { children: [], classList: { add: function(){}, remove: function(){} }, appendChild: function(child) { this.children.push(child); }, textContent: '', scrollTop: 0, scrollHeight: 0, clientHeight: 0 }; }
+const consoleNode = node();
+const document = { hidden: false, documentElement: {}, title: '', getElementById: function(id) { return id === 'console' ? consoleNode : node(); }, querySelector: function() { return null; }, querySelectorAll: function() { return []; }, createElement: node, addEventListener: function() {} };
+const window = { location: { origin: 'http://localhost:5201' }, console: { warn: function() {} } };
+const context = { window: window, document: document, localStorage: { getItem: function(){ return null; }, setItem: function(){}, removeItem: function(){} }, setTimeout: function(){ return 1; }, clearTimeout: function(){}, setInterval: function(){ return 1; }, clearInterval: function(){}, Intl: Intl, Date: Date, console: console };
+vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), context);
+context.EaglerXI18n = window.EaglerXI18n;
+let source = fs.readFileSync(process.argv[2], 'utf8');
+source = source.replace('setupLocalePreference();\\ninit();', "EaglerXI18n.setLocale('en'); logRaw('  <tag>' + String.fromCharCode(10) + 'raw ✓  ', 'out'); console.log(JSON.stringify({ payload: CONSOLE_HISTORY[0].payload, locale: EaglerXI18n.getLocale(), clock: formatMinecraftClock(18000) }));");
+vm.runInNewContext(source, context);
+"""
+        result = subprocess.run(['node', '-e', script, str(ROOT / 'web-1.8' / 'admin-i18n.js'), str(ROOT / 'web-1.8' / 'admin.js')], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        data = json.loads(result.stdout)
+        self.assertEqual('  <tag>\nraw ✓  ', data['payload'])
+        self.assertEqual('en', data['locale'])
+        self.assertEqual('00:00', data['clock'])
 
 
 class I18nRuntimeTests(unittest.TestCase):
