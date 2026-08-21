@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import copy
+import http.server
 import shutil
 import socket
 import subprocess
@@ -14,6 +15,8 @@ import tempfile
 import threading
 import time
 import unittest
+import urllib.error
+import urllib.request
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -702,6 +705,195 @@ console.log(JSON.stringify({ fallback: fallback, interpolation: interpolation, f
         self.assertEqual(result['first'], result['second'])
         self.assertEqual('en', result['selected'])
         self.assertEqual(['[EaglerX i18n] missing key: missing.key'], result['warnings'])
+
+
+class ReleaseContractTests(unittest.TestCase):
+    ROOTS = (ROOT / 'web-1.8', ROOT / 'web-1.12')
+    RELEASE_ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'admin-i18n-inventory.json')
+
+    @staticmethod
+    def digest(path):
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    @staticmethod
+    def runtime(root):
+        script = """
+const fs = require('fs');
+const vm = require('vm');
+const warnings = [];
+const window = { console: { warn: function(message) { warnings.push(message); } } };
+vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), { window: window });
+const i18n = window.EaglerXI18n;
+const catalogs = {
+  en: Object.assign({}, i18n.locales.en.messages),
+  'zh-CN': Object.assign({}, i18n.locales['zh-CN'].messages)
+};
+i18n.setLocale('zh-CN');
+delete i18n.locales['zh-CN'].messages['header.title'];
+const fallback = i18n.t('header.title');
+const interpolation = i18n.t('validation.requiredField', { name: '<strong>FixtureAlex</strong>' });
+const missing = i18n.t('release.contract.unknown');
+const selected = i18n.setLocale('zh-CN');
+const current = i18n.getLocale();
+console.log(JSON.stringify({
+  defaults: [i18n.DEFAULT_LOCALE, i18n.FALLBACK_LOCALE, i18n.PREFERENCE_KEY],
+  catalogs: catalogs,
+  ids: Object.keys(i18n.locales),
+  labels: [i18n.locales.en.label, i18n.locales['zh-CN'].label],
+  fallback: fallback,
+  interpolation: interpolation,
+  missing: missing,
+  selected: selected,
+  current: current,
+  warnings: warnings
+}));
+"""
+        result = subprocess.run(
+            ['node', '-e', script, str(root / 'admin-i18n.js')],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        return json.loads(result.stdout)
+
+    def test_release_assets_are_exact_mirrors_with_sha256_evidence(self):
+        canonical, mirror = self.ROOTS
+        for asset in self.RELEASE_ASSETS:
+            with self.subTest(asset=asset):
+                canonical_path = canonical / asset
+                mirror_path = mirror / asset
+                self.assertEqual(
+                    canonical_path.read_bytes(),
+                    mirror_path.read_bytes(),
+                    f'{asset}: web-1.8 sha256={self.digest(canonical_path)} '
+                    f'web-1.12 sha256={self.digest(mirror_path)}',
+                )
+
+    def test_full_bilingual_locale_catalog_inventory_and_runtime_contract(self):
+        for root in self.ROOTS:
+            with self.subTest(root=root.name):
+                inventory = json.loads((root / 'admin-i18n-inventory.json').read_text(encoding='utf-8'))
+                runtime = self.runtime(root)
+                catalogs = runtime['catalogs']
+                static_keys = {binding[0] for binding in inventory['staticBindingContract']['bindings']}
+                dynamic_keys = set(inventory['dynamicBindingContract']['keys'])
+                runtime_keys = set(catalogs['en']) | set(catalogs['zh-CN'])
+                referenced_keys = static_keys | dynamic_keys | runtime_keys
+
+                self.assertEqual(['en', 'en', 'eaglerx_admin_locale'], runtime['defaults'], root.name)
+                self.assertEqual(['en', 'zh-CN'], runtime['ids'], root.name)
+                self.assertEqual(['English', '简体中文'], runtime['labels'], root.name)
+                self.assertEqual('EaglercraftX Admin Console', runtime['fallback'], root.name)
+                self.assertEqual('[[missing:release.contract.unknown]]', runtime['missing'], root.name)
+                self.assertEqual('请填写“<strong>FixtureAlex</strong>”。', runtime['interpolation'], root.name)
+                self.assertEqual(('zh-CN', 'zh-CN'), (runtime['selected'], runtime['current']), root.name)
+                self.assertEqual(['[EaglerX i18n] missing key: release.contract.unknown'], runtime['warnings'], root.name)
+                for key in referenced_keys:
+                    with self.subTest(root=root.name, key=key):
+                        for locale_id in ('en', 'zh-CN'):
+                            self.assertTrue(catalogs[locale_id].get(key, '').strip(), f'{root.name}: {locale_id} {key}')
+                for key, message in inventory['messages'].items():
+                    if message['classification'] == 'operational':
+                        self.assertNotIn(key, catalogs['en'], f'{root.name}: operational key {key} in en catalog')
+                        self.assertNotIn(key, catalogs['zh-CN'], f'{root.name}: operational key {key} in zh-CN catalog')
+
+
+class DirectRootStaticServer:
+    ALLOWED_ROOTS = (ROOT / 'web-1.8', ROOT / 'web-1.12')
+
+    def __init__(self, web_root):
+        self.web_root = web_root.resolve()
+        self.server = None
+        self.thread = None
+
+    def __enter__(self):
+        allowed_roots = {path.resolve() for path in self.ALLOWED_ROOTS}
+        if self.web_root not in allowed_roots:
+            raise AssertionError(f'unsupported direct web root: {self.web_root}')
+
+        root = self.web_root
+
+        class Handler(http.server.SimpleHTTPRequestHandler):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, directory=str(root), **kwargs)
+
+            def do_GET(self):
+                if self.path in ('/admin', '/admin/'):
+                    self.send_response(302)
+                    self.send_header('Location', '/admin.html')
+                    self.end_headers()
+                    return
+                super().do_GET()
+
+            def log_message(self, *_args):
+                pass
+
+        self.server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        return self
+
+    @property
+    def base_url(self):
+        return f'http://127.0.0.1:{self.server.server_port}'
+
+    def __exit__(self, _type, _value, _traceback):
+        try:
+            self.server.shutdown()
+            self.server.server_close()
+        finally:
+            self.thread.join(timeout=5)
+            if self.thread.is_alive():
+                raise AssertionError(f'{self.web_root.name}: static server thread did not stop')
+
+
+class ServedAdminStaticTests(unittest.TestCase):
+    ROOTS = (ROOT / 'web-1.8', ROOT / 'web-1.12')
+    RELEASE_ASSETS = ReleaseContractTests.RELEASE_ASSETS
+
+    @staticmethod
+    def request(url, follow=True):
+        opener = urllib.request.build_opener() if follow else urllib.request.build_opener(NoRedirect)
+        return opener.open(url, timeout=5)
+
+    def test_direct_root_admin_entrypoints_and_release_assets(self):
+        for root in self.ROOTS:
+            with self.subTest(root=root.name), DirectRootStaticServer(root) as server:
+                with self.request(server.base_url + '/') as response:
+                    self.assertEqual(200, response.status, f'{root.name} /')
+                    self.assertTrue(response.read(), f'{root.name} /: empty response')
+                for route in ('/admin.html',):
+                    with self.subTest(root=root.name, route=route):
+                        with self.request(server.base_url + route) as response:
+                            body = response.read().decode('utf-8')
+                            self.assertEqual(200, response.status, f'{root.name} {route}')
+                            self.assertIn('EaglercraftX Admin Console', body, f'{root.name} {route}')
+                            self.assertIn('id="locale-select"', body, f'{root.name} {route}')
+                            self.assertIn('admin.css', body, f'{root.name} {route}')
+                            self.assertIn('admin-i18n.js', body, f'{root.name} {route}')
+                            self.assertIn('admin.js?v=', body, f'{root.name} {route}')
+                            self.assertLess(body.index('admin-i18n.js'), body.index('admin.js?v='), f'{root.name} {route}')
+                for route in ('/admin', '/admin/'):
+                    with self.subTest(root=root.name, route=route):
+                        with self.assertRaises(urllib.error.HTTPError) as raised:
+                            self.request(server.base_url + route, follow=False)
+                        self.assertEqual(302, raised.exception.code, f'{root.name} {route}')
+                        self.assertEqual('/admin.html', raised.exception.headers['Location'], f'{root.name} {route}')
+                        raised.exception.close()
+                        with self.request(server.base_url + route) as response:
+                            self.assertEqual(200, response.status, f'{root.name} {route}')
+                for asset in self.RELEASE_ASSETS:
+                    route = '/' + asset
+                    with self.subTest(root=root.name, route=route):
+                        with self.request(server.base_url + route) as response:
+                            self.assertEqual(200, response.status, f'{root.name} {route}')
+                            self.assertTrue(response.read(), f'{root.name} {route}: empty response')
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *_args, **_kwargs):
+        return None
 
 
 if __name__ == '__main__':
