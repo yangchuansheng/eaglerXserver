@@ -17,15 +17,16 @@ Operators can reliably run either supported server version and administer it thr
 - ✓ The management service exposes authenticated RCON operations, status, Dynmap proxying, and static fallback service on port 5201.
 - ✓ The admin interface supports server, player, world, gameplay, configuration, and diagnostic operations.
 - ✓ The 1.8 and 1.12 web trees provide matching admin interface assets.
+- ✓ Complete English and Simplified Chinese (`zh-CN`) catalogs cover every Phase 1 scoped client-authored interface literal, with English as the default and fallback — Phase 1.
+- ✓ An extensible client-side locale registry supplies deterministic fallback, plain-text interpolation, and deduplicated missing-key diagnostics — Phase 1.
+- ✓ The header locale selector persists a valid origin-scoped preference and refreshes the static bilingual shell — Phase 2.
+- ✓ Dynamic administration views, dialogs, validation, notifications, and client logs render through bilingual presentation keys — Phase 3.
+- ✓ Locale changes preserve administration state while raw server output remains opaque text — Phase 3.
+- ✓ Served-browser parity and the release matrix cover both web roots through direct-root contracts and a deterministic Mock Admin API — Phase 4.
 
 ### Active
 
-- [ ] Provide complete English and Simplified Chinese (`zh-CN`) catalogs for every admin-authored interface string, with English as the first-visit default and primary fallback.
-- [ ] Provide an extensible client-side locale catalog with immediate locale switching and deterministic fallback behavior.
-- [ ] Add an always-available header language selector that persists the selected locale per browser origin in `localStorage`.
-- [ ] Route static text, dynamic status text, dialogs, notifications, titles, and accessibility labels through translation keys.
-- [ ] Preserve authentication, form state, focus, dialogs, selections, cached data, polling, and server-operation state during locale changes.
-- [ ] Keep the 1.8 and 1.12 admin implementations and locale assets synchronized.
+No active v1 requirements.
 
 ### Out of Scope
 
@@ -63,12 +64,13 @@ Operators can reliably run either supported server version and administer it thr
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Ship complete English and `zh-CN` locales in v1.0 | Covers the confirmed bilingual admin audience while validating the localization mechanism | — Pending |
-| Use an always-visible header selector with `localStorage` persistence | Keeps language choice explicit, immediately available before and after login, and durable per origin | — Pending |
-| Use English as the first-visit default and primary fallback | Guarantees complete, deterministic interface text when the active catalog is incomplete | — Pending |
-| Preserve live administration state during locale changes | Makes language switching presentation-only while retaining ongoing operator work | — Pending |
-| Keep server-originated command output in its source language | Raw output is controlled by Paper and plugins and may contain dynamic third-party text | — Pending |
-| Add no frontend dependency | Native browser APIs cover catalogs, DOM updates, and preference storage | — Pending |
+| Ship complete English and `zh-CN` locales in v1.0 | Covers the confirmed bilingual admin audience while validating the localization mechanism | Verified through Phase 3 |
+| Use an always-visible header selector with `localStorage` persistence | Keeps language choice explicit, immediately available before and after login, and durable per origin | Verified through Phase 2 |
+| Use English as the first-visit default and primary fallback | Guarantees complete, deterministic interface text when the active catalog is incomplete | Verified through Phase 3 |
+| Preserve live administration state during locale changes | Makes language switching presentation-only while retaining ongoing operator work | Verified through Phase 3 |
+| Keep server-originated command output in its source language | Raw output is controlled by Paper and plugins and may contain dynamic third-party text | Verified through Phase 3 |
+| Add no frontend dependency | Native browser APIs cover catalogs, DOM updates, and preference storage | Verified through Phase 3 |
+| Release-gate mirrored roots with one deterministic served-browser matrix | Exact assets, direct-root HTTP, and isolated local fixtures provide repeatable parity evidence without claiming a live deployment smoke | Verified through Phase 4 |
 
 ## Evolution
 
@@ -88,4 +90,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-20 after confirming bilingual milestone scope*
+*Last updated: 2026-08-21 after Phase 4 completion*

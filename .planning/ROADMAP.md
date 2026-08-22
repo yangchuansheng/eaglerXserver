@@ -7,9 +7,9 @@ Milestone v1.0 delivers complete English and Simplified Chinese (`zh-CN`) experi
 ## Phases
 
 - [x] **Phase 1: Locale Contract and Inventory** - Establish complete English and `zh-CN` catalogs, safe locale runtime, and semantic message inventory. (completed 2026-08-20)
-- [ ] **Phase 2: Bilingual Static Shell and Preference** - Deliver English first paint, persistent locale choice, immediate switching, and localized static accessibility surfaces.
-- [ ] **Phase 3: Dynamic Renderers and Raw-Output Boundary** - Localize stateful UI while preserving operator context and exact server-originated output.
-- [ ] **Phase 4: Mirror Gate and Release Matrix** - Prove parity, catalog integrity, and end-to-end administration flows in both web roots.
+- [x] **Phase 2: Bilingual Static Shell and Preference** - Deliver English first paint, persistent locale choice, immediate switching, and localized static accessibility surfaces. (completed 2026-08-20)
+- [x] **Phase 3: Dynamic Renderers and Raw-Output Boundary** - Localize stateful UI while preserving operator context and exact server-originated output. (completed 2026-08-21)
+- [x] **Phase 4: Mirror Gate and Release Matrix** - Prove parity, catalog integrity, and end-to-end administration flows in both web roots. (completed 2026-08-21)
 
 ## Phase Details
 
@@ -61,7 +61,12 @@ Milestone v1.0 delivers complete English and Simplified Chinese (`zh-CN`) experi
   4. Locale changes retain polling and server-operation state without introducing duplicate requests or timers, and UI-owned numbers and dates follow the active locale's native formatting.
   5. Paper, plugin, and RCON response content remains byte-for-byte unchanged when displayed in the administration interface.
 
-**Plans**: TBD
+**Plans**: 3/3 complete
+
+- [x] 03-01-PLAN.md
+- [x] 03-02-PLAN.md
+- [x] 03-03-PLAN.md (verification gap closure)
+
 **UI hint**: yes
 
 ### Phase 4: Mirror Gate and Release Matrix
@@ -75,7 +80,7 @@ Milestone v1.0 delivers complete English and Simplified Chinese (`zh-CN`) experi
   2. Automated release checks verify English-key coverage, referenced-key integrity, and equality of mirrored administration assets.
   3. Browser acceptance demonstrates authentication, player, world, configuration, dialog, notification, command, and error flows for both web versions.
 
-**Plans**: TBD
+**Plans**: 2/2 complete
 **UI hint**: yes
 
 ## Progress
@@ -83,6 +88,6 @@ Milestone v1.0 delivers complete English and Simplified Chinese (`zh-CN`) experi
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Locale Contract and Inventory | 4/4 | Complete    | 2026-08-20 |
-| 2. English-First Static Shell and Preference | 2/2 | In Progress|  |
-| 3. Dynamic Renderers and Raw-Output Boundary | 0/TBD | Not started | - |
-| 4. Mirror Gate and Release Matrix | 0/TBD | Not started | - |
+| 2. English-First Static Shell and Preference | 2/2 | Complete    | 2026-08-20 |
+| 3. Dynamic Renderers and Raw-Output Boundary | 3/3 | Complete    | 2026-08-21 |
+| 4. Mirror Gate and Release Matrix | 2/2 | Complete    | 2026-08-21 |

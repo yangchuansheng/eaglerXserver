@@ -574,6 +574,14 @@ console.log(JSON.stringify(window.EaglerXI18n.locales));
         self.assertIn('focused.setSelectionRange', source)
         self.assertIn('ACTIVE_TOAST.deadline', source)
         self.assertIn('entry.payload', source)
+        self.assertIn('SEED_STATE', source)
+        self.assertIn('STRUCTURE_STATUS_STATE', source)
+        self.assertIn('renderSeedState();', rerender.group(1))
+        self.assertIn('renderStructureStatus();', rerender.group(1))
+        self.assertIn('renderStructureSource();', rerender.group(1))
+        self.assertNotIn("logRaw(d.response || t('console.emptyOutput')", source)
+        self.assertIn("if (d.response) logRaw(d.response, 'out');", source)
+        self.assertIn("else logClient('console.emptyOutput', {}, 'out');", source)
 
     def test_node_vm_keeps_raw_console_bytes(self):
         script = """
@@ -627,17 +635,22 @@ const i18n = window.EaglerXI18n;
             surface['messageKey'] for surface in inventory['surfaces']
             if surface['classification'] == 'presentation'
         ]
-        expected = set(presentation_keys)
-        self.assertTrue(expected.issubset({
+        expected = (
+            set(presentation_keys)
+            | {binding[0] for binding in inventory['staticBindingContract']['bindings']}
+            | set(inventory['dynamicBindingContract']['keys'])
+        )
+        self.assertTrue(set(presentation_keys).issubset({
             key for key, message in inventory['messages'].items()
             if message['classification'] == 'presentation'
         }))
         for locale_id in ('en', 'zh-CN'):
             catalog = catalogs[locale_id]
-            self.assertTrue(expected.issubset(set(catalog)))
+            self.assertEqual(expected, set(catalog))
             for key, value in catalog.items():
                 self.assertIsInstance(value, str)
                 self.assertTrue(value.strip(), key)
+        self.assertEqual(set(catalogs['en']), set(catalogs['zh-CN']))
         for key, message in inventory['messages'].items():
             if message['classification'] == 'operational':
                 self.assertNotIn(key, catalogs['en'])
@@ -683,7 +696,7 @@ console.log(JSON.stringify({
         operational = copy.deepcopy(catalogs)
         operational['zh-CN'][operational_key] = '操作值'
 
-        for name, corrupt in (('missing', missing), ('operational', operational)):
+        for name, corrupt in (('missing', missing), ('extra', extra), ('operational', operational)):
             with self.subTest(name=name):
                 with self.assertRaises(AssertionError):
                     self.assert_catalog_contract(inventory, corrupt)
@@ -705,6 +718,31 @@ console.log(JSON.stringify({ fallback: fallback, interpolation: interpolation, f
         self.assertEqual(result['first'], result['second'])
         self.assertEqual('en', result['selected'])
         self.assertEqual(['[EaglerX i18n] missing key: missing.key'], result['warnings'])
+
+    def test_stable_keys_render_composites_without_han(self):
+        result = self.run_runtime("""
+i18n.setLocale('en');
+const samples = [
+  i18n.t('console.rconDisabled'),
+  i18n.t('structure.sourcePlayerLocation', { player: 'FixtureAlex', world: 'fixture-world', x: '12.5', z: '-8.25', source: 'Dynmap' }),
+  i18n.t('structure.coordinatesSummary', { x: '0', z: '0' }),
+  i18n.t('console.playerCoordinates', { player: 'FixtureAlex', world: 'fixture-world', x: '12', y: '64', z: '-8', source: 'player data snapshot' }),
+  i18n.t('structure.type.village'),
+  i18n.t('structure.sourcePlayerdata'),
+  i18n.t('toast.commandSubmitted')
+];
+console.log(JSON.stringify(samples));
+""")
+        self.assertEqual([
+            'RCON is disabled. Start the container with -e RCON_PASSWORD=xxx to enable it.',
+            'Search source: player “FixtureAlex” · world fixture-world · X 12.5 / Z -8.25 · coordinate source Dynmap',
+            'Center X 0 / Z 0',
+            'Player coordinates [FixtureAlex]: world=fixture-world X=12 Y=64 Z=-8 (source: player data snapshot)',
+            'Village',
+            'player data snapshot',
+            'Command submitted.',
+        ], result)
+        self.assertTrue(all(not re.search(r'[\u4e00-\u9fff]', value) for value in result))
 
 
 class ReleaseContractTests(unittest.TestCase):
@@ -778,8 +816,20 @@ console.log(JSON.stringify({
                 catalogs = runtime['catalogs']
                 static_keys = {binding[0] for binding in inventory['staticBindingContract']['bindings']}
                 dynamic_keys = set(inventory['dynamicBindingContract']['keys'])
-                runtime_keys = set(catalogs['en']) | set(catalogs['zh-CN'])
-                referenced_keys = static_keys | dynamic_keys | runtime_keys
+                source = (root / 'admin.js').read_text(encoding='utf-8')
+                runtime_keys = set(re.findall(
+                    r"['\"]((?:hero|status|console|dialog|validation|toast|seed|structure)\.[A-Za-z0-9_.-]+)['\"]",
+                    source,
+                ))
+                inventory_keys = {
+                    key for key, message in inventory['messages'].items()
+                    if message['classification'] == 'presentation'
+                }
+                referenced_keys = static_keys | dynamic_keys | inventory_keys
+
+                self.assertEqual(runtime_keys, dynamic_keys, root.name)
+                self.assertEqual(referenced_keys, set(catalogs['en']), root.name)
+                self.assertEqual(referenced_keys, set(catalogs['zh-CN']), root.name)
 
                 self.assertEqual(['en', 'en', 'eaglerx_admin_locale'], runtime['defaults'], root.name)
                 self.assertEqual(['en', 'zh-CN'], runtime['ids'], root.name)

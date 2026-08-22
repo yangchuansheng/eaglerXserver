@@ -2,7 +2,6 @@ import hashlib
 import json
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-import re
 import secrets
 import subprocess
 import tempfile
@@ -152,9 +151,21 @@ class MockAdminServer:
                     self.json(200, {'success': True, 'seed': '246813579', 'source': 'rcon', 'minecraft_version': '1.8.8'})
                     return
                 if route == '/api/structures':
-                    self.json(200, {'success': True, 'spawn': {'x': 0, 'z': 0, 'distance': 0}, 'structures': [], 'effective_seed_kind': 'numeric'})
+                    injected_label = 'Village" onmouseover="window.__structureInjected=true" data-review="'
+                    self.json(200, {
+                        'success': True,
+                        'spawn': {'x': 0, 'z': 0, 'distance': 0},
+                        'center': {'x': 12, 'z': -8},
+                        'radius': 5000,
+                        'total_matches': 2,
+                        'groups': [
+                            {'key': 'village', 'label': injected_label, 'total_found': 1, 'entries': [{'x': 32, 'z': 48, 'distance': 72}]},
+                            {'key': 'custom', 'label': injected_label, 'total_found': 1, 'entries': [{'x': -16, 'z': 64, 'distance': 80}]},
+                        ],
+                        'effective_seed_kind': 'numeric',
+                    })
                     return
-                self.json(200, {'success': True, 'player': 'FixtureAlex', 'world': 'fixture-world', 'x': 12.5, 'y': 64, 'z': -8.25, 'source': 'fixture'})
+                self.json(200, {'success': True, 'player': 'FixtureAlex', 'world': 'fixture-world', 'x': 12.5, 'y': 64, 'z': -8.25, 'source': 'playerdata'})
 
         self.server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
         def serve():
@@ -192,7 +203,7 @@ class AgentBrowser:
             'AGENT_BROWSER_CONTENT_BOUNDARIES': '1',
             'AGENT_BROWSER_MAX_OUTPUT': '4000',
             'AGENT_BROWSER_DEFAULT_TIMEOUT': '10000',
-            'AGENT_BROWSER_ALLOWED_DOMAINS': '127.0.0.1,localhost,fonts.googleapis.com,fonts.gstatic.com',
+            'AGENT_BROWSER_ALLOWED_DOMAINS': '127.0.0.1,localhost,api.fontshare.com,cdn.fontshare.com,picsum.photos,fastly.picsum.photos',
             'AGENT_BROWSER_ACTION_POLICY': self.policy,
             'AGENT_BROWSER_SCREENSHOT_DIR': self.screenshot_dir,
         }
@@ -213,14 +224,13 @@ class AgentBrowser:
             check=False,
         )
         if result.returncode:
-            detail = re.sub(r'\s+', ' ', (result.stderr or result.stdout)[-400:]).strip()
-            raise AssertionError(f'{self.root_name}:{stage}: agent-browser failed ({result.returncode}): {detail}')
+            raise AssertionError(f'{self.root_name}:{stage}: agent-browser failed ({result.returncode})')
         return result.stdout
 
     def check(self, stage, expression):
         output = self.run(stage, 'eval', expression)
         if not any(line.strip().strip('"').lower() == 'true' for line in output.splitlines()):
-            raise AssertionError(f'{self.root_name}:{stage}: browser assertion failed ({output[-120:].strip()!r})')
+            raise AssertionError(f'{self.root_name}:{stage}: browser assertion failed')
 
     def snapshot(self, stage):
         self.run(stage, 'snapshot', '-i')
@@ -237,8 +247,7 @@ class AgentBrowser:
             env=self.env, timeout=min(10, remaining), check=False,
         )
         if result.returncode:
-            detail = re.sub(r'\s+', ' ', (result.stderr or result.stdout)[-400:]).strip()
-            raise AssertionError(f'{self.root_name}:{stage}: browser batch failed ({result.returncode}): {detail}')
+            raise AssertionError(f'{self.root_name}:{stage}: browser batch failed ({result.returncode})')
         try:
             results = json.loads(result.stdout)
         except json.JSONDecodeError as error:
@@ -259,6 +268,14 @@ class AgentBrowser:
 
 
 class MockAdminServerTests(unittest.TestCase):
+    def test_browser_assertion_omits_page_output(self):
+        browser = object.__new__(AgentBrowser)
+        browser.root_name = 'web-1.8'
+        browser.run = lambda *_args: 'untrusted raw <fixture-secret>'
+        with self.assertRaises(AssertionError) as raised:
+            browser.check('sanitized-failure', 'false')
+        self.assertNotIn('fixture-secret', str(raised.exception))
+
     def request(self, server, route, payload=None):
         data = None if payload is None else json.dumps(payload).encode('utf-8')
         request = urllib.request.Request(server.base_url + route, data=data, method='GET' if data is None else 'POST')
@@ -361,9 +378,10 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 self.emit_evidence(root, stage, 'en', '/api/login')
                 stage = 'locale-persist'
                 browser.batch(stage, [['select', '#locale-select', 'zh-CN'], ['snapshot', '-i']])
-                browser.check(stage, "document.documentElement.lang === 'zh-CN' && localStorage.getItem('eaglerx_admin_locale') === 'zh-CN' && document.querySelector('#locale-select').value === 'zh-CN'")
+                browser.check(stage, "document.documentElement.lang === 'zh-CN' && localStorage.getItem('eaglerx_admin_locale') === 'zh-CN' && document.querySelector('#locale-select').value === 'zh-CN' && document.querySelector('#ver-tag').textContent.includes('RCON:25575') && document.querySelector('#seedmap-spawn').textContent.includes('搜索完成后会显示世界出生点')")
                 browser.batch(stage, [['reload'], ['wait', '500'], ['snapshot', '-i']])
                 browser.check(stage, "document.documentElement.lang === 'zh-CN' && document.querySelector('#locale-select').value === 'zh-CN'")
+                browser.check(stage, "document.querySelector('#hero-connection').textContent.includes('已连接') && document.querySelector('#world-info').textContent.includes('世界') && document.querySelector('#players').textContent.includes('FixtureAlex')")
                 self.emit_evidence(root, stage, 'zh-CN', '/admin')
                 browser.run(stage, 'select', '#locale-select', 'en')
                 stage = 'dialog-validation-recovery'
@@ -383,8 +401,32 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 browser.snapshot(stage)
                 self.assert_recorded(server, '/api/rcon', 'op FixtureAlex')
                 browser.check(stage, "document.querySelector('#console').textContent.includes('Made FixtureAlex a server operator')")
+                browser.check(stage, "document.querySelector('#toast').textContent.includes('命令已提交')")
                 self.emit_evidence(root, stage, 'zh-CN', '/api/rcon')
+                stage = 'structure-localization-safety'
+                browser.run(stage, 'set', 'viewport', '1440', '900')
+                browser.run(stage, 'wait', 1500)
+                browser.check(stage, "!document.querySelector('#seed-search-btn').disabled")
+                browser.run(stage, 'eval', "(() => { document.querySelector('#seed-search-btn').scrollIntoView({ block: 'center', behavior: 'instant' }); return true; })()")
+                browser.run(stage, 'click', '#seed-search-btn')
+                browser.run(stage, 'wait', 200)
+                browser.run(stage, 'fill', '#action-fields [data-field="player"]', 'FixtureAlex')
+                browser.snapshot(stage)
+                browser.run(stage, 'click', '#action-confirm')
+                browser.run(stage, 'wait', 500)
+                browser.snapshot(stage)
+                self.assert_recorded(server, '/api/player-location')
+                self.assert_recorded(server, '/api/structures')
                 browser.run(stage, 'select', '#locale-select', 'en')
+                browser.snapshot(stage)
+                browser.check(stage, "(() => { const headings = Array.from(document.querySelectorAll('.seedmap-group-head strong')).map(e => e.textContent); const source = document.querySelector('#seedmap-source').textContent; return headings[0] === 'Village' && source.includes('player data snapshot') && !source.includes('玩家存档快照') && !document.querySelector('#seedmap-results [onmouseover]') && window.__structureInjected !== true; })()")
+                browser.run(stage, 'eval', '(() => { locatePlayerInfo(); return true; })()')
+                browser.run(stage, 'wait', 200)
+                browser.run(stage, 'fill', '#action-fields [data-field="player"]', 'FixtureAlex')
+                browser.run(stage, 'click', '#action-confirm')
+                browser.run(stage, 'wait', 300)
+                browser.check(stage, "document.querySelector('#console').textContent.includes('Player coordinates [FixtureAlex]') && !document.querySelector('#console').textContent.includes('玩家坐标 [FixtureAlex]')")
+                self.emit_evidence(root, stage, 'en', '/api/structures')
                 stage = 'raw-error-recovery'
                 browser.run(stage, 'eval', "send('raw-fixture').then(function() { return true; })")
                 browser.snapshot(stage)
@@ -411,7 +453,17 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                     self.assertTrue(screenshot_digest, f'{root.name}: empty {name} screenshot digest')
                     self.emit_evidence(root, stage, 'en', '/admin.html', f'{width}x{height}', screenshot=screenshot_digest)
                 stage = 'network-boundary'
-                browser.run(stage, 'network', 'requests')
+                network_output = browser.run(stage, 'network', 'requests', '--json')
+                try:
+                    network_payload = json.loads(network_output)
+                except json.JSONDecodeError as error:
+                    raise AssertionError(f'{root.name}: network evidence is not JSON') from error
+                network_data = network_payload.get('data', {}) if isinstance(network_payload, dict) else {}
+                network_records = network_payload if isinstance(network_payload, list) else network_data.get('requests', [])
+                network_urls = [record.get('url', '') for record in network_records if isinstance(record, dict)]
+                self.assertTrue(network_urls, f'{root.name}: missing browser network evidence')
+                allowed_origins = (server.base_url, 'https://api.fontshare.com/', 'https://cdn.fontshare.com/', 'https://picsum.photos/', 'https://fastly.picsum.photos/')
+                self.assertTrue(all(url.startswith(allowed_origins) for url in network_urls), f'{root.name}: browser left the allowed origins')
                 self.assertTrue(all(record['route'].startswith('/api/') or record['route'] in ('/admin', '/admin/') for record in server.records), f'{root.name}: unexpected mock route')
                 self.assertTrue(any(record.get('raw_sha256') for record in server.records), f'{root.name}: missing sanitized raw evidence')
                 self.emit_evidence(root, stage, 'en', '/api/rcon')
@@ -428,7 +480,7 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 self.run_root_scenario(root)
         self.evidence.append({'boundary': DEPLOYMENT_BOUNDARY})
         print(f'browser-matrix-evidence {DEPLOYMENT_BOUNDARY}')
-        self.assertEqual(17, len(self.evidence))
+        self.assertEqual(19, len(self.evidence))
         self.assertEqual({'boundary': DEPLOYMENT_BOUNDARY}, self.evidence[-1])
 
 

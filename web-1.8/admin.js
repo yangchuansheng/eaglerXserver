@@ -15,15 +15,30 @@ let WORLD_INFO_CACHE = null;
 let WORLD_SEED = '';
 let STRUCTURE_QUERY = { x: 0, z: 0, radius: 5000, limitPerType: 8 };
 let LAST_STRUCTURE_RESULT = null;
-let LAST_STRUCTURE_CONTEXT = '';
+let LAST_STRUCTURE_CONTEXT = null;
 let ONLINE_PLAYERS = [];
 let REFRESH_IN_FLIGHT = {};
 let HERO_PULSE_TIMER = null;
 let STATUS_STATE = { state: 'off', text: '' };
+let VERSION_STATE = '';
 let TPS_VALUES = [];
 let ACTIVE_TOAST = null;
 let CONSOLE_HISTORY = [];
 let SOURCE_MESSAGE_KEYS = Object.create(null);
+let SEED_STATE = { seed: '', hint: null, rawHint: null };
+let STRUCTURE_STATUS_STATE = { text: null, summary: null, rawSummary: null };
+let STRUCTURE_PLACEHOLDER_STATE = { text: null, rawPayload: null };
+const STRUCTURE_LABEL_KEYS = {
+  village: 'structure.type.village',
+  stronghold: 'structure.type.stronghold',
+  desert_pyramid: 'structure.type.desert_pyramid',
+  monument: 'structure.type.monument',
+  jungle_temple: 'structure.type.jungle_temple',
+  swamp_hut: 'structure.type.swamp_hut',
+  igloo: 'structure.type.igloo',
+  mansion: 'structure.type.mansion',
+  spawn: 'structure.type.spawn'
+};
 const REFRESH_INTERVALS = {
   players: 20000,
   tps: 30000,
@@ -47,6 +62,20 @@ function localize(source) {
     }
   }
   return value;
+}
+
+function presentation(key, params) {
+  return { key: key, params: params || {} };
+}
+
+function renderPresentation(value) {
+  if (!value || typeof value !== 'object' || !value.key) return localize(value || '');
+  var params = {};
+  Object.keys(value.params || {}).forEach(function (name) {
+    var param = value.params[name];
+    params[name] = param && typeof param === 'object' && param.key ? renderPresentation(param) : String(param == null ? '' : param);
+  });
+  return t(value.key, params);
 }
 
 function formatNumber(value, options) {
@@ -79,6 +108,15 @@ function persistLocalePreference(localeId) {
   } catch (e) { }
 }
 
+function updateLocaleLabels() {
+  var selector = document.getElementById('locale-select');
+  if (!selector || !selector.options) return;
+  Array.prototype.forEach.call(selector.options, function (option) {
+    var locale = EaglerXI18n.locales[option.value];
+    option.textContent = locale ? locale.label : option.value;
+  });
+}
+
 function applyStaticLocale(localeId) {
   if (!window.EaglerXI18n) return;
   var activeLocale = EaglerXI18n.setLocale(isRegisteredLocale(localeId) ? localeId : EaglerXI18n.DEFAULT_LOCALE);
@@ -99,7 +137,10 @@ function applyStaticLocale(localeId) {
     });
   });
   var selector = document.getElementById('locale-select');
-  if (selector) selector.value = activeLocale;
+  if (selector) {
+    selector.value = activeLocale;
+    updateLocaleLabels();
+  }
   rerenderLocalizedState();
 }
 
@@ -138,7 +179,7 @@ function renderConsoleEntry(entry) {
   div.appendChild(ts);
   const body = document.createElement('span');
   body.className = entry.cls || 'out';
-  body.textContent = entry.kind === 'raw' ? entry.payload : (entry.key ? t(entry.key, entry.params) : localize(entry.source));
+  body.textContent = entry.kind === 'raw' ? entry.payload : (entry.key ? renderPresentation(entry) : localize(entry.source));
   div.appendChild(body);
   c.appendChild(div);
 }
@@ -170,7 +211,7 @@ function logRaw(payload, cls) {
 function renderToast() {
   const toastElement = document.getElementById('toast');
   if (!toastElement || !ACTIVE_TOAST) return;
-  toastElement.textContent = ACTIVE_TOAST.raw != null ? ACTIVE_TOAST.raw : (ACTIVE_TOAST.key ? t(ACTIVE_TOAST.key, ACTIVE_TOAST.params) : localize(ACTIVE_TOAST.source));
+  toastElement.textContent = ACTIVE_TOAST.raw != null ? ACTIVE_TOAST.raw : (ACTIVE_TOAST.key ? renderPresentation(ACTIVE_TOAST) : localize(ACTIVE_TOAST.source));
   if (Date.now() >= ACTIVE_TOAST.deadline) {
     toastElement.classList.remove('show');
     return;
@@ -210,7 +251,7 @@ function setStatus(state, text) {
 
 function renderStatus() {
   var state = STATUS_STATE.state;
-  var text = localize(STATUS_STATE.text);
+  var text = renderPresentation(STATUS_STATE.text);
   var d = document.getElementById('status-dot');
   d.className = state;
   document.getElementById('status-text').textContent = text;
@@ -222,8 +263,13 @@ function renderStatus() {
   if (heroSignalNote) heroSignalNote.textContent = localize(state === 'on' ? '管理通道运行正常' : (state === 'auth' ? '系统正在等待认证' : '管理通道当前不可用'));
 }
 
-function setVersion(v) {
-  document.getElementById('ver-tag').textContent = v || '--';
+function setVersion(value) {
+  VERSION_STATE = value || '';
+  renderVersion();
+}
+
+function renderVersion() {
+  document.getElementById('ver-tag').textContent = renderPresentation(VERSION_STATE) || '--';
 }
 
 function startHeroPulse() {
@@ -236,7 +282,7 @@ function startHeroPulse() {
     var tps = document.getElementById('hero-tps');
     var version = SERVER_INFO.minecraftVersion || '--';
     var messages = [
-      localize(TOKEN ? 'RCON 连接正常' : '等待 RCON 认证'),
+      t(TOKEN ? 'hero.rconReady' : 'hero.rconWaiting'),
       t('hero.paperReady', { version: version }),
       t('hero.playersOnline', { count: formatNumber(ONLINE_PLAYERS.length) }),
       t('hero.currentTps', { value: tps ? tps.textContent : '--' })
@@ -276,33 +322,6 @@ function initRevealMotion() {
 
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   var targets = Array.prototype.slice.call(document.querySelectorAll('.reveal-item'));
-  if (window.gsap && window.ScrollTrigger) {
-    window.gsap.registerPlugin(window.ScrollTrigger);
-    window.gsap.timeline({ defaults: { duration: .68, ease: 'power2.out' } })
-      .from('.hero-card .eyebrow, .hero-card h2, .hero-card p, .hero-actions', { opacity: 0, y: 24, stagger: .08 })
-      .from('.hero-side', { opacity: 0, x: 24 }, '-=.42')
-      .from('.overview-stat', { opacity: 0, y: 18, stagger: .06, duration: .48 }, '-=.3');
-    Array.prototype.slice.call(document.querySelectorAll('.workspace-section')).forEach(function (section) {
-      var cards = Array.prototype.slice.call(section.querySelectorAll('.reveal-item'));
-      if (!cards.length) return;
-      window.gsap.from(cards, {
-        scrollTrigger: { trigger: section, start: 'top 78%', once: true },
-        opacity: 0,
-        y: function (index, card) { return card.classList.contains('stack-card') ? 24 + index * 7 : 24; },
-        scale: .985,
-        duration: .58,
-        stagger: .07,
-        ease: 'power2.out',
-        clearProps: 'opacity,transform'
-      });
-    });
-    var drawer = document.querySelector('.console-drawer');
-    if (drawer) drawer.addEventListener('toggle', function () {
-      if (drawer.open) window.gsap.from(drawer.querySelector('.console-wrap'), { opacity: 0, y: 12, duration: .3, ease: 'power2.out' });
-    });
-    return;
-  }
-
   if (!targets.length) return;
   document.body.classList.add('motion-enabled');
   if (!('IntersectionObserver' in window)) {
@@ -341,10 +360,10 @@ async function init() {
     SERVER_INFO.bridgePort = '';
     SERVER_INFO.nativeSeedFinderReady = false;
     SERVER_INFO.serverVersionText = '';
-    setStatus('off', 'RCON 未启用');
-    setVersion('RCON 关闭');
-    setSeedState('', '启动容器时设置 RCON 后可读取世界种子');
-    log('RCON 未启用 —— 启动容器时设置 -e RCON_PASSWORD=xxx 可开启', 'warn');
+    setStatus('off', presentation('status.rconDisabled'));
+    setVersion(presentation('status.rconDisabled'));
+    setSeedState('', presentation('status.rconSeedHint'));
+    logClient('console.rconDisabled', {}, 'warn');
   }
 }
 
@@ -480,8 +499,7 @@ function resetAuthUi() {
 }
 
 function defaultSeedHint() {
-  if (!SERVER_INFO.nativeSeedFinderReady) return '登录后自动读取，可一键打开 mcseedmap.net；当前镜像未启用原生结构查找';
-  return '登录后自动读取，可一键打开 mcseedmap.net，也可直接查村庄 / 神庙 / 要塞 / 出生点';
+  return presentation(SERVER_INFO.nativeSeedFinderReady ? 'seed.defaultHintReady' : 'seed.defaultHintUnavailable');
 }
 
 function getSeedMapVersion() {
@@ -577,19 +595,19 @@ async function openStructureSearchDialog(preset) {
     previewText: function (input) {
       var query = getStructureQuery(input || current);
       var player = input && input.player ? String(input.player).trim() : '';
-      if (player) return '按玩家“' + player + '”当前位置搜索，半径 ' + formatNumber(query.radius) + ' 格';
-      return '中心 X ' + formatNumber(query.x) + ' / Z ' + formatNumber(query.z) + '，半径 ' + formatNumber(query.radius) + ' 格';
+      if (player) return t('structure.playerPreview', { player: player, radius: formatNumber(query.radius) });
+      return t('structure.coordinatesPreview', { x: formatNumber(query.x), z: formatNumber(query.z), radius: formatNumber(query.radius) });
     }
   });
   if (!values) return;
   var playerName = String(values.player || '').trim();
   if (playerName) {
-    setStructureSource('搜索来源：按在线玩家“' + playerName + '”当前位置搜索');
-    setStructureStatus('正在读取玩家位置...', '玩家 ' + playerName);
-    renderStructurePlaceholder('正在通过 Dynmap 读取玩家“' + escapeHtml(playerName) + '”的实时坐标...');
+    setStructureSource(presentation('structure.sourcePlayer', { player: playerName }));
+    setStructureStatus('正在读取玩家位置...', presentation('structure.playerSummary', { player: playerName }));
+    renderStructurePlaceholder(presentation('structure.readingPlayer', { player: playerName }));
     try {
       var playerLocation = await fetchDynmapPlayerLocation(playerName);
-      var playerSourceText = '搜索来源：玩家“' + playerLocation.name + '”当前位置 · 世界 ' + playerLocation.world + ' · X ' + formatNumber(playerLocation.x) + ' / Z ' + formatNumber(playerLocation.z) + ' · 坐标来源 ' + (playerLocation.source === 'playerdata' ? '玩家存档快照' : 'Dynmap');
+      var playerSourceText = presentation('structure.sourcePlayerLocation', { player: playerLocation.name, world: playerLocation.world, x: formatNumber(playerLocation.x), z: formatNumber(playerLocation.z), source: playerLocation.source === 'playerdata' ? presentation('structure.sourcePlayerdata') : 'Dynmap' });
       setStructureSource(playerSourceText);
       await refreshStructureFinder({
         x: playerLocation.x,
@@ -598,12 +616,12 @@ async function openStructureSearchDialog(preset) {
         limitPerType: STRUCTURE_QUERY.limitPerType,
         sourceText: playerSourceText
       });
-      setStructureStatus('原生结构查找完成', '玩家 ' + playerLocation.name + ' 附近 · 范围 ' + formatNumber(getStructureQuery({ radius: values.radius }).radius) + ' 格');
+      setStructureStatus('原生结构查找完成', presentation('structure.playerRangeSummary', { player: playerLocation.name, radius: formatNumber(getStructureQuery({ radius: values.radius }).radius) }));
       return;
     } catch (e) {
-      setStructureStatus('玩家定位失败', e.message || 'unknown');
-      renderStructurePlaceholder('玩家定位失败', e.message || 'unknown');
-      if (e.message) toastRaw(e.message); else toast('读取玩家位置失败');
+      setStructureStatus(presentation('status.playerLookupFailed'), '', e.message || 'unknown');
+      renderStructurePlaceholder(presentation('status.playerLookupFailed'), e.message || 'unknown');
+      if (e.message) toastRaw(e.message); else toastClient('toast.playerLocationFailed');
       return;
     }
   }
@@ -613,7 +631,7 @@ async function openStructureSearchDialog(preset) {
     z: coordinateQuery.z,
     radius: coordinateQuery.radius,
     limitPerType: coordinateQuery.limitPerType,
-    sourceText: '搜索来源：按坐标中心 X ' + formatNumber(coordinateQuery.x) + ' / Z ' + formatNumber(coordinateQuery.z)
+    sourceText: presentation('structure.sourceCoordinates', { x: formatNumber(coordinateQuery.x), z: formatNumber(coordinateQuery.z) })
   });
 }
 
@@ -640,25 +658,39 @@ async function fetchDynmapPlayerLocation(playerName) {
 
 function setSeedState(seed, hint) {
   WORLD_SEED = seed || '';
+  SEED_STATE = { seed: WORLD_SEED, hint: hint || defaultSeedHint(), rawHint: arguments.length > 2 ? arguments[2] : null };
+  renderSeedState();
+  if (!WORLD_SEED) {
+    LAST_STRUCTURE_RESULT = null;
+    setStructureStatus('等待读取世界种子', '');
+    setStructureSource('');
+    setSpawnCard(null);
+    renderStructurePlaceholder('读取种子后可直接在这里查看原生结构坐标');
+  }
+}
+
+function renderSeedState() {
   var valueEl = document.getElementById('seed-value');
   var hintEl = document.getElementById('seed-hint');
   var copyBtn = document.getElementById('seed-copy-btn');
   var openBtn = document.getElementById('seed-open-btn');
   var searchBtn = document.getElementById('seed-search-btn');
   var lastResultBtn = document.getElementById('seed-last-result-btn');
-  if (valueEl) valueEl.textContent = WORLD_SEED || localize('未读取');
-  if (hintEl) hintEl.textContent = localize(hint || defaultSeedHint());
-  if (copyBtn) copyBtn.disabled = !WORLD_SEED;
-  if (openBtn) openBtn.disabled = !WORLD_SEED;
-  if (searchBtn) searchBtn.disabled = !WORLD_SEED || !SERVER_INFO.nativeSeedFinderReady;
-  updateSeedMapLink();
-  if (!WORLD_SEED) {
-    LAST_STRUCTURE_RESULT = null;
-    setStructureStatus(localize('等待读取世界种子'), '');
-    setStructureSource('');
-    setSpawnCard(null);
-    renderStructurePlaceholder(localize('读取种子后可直接在这里查看原生结构坐标'));
+  if (valueEl) valueEl.textContent = SEED_STATE.seed || localize('未读取');
+  if (hintEl) {
+    hintEl.textContent = renderPresentation(SEED_STATE.hint);
+    if (SEED_STATE.rawHint != null) {
+      hintEl.appendChild(document.createTextNode(' '));
+      var rawHint = document.createElement('span');
+      rawHint.className = 'raw-output';
+      rawHint.textContent = String(SEED_STATE.rawHint);
+      hintEl.appendChild(rawHint);
+    }
   }
+  if (copyBtn) copyBtn.disabled = !SEED_STATE.seed;
+  if (openBtn) openBtn.disabled = !SEED_STATE.seed;
+  if (searchBtn) searchBtn.disabled = !SEED_STATE.seed || !SERVER_INFO.nativeSeedFinderReady;
+  updateSeedMapLink();
   if (lastResultBtn) lastResultBtn.disabled = !LAST_STRUCTURE_RESULT;
 }
 
@@ -676,21 +708,6 @@ function setWorldInfoPlaceholder(text, rawPayload) {
     message.appendChild(raw);
   }
   el.appendChild(message);
-}
-
-function describeEnabled(value, onText, offText) {
-  var enabledText = onText || '开启';
-  var disabledText = offText || '关闭';
-  if (String(value).toLowerCase() === 'true') return enabledText;
-  if (String(value).toLowerCase() === 'false') return disabledText;
-  return '--';
-}
-
-function formatSpawnProtection(value) {
-  if (value === '' || value == null || typeof value === 'undefined') return '--';
-  var num = Number(value);
-  if (!isFinite(num)) return String(value);
-  return num <= 0 ? '关闭' : (formatNumber(num) + ' 格');
 }
 
 function getServerVersionDisplay() {
@@ -787,16 +804,22 @@ function rerenderLocalizedState() {
   if (!window.EaglerXI18n) return;
   var dialogSnapshot = captureActionDialogSnapshot();
   renderStatus();
-  setVersion(SERVER_INFO.minecraftVersion ? ('MC ' + SERVER_INFO.minecraftVersion) : '');
+  renderVersion();
   if (WORLD_INFO_CACHE) renderWorldInfo(WORLD_INFO_CACHE);
   if (ONLINE_PLAYERS || TOKEN) renderPlayers();
   if (TPS_VALUES.length) renderTPS();
+  renderSeedState();
+  renderStructureStatus();
+  renderStructureSource();
   updateSeedMapLink();
   if (LAST_STRUCTURE_RESULT) {
     var overlay = document.getElementById('structure-overlay');
     var wasOpen = overlay && !overlay.classList.contains('hidden');
     renderStructureResults(LAST_STRUCTURE_RESULT);
     if (!wasOpen && overlay) overlay.classList.add('hidden');
+  } else {
+    setSpawnCard(null);
+    renderStructurePlaceholderState();
   }
   if (ACTION_DIALOG) renderActionDialog(dialogSnapshot);
   renderToast();
@@ -911,23 +934,37 @@ async function refreshServerVersion() {
   } catch (e) { }
 }
 
-function escapeJsSingleQuoted(s) {
-  return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+function setStructureStatus(text, summary, rawSummary) {
+  STRUCTURE_STATUS_STATE = { text: text || '', summary: summary || '', rawSummary: rawSummary == null ? null : String(rawSummary) };
+  renderStructureStatus();
 }
 
-function setStructureStatus(text, summary) {
+function renderStructureStatus() {
   var status = document.getElementById('seedmap-status');
   var summaryEl = document.getElementById('seedmap-summary');
-  if (status) status.textContent = localize(text || '');
-  if (summaryEl) summaryEl.textContent = localize(summary || '');
+  if (status) status.textContent = renderPresentation(STRUCTURE_STATUS_STATE.text);
+  if (summaryEl) {
+    summaryEl.textContent = renderPresentation(STRUCTURE_STATUS_STATE.summary);
+    if (STRUCTURE_STATUS_STATE.rawSummary != null) {
+      summaryEl.appendChild(document.createTextNode(' '));
+      var raw = document.createElement('span');
+      raw.className = 'raw-output';
+      raw.textContent = STRUCTURE_STATUS_STATE.rawSummary;
+      summaryEl.appendChild(raw);
+    }
+  }
 }
 
 function setStructureSource(text) {
+  LAST_STRUCTURE_CONTEXT = text || null;
+  renderStructureSource();
+}
+
+function renderStructureSource() {
   var sourceEl = document.getElementById('seedmap-source');
-  LAST_STRUCTURE_CONTEXT = text || '';
   if (!sourceEl) return;
   if (LAST_STRUCTURE_CONTEXT) {
-    sourceEl.textContent = localize(LAST_STRUCTURE_CONTEXT);
+    sourceEl.textContent = renderPresentation(LAST_STRUCTURE_CONTEXT);
     sourceEl.classList.remove('hidden');
   } else {
     sourceEl.textContent = '';
@@ -936,28 +973,41 @@ function setStructureSource(text) {
 }
 
 function renderStructurePlaceholder(text, rawPayload) {
+  STRUCTURE_PLACEHOLDER_STATE = { text: text || '', rawPayload: rawPayload == null ? null : String(rawPayload) };
+  renderStructurePlaceholderState();
+}
+
+function renderStructurePlaceholderState() {
   var el = document.getElementById('seedmap-results');
   if (!el) return;
   el.textContent = '';
   var message = document.createElement('div');
   message.className = 'empty-state';
-  message.textContent = localize(text || '暂无结果');
-  if (rawPayload != null) {
+  message.textContent = renderPresentation(STRUCTURE_PLACEHOLDER_STATE.text || '暂无结果');
+  if (STRUCTURE_PLACEHOLDER_STATE.rawPayload != null) {
     var raw = document.createElement('span');
     raw.className = 'raw-output';
-    raw.textContent = String(rawPayload);
+    raw.textContent = STRUCTURE_PLACEHOLDER_STATE.rawPayload;
     message.appendChild(raw);
   }
   el.appendChild(message);
 }
 
-async function teleportPlayerToPoint(x, z, label) {
+function structureLabelDescriptor(key, fallbackLabel) {
+  var messageKey = STRUCTURE_LABEL_KEYS[String(key || '')];
+  return messageKey ? presentation(messageKey) : String(fallbackLabel || t('structure.type.unknown'));
+}
+
+function getStructureLabel(key, fallbackLabel) {
+  return renderPresentation(structureLabelDescriptor(key, fallbackLabel));
+}
+
+async function teleportPlayerToPoint(x, z, structureKey, fallbackLabel) {
   if (!TOKEN) return;
-  var pointLabel = String(label || '该点位');
   var values = await showActionDialog({
     kicker: '世界传送',
     title: '传送玩家到此处',
-    description: '将玩家安全传送到“' + pointLabel + '”附近的地表。这里不再直接用 tp 到固定 Y，而是用 spreadplayers 让玩家落到附近安全地面，避免卡地下或悬空。',
+    description: presentation('dialog.teleportPointDescription', { point: structureLabelDescriptor(structureKey, fallbackLabel) }),
     confirmText: '执行传送',
     fields: [
       playerField('玩家名', 'Steve')
@@ -975,18 +1025,17 @@ function setSpawnCard(spawn, effectiveSeedKind) {
   var el = document.getElementById('seedmap-spawn');
   if (!el) return;
   if (!spawn) {
-    el.innerHTML = '<div class="empty-state">搜索完成后会显示世界出生点</div>';
+    el.innerHTML = '<div class="empty-state">' + escapeHtml(localize('搜索完成后会显示世界出生点')) + '</div>';
     return;
   }
   var note = effectiveSeedKind === 'string-hash'
-    ? '当前世界种子是文本，Minecraft 会先做 Java String.hashCode 再参与结构计算。'
-    : '以下出生点为 cubiomes 近似计算结果，通常足够用于面板内找结构。';
-  var spawnLabel = escapeJsSingleQuoted('世界出生点');
+    ? localize('当前世界种子是文本，Minecraft 会先做 Java String.hashCode 再参与结构计算。')
+    : localize('以下出生点为 cubiomes 近似计算结果，通常足够用于面板内找结构。');
   el.innerHTML = '' +
     '<div class="seedmap-spawn-card">' +
-      '<div class="seedmap-spawn-title"><strong>世界出生点</strong><span class="seedmap-spawn-meta">距离当前中心 ' + formatNumber(spawn.distance || 0) + ' 格</span></div>' +
+      '<div class="seedmap-spawn-title"><strong>' + escapeHtml(localize('世界出生点')) + '</strong><span class="seedmap-spawn-meta">' + escapeHtml(localize('距离当前中心')) + ' ' + formatNumber(spawn.distance || 0) + ' ' + escapeHtml(localize('格')) + '</span></div>' +
       '<div class="seedmap-spawn-coords">X ' + escapeHtml(spawn.x) + ' / Z ' + escapeHtml(spawn.z) + '</div>' +
-      '<div class="seedmap-inline-note"><div class="seedmap-inline-actions"><button class="pill-btn seedmap-mini-btn" type="button" onclick="fillStructureCenter(' + Number(spawn.x || 0) + ', ' + Number(spawn.z || 0) + ', true)">以出生点为中心重新搜索</button><button class="pill-btn seedmap-mini-btn" type="button" onclick="teleportPlayerToPoint(' + Number(spawn.x || 0) + ', ' + Number(spawn.z || 0) + ', \'' + spawnLabel + '\')">传送玩家到此处</button></div></div>' +
+      '<div class="seedmap-inline-note"><div class="seedmap-inline-actions"><button class="pill-btn seedmap-mini-btn" type="button" onclick="fillStructureCenter(' + Number(spawn.x || 0) + ', ' + Number(spawn.z || 0) + ', true)">' + escapeHtml(localize('以出生点为中心重新搜索')) + '</button><button class="pill-btn seedmap-mini-btn" type="button" onclick="teleportPlayerToPoint(' + Number(spawn.x || 0) + ', ' + Number(spawn.z || 0) + ', \'spawn\', \'\')">' + escapeHtml(localize('传送玩家到此处')) + '</button></div></div>' +
       '<div class="seedmap-spawn-note">' + escapeHtml(note) + '</div>' +
     '</div>';
 }
@@ -1022,8 +1071,8 @@ async function useSpawnAsCenter() {
 function renderStructureResults(data) {
   LAST_STRUCTURE_RESULT = data || null;
   setSpawnCard(data && data.spawn, data && data.effective_seed_kind);
-  setStructureSource(LAST_STRUCTURE_CONTEXT || ('搜索来源：按坐标中心 X ' + formatNumber(data && data.center ? data.center.x : 0) + ' / Z ' + formatNumber(data && data.center ? data.center.z : 0)));
-  setStructureStatus('原生结构查找完成', '范围 ' + formatNumber(data.radius) + ' 格 · 共 ' + formatNumber(data.total_matches || 0) + ' 个点位');
+  setStructureSource(LAST_STRUCTURE_CONTEXT || presentation('structure.sourceCoordinates', { x: formatNumber(data && data.center ? data.center.x : 0), z: formatNumber(data && data.center ? data.center.z : 0) }));
+  setStructureStatus('原生结构查找完成', presentation('structure.resultSummary', { radius: formatNumber(data.radius), total: formatNumber(data.total_matches || 0) }));
   openStructureOverlay();
 
   var lastResultBtn = document.getElementById('seed-last-result-btn');
@@ -1032,25 +1081,27 @@ function renderStructureResults(data) {
   var el = document.getElementById('seedmap-results');
   if (!el) return;
   if (!data || !data.groups || !data.groups.length) {
-    el.innerHTML = '<div class="empty-state">当前范围内暂时没找到结构点位，你可以调整中心坐标或搜索半径后重试</div>';
+    el.innerHTML = '<div class="empty-state">' + escapeHtml(localize('当前范围内暂时没找到结构点位，你可以调整中心坐标或搜索半径后重试')) + '</div>';
     return;
   }
 
   el.innerHTML = data.groups.map(function (group) {
+    var groupLabel = getStructureLabel(group.key, group.label);
+    var structureKey = escapeHtml(JSON.stringify(String(group.key || '')));
+    var fallbackLabel = escapeHtml(JSON.stringify(String(group.label || '')));
     var rows = (group.entries || []).map(function (entry) {
-      var teleportLabel = escapeJsSingleQuoted(String(group.label || '该点位'));
       return '' +
         '<div class="seedmap-row">' +
           '<div class="seedmap-coords">X ' + escapeHtml(entry.x) + ' / Z ' + escapeHtml(entry.z) + '</div>' +
-          '<div class="seedmap-distance">距离 ' + formatNumber(entry.distance || 0) + ' 格</div>' +
-          '<div class="seedmap-row-actions"><button class="pill-btn seedmap-mini-btn" type="button" onclick="fillStructureCenter(' + Number(entry.x || 0) + ', ' + Number(entry.z || 0) + ', true)">以此为中心</button><button class="pill-btn seedmap-mini-btn" type="button" onclick="teleportPlayerToPoint(' + Number(entry.x || 0) + ', ' + Number(entry.z || 0) + ', \'' + teleportLabel + '\')">传送玩家到此处</button></div>' +
+          '<div class="seedmap-distance">' + escapeHtml(localize('距离')) + ' ' + formatNumber(entry.distance || 0) + ' ' + escapeHtml(localize('格')) + '</div>' +
+          '<div class="seedmap-row-actions"><button class="pill-btn seedmap-mini-btn" type="button" onclick="fillStructureCenter(' + Number(entry.x || 0) + ', ' + Number(entry.z || 0) + ', true)">' + escapeHtml(localize('以此为中心')) + '</button><button class="pill-btn seedmap-mini-btn" type="button" onclick="teleportPlayerToPoint(' + Number(entry.x || 0) + ', ' + Number(entry.z || 0) + ', ' + structureKey + ', ' + fallbackLabel + ')">' + escapeHtml(localize('传送玩家到此处')) + '</button></div>' +
         '</div>';
     }).join('');
     return '' +
       '<div class="seedmap-group">' +
         '<div class="seedmap-group-head">' +
-          '<strong>' + escapeHtml(group.label) + '</strong>' +
-          '<span class="seedmap-group-meta">显示 ' + formatNumber((group.entries || []).length) + ' / ' + formatNumber(group.total_found || 0) + '</span>' +
+          '<strong>' + escapeHtml(groupLabel) + '</strong>' +
+          '<span class="seedmap-group-meta">' + escapeHtml(localize('显示')) + ' ' + formatNumber((group.entries || []).length) + ' / ' + formatNumber(group.total_found || 0) + '</span>' +
         '</div>' +
         '<div class="seedmap-list">' + rows + '</div>' +
       '</div>';
@@ -1069,12 +1120,12 @@ async function refreshStructureFinder(queryOverride) {
   }
   var rawQuery = queryOverride || {};
   var query = getStructureQuery(rawQuery);
-  var sourceText = typeof rawQuery.sourceText === 'string' && rawQuery.sourceText
+  var sourceText = rawQuery.sourceText
     ? rawQuery.sourceText
-    : '搜索来源：按坐标中心 X ' + formatNumber(query.x) + ' / Z ' + formatNumber(query.z);
+    : presentation('structure.sourceCoordinates', { x: formatNumber(query.x), z: formatNumber(query.z) });
   openStructureOverlay();
   setStructureSource(sourceText);
-  setStructureStatus('正在计算结构坐标...', '中心 X ' + formatNumber(query.x) + ' / Z ' + formatNumber(query.z));
+  setStructureStatus('正在计算结构坐标...', presentation('structure.coordinatesSummary', { x: formatNumber(query.x), z: formatNumber(query.z) }));
   renderStructurePlaceholder('正在调用后端原生结构算法，请稍候...');
   try {
     var d = await structuresRequest({
@@ -1086,12 +1137,12 @@ async function refreshStructureFinder(queryOverride) {
     if (d.success) {
       renderStructureResults(d);
     } else if (!isAuthError(d.error)) {
-      setStructureStatus('结构查找失败', d.error || 'unknown');
+      setStructureStatus('结构查找失败', '', d.error || 'unknown');
       renderStructurePlaceholder('结构查找失败', d.error || 'unknown');
       logClient('console.requestFailed', { error: d.error || 'unknown' }, 'warn');
     }
   } catch (e) {
-    setStructureStatus('结构查找失败', e.message || 'network error');
+    setStructureStatus('结构查找失败', '', e.message || 'network error');
     renderStructurePlaceholder('结构查找失败', e.message || 'network error');
     logClient('console.requestFailed', { error: e.message }, 'warn');
   }
@@ -1428,10 +1479,10 @@ function showActionDialog(config) {
 function renderActionDialog(snapshot) {
   if (!ACTION_DIALOG) return;
   var config = ACTION_DIALOG.config;
-  document.getElementById('action-kicker').textContent = config.kickerKey ? t(config.kickerKey) : (config.kicker ? localize(config.kicker) : t('dialog.action.defaultKicker'));
-  document.getElementById('action-title').textContent = config.titleKey ? t(config.titleKey) : (config.title ? localize(config.title) : t('dialog.action.defaultTitle'));
-  document.getElementById('action-desc').textContent = config.descriptionKey ? t(config.descriptionKey) : (config.description ? localize(config.description) : t('dialog.action.defaultDescription'));
-  document.getElementById('action-confirm').textContent = config.confirmKey ? t(config.confirmKey) : (config.confirmText ? localize(config.confirmText) : t('dialog.action.confirm'));
+  document.getElementById('action-kicker').textContent = config.kickerKey ? t(config.kickerKey) : (config.kicker ? renderPresentation(config.kicker) : t('dialog.action.defaultKicker'));
+  document.getElementById('action-title').textContent = config.titleKey ? t(config.titleKey) : (config.title ? renderPresentation(config.title) : t('dialog.action.defaultTitle'));
+  document.getElementById('action-desc').textContent = config.descriptionKey ? t(config.descriptionKey) : (config.description ? renderPresentation(config.description) : t('dialog.action.defaultDescription'));
+  document.getElementById('action-confirm').textContent = config.confirmKey ? t(config.confirmKey) : (config.confirmText ? renderPresentation(config.confirmText) : t('dialog.action.confirm'));
   document.getElementById('action-confirm').classList.toggle('danger-btn', !!config.danger);
   renderActionFields(config.fields || []);
   document.getElementById('action-overlay').classList.remove('hidden');
@@ -1521,7 +1572,8 @@ async function runDialogCommand(config) {
   if (!values) return;
   var cmd = typeof config.buildCommand === 'function' ? config.buildCommand(values) : '';
   if (!cmd) return;
-  send(cmd);
+  var result = await send(cmd);
+  if (result && result.success) toastClient('toast.commandSubmitted');
 }
 
 function playerField(label, placeholder) {
@@ -1631,9 +1683,9 @@ async function locatePlayerInfo() {
   if (!values || !values.player) return;
   try {
     var info = await fetchDynmapPlayerLocation(values.player);
-    var sourceText = info.source === 'playerdata' ? '玩家存档快照' : (info.source === 'dynmap' ? 'Dynmap' : info.source || 'unknown');
-    log('玩家坐标 [' + info.name + ']: 世界=' + info.world + ' X=' + info.x + ' Y=' + info.y + ' Z=' + info.z + '（来源：' + sourceText + '）', 'info');
-    toast(info.name + ' @ ' + info.x + ', ' + info.y + ', ' + info.z);
+    var sourceText = info.source === 'playerdata' ? presentation('structure.sourcePlayerdata') : (info.source === 'dynmap' ? 'Dynmap' : info.source || 'unknown');
+    logClient('console.playerCoordinates', { player: info.name, world: info.world, x: info.x, y: info.y, z: info.z, source: sourceText }, 'info');
+    toastClient('toast.playerCoordinates', { player: info.name, x: info.x, y: info.y, z: info.z });
   } catch (e) {
     logClient('console.requestFailed', { error: e.message || 'unknown' }, 'err');
     if (e.message) toastRaw(e.message); else toast('读取玩家坐标失败');
@@ -2029,7 +2081,8 @@ async function send(cmd, opts) {
     });
     var d = await r.json();
     if (d.success) {
-      logRaw(d.response || t('console.emptyOutput'), 'out');
+      if (d.response) logRaw(d.response, 'out');
+      else logClient('console.emptyOutput', {}, 'out');
       var effect = classifyCommandRefresh(cmd);
       if (!opts.skipAutoRefresh) {
         if (effect.world || effect.config) queueWorldInfoRefresh(500, true);
@@ -2191,13 +2244,13 @@ async function refreshWorldInfo(forceRefresh) {
 async function refreshSeedMap() {
   if (!TOKEN) return;
   if (!beginRefresh('seedmap')) return;
-  setSeedState('', '正在读取当前世界种子...');
+  setSeedState('', presentation('seed.reading'));
   try {
     var d = await seedRequest({});
     if (d.success) {
       var sourceText = d.source === 'server.properties' ? 'server.properties' : (d.source === 'rcon' ? 'RCON /seed' : '未知来源');
       LAST_STRUCTURE_RESULT = null;
-      setSeedState(d.seed || '', '来源：' + sourceText + ' · ' + defaultSeedHint());
+      setSeedState(d.seed || '', presentation('seed.source', { source: sourceText, hint: defaultSeedHint() }));
       if (SERVER_INFO.nativeSeedFinderReady) {
         setSpawnCard(null);
         setStructureStatus('可开始搜索', '点击“搜索附近”后会弹出悬浮框');
@@ -2207,11 +2260,11 @@ async function refreshSeedMap() {
         renderStructurePlaceholder('当前镜像里还没有原生结构组件，重建镜像后这里会直接显示结构坐标');
       }
     } else if (!isAuthError(d.error)) {
-      setSeedState('', '读取种子失败：' + (d.error || 'unknown'));
+      setSeedState('', presentation('seed.readFailed'), d.error || 'unknown');
       logClient('console.requestFailed', { error: d.error || 'unknown' }, 'warn');
     }
   } catch (e) {
-    setSeedState('', '读取种子失败：' + e.message);
+    setSeedState('', presentation('seed.readFailed'), e.message || 'unknown');
     logClient('console.requestFailed', { error: e.message }, 'warn');
   } finally {
     setCardLoading('card-seedmap', false);

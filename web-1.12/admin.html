@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title data-i18n="document.surface.adminhtml.l6.c21">EaglercraftX Admin Console</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='8' fill='%231a1a2e'/%3E%3Crect x='6' y='6' width='52' height='52' rx='6' fill='%2316213e'/%3E%3Ctext x='32' y='46' text-anchor='middle' font-size='36' font-weight='bold' font-family='monospace' fill='%23e94560'%3EE%3C/text%3E%3Ccircle cx='48' cy='20' r='8' fill='%2339ff14'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="admin.css?v=obsidian-20260820">
+<link rel="stylesheet" href="admin.css?v=cobalt-20260822">
 <link rel="preconnect" href="https://api.fontshare.com">
 <link href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@400,500,600,700,800&display=swap" rel="stylesheet">
 </head>
@@ -14,7 +14,7 @@
 
 <header id="header">
   <div class="header-left">
-    <div class="header-logo"><span>E</span></div>
+    <div class="header-logo" aria-hidden="true"><span>E</span></div>
     <div>
       <h1 data-i18n="header.title">EaglercraftX Admin Console</h1>
       <p data-i18n="header.subtitle">Server command center</p>
@@ -22,7 +22,7 @@
   </div>
   <div class="header-right">
     <label for="locale-select" data-i18n="header.localeLabel">Language</label>
-    <select id="locale-select" name="locale" aria-label="Language" data-i18n-aria-label="header.localeLabel"><option value="en">English</option><option value="zh-CN">简体中文</option></select>
+    <select id="locale-select" name="locale" aria-label="Language" data-i18n-aria-label="header.localeLabel"><option value="en">English</option><option value="zh-CN">Simplified Chinese</option></select>
     <div class="header-status">
       <span id="ver-tag">--</span>
       <span id="status-dot" class="off"></span>
@@ -54,11 +54,11 @@
       <section class="hero-card" id="overview" aria-labelledby="overview-title">
         <div class="hero-copy">
           <span class="eyebrow"><span data-i18n="document.surface.adminhtml.l54.c33">Server online operation control</span></span>
-          <h2 id="overview-title"><span data-i18n="document.surface.adminhtml.l55.c35">server status</span>，<span data-i18n="document.surface.adminhtml.l55.c42">tuck into a workbench</span></h2>
-          <p><span data-i18n="document.surface.adminhtml.l56.c14">See the world from one place</span>、<span data-i18n="document.surface.adminhtml.l56.c22">player vs.</span> TPS，<span data-i18n="document.surface.adminhtml.l56.c30">Keep high-frequency operations at hand</span>，<span data-i18n="document.surface.adminhtml.l56.c40">Leave complex configurations in a clear workspace</span>。</p>
+          <h2 id="overview-title"><span data-i18n="document.surface.adminhtml.l55.c35">Server status</span> — <span data-i18n="document.surface.adminhtml.l55.c42">all in one workspace</span></h2>
+          <p><span data-i18n="document.surface.adminhtml.l56.c14">See the world in one place</span>, <span data-i18n="document.surface.adminhtml.l56.c22">players and</span> TPS; <span data-i18n="document.surface.adminhtml.l56.c30">Keep frequent operations at hand</span>; <span data-i18n="document.surface.adminhtml.l56.c40">Keep complex configuration in a clear workspace</span>.</p>
           <div class="hero-actions">
             <button onclick="send('list')"><span data-i18n="document.surface.adminhtml.l58.c44">Refresh players</span></button>
-            <button onclick="send('save-all')"><span data-i18n="document.surface.adminhtml.l59.c48">save the world</span></button>
+            <button onclick="send('save-all')"><span data-i18n="document.surface.adminhtml.l59.c48">Save the world</span></button>
           </div>
         </div>
         <div class="hero-side">
@@ -169,7 +169,7 @@
   </div>
 </main>
 
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <div id="modal-overlay" class="hidden">
   <div id="modal-box">
@@ -179,7 +179,7 @@
       <input type="password" id="modal-pw" placeholder="password..." data-i18n-placeholder="accessibility.surface.adminhtml.l177.c57" onkeydown="if(event.key==='Enter')modalConfirm()">
       <div id="modal-btns">
         <button class="btn-cancel" onclick="modalCancel()"><span data-i18n="document.surface.adminhtml.l179.c60">Cancel</span></button>
-        <button class="btn-ok" onclick="modalConfirm()"><span data-i18n="document.surface.adminhtml.l180.c57">Sure</span></button>
+        <button class="btn-ok" onclick="modalConfirm()"><span data-i18n="document.surface.adminhtml.l180.c57">Confirm</span></button>
       </div>
     </div>
   </div>
@@ -189,22 +189,22 @@
   <div id="action-box">
     <div class="dialog-head">
       <div>
-        <div class="dialog-kicker" id="action-kicker">Quick operation</div>
-        <div class="dialog-title" id="action-title">input parameters</div>
+        <div class="dialog-kicker" id="action-kicker">Quick action</div>
+        <div class="dialog-title" id="action-title">Enter parameters</div>
       </div>
       <button class="dialog-close" type="button" onclick="actionDialogCancel()" aria-label="Close" data-i18n-aria-label="accessibility.close">×</button>
     </div>
     <div class="dialog-body">
-      <p id="action-desc">Please fill in the command parameters</p>
+      <p id="action-desc">Enter command parameters</p>
       <form id="action-form" onsubmit="submitActionDialog(event)">
         <div id="action-fields"></div>
         <div id="action-preview-wrap" class="dialog-preview hidden">
-          <span>will send command</span>
+          <span>Command preview</span>
           <code id="action-preview"></code>
         </div>
         <div class="dialog-btns">
           <button class="btn-cancel" type="button" onclick="actionDialogCancel()">Cancel</button>
-          <button class="btn-ok" id="action-confirm" type="submit">Sure</button>
+          <button class="btn-ok" id="action-confirm" type="submit">Confirm</button>
         </div>
       </form>
     </div>
@@ -215,32 +215,30 @@
   <div id="structure-box">
     <div class="dialog-head">
       <div>
-        <div class="dialog-kicker">Native structure lookup</div>
-        <div class="dialog-title">Nearby structure results</div>
+        <div class="dialog-kicker" data-i18n="document.surface.adminhtml.l216.c36">Native structure lookup</div>
+        <div class="dialog-title" data-i18n="document.surface.adminhtml.l217.c35">Nearby structure results</div>
       </div>
       <button class="dialog-close" type="button" onclick="closeStructureOverlay()" aria-label="Close" data-i18n-aria-label="accessibility.close">×</button>
     </div>
     <div class="dialog-body structure-dialog-body">
-      <p>The search results after you just entered the coordinates will be displayed here.；If you want to change the center point，Click again“Search again”。</p>
+      <p data-i18n="dialog.structureDescription">The search results for the coordinates you entered appear here. To change the center point, choose Search again.</p>
       <div class="seedmap-toolbar">
-        <span class="seedmap-status" id="seedmap-status">Waiting to read world seed</span>
+        <span class="seedmap-status" id="seedmap-status" data-i18n="document.surface.adminhtml.l224.c58">Waiting to read world seed</span>
         <span class="seedmap-summary" id="seedmap-summary"></span>
       </div>
       <div class="seedmap-source hidden" id="seedmap-source"></div>
-      <div class="seedmap-spawn" id="seedmap-spawn"><div class="empty-state">After the search is completed, the world spawn point will be displayed.</div></div>
-      <div class="seedmap-results" id="seedmap-results"><div class="empty-state">Click“Search nearby”back，A list of structure coordinates within the current range will be displayed here.</div></div>
+      <div class="seedmap-spawn" id="seedmap-spawn"><div class="empty-state" data-i18n="document.surface.adminhtml.l228.c78">After the search is completed, the world spawn point will be displayed.</div></div>
+      <div class="seedmap-results" id="seedmap-results"><div class="empty-state" data-i18n="card.structureResultsEmpty">Choose Search nearby to display structure coordinates within the current range.</div></div>
       <div class="dialog-btns structure-actions">
-        <button class="btn-cancel" type="button" onclick="closeStructureOverlay()">closure</button>
-        <button class="btn-cancel" id="seed-overlay-open-btn" type="button" onclick="openSeedMapInNewTab()" disabled>Open Seed Map</button>
-        <button class="btn-ok" type="button" onclick="openStructureSearchDialog()">Search again</button>
+        <button class="btn-cancel" type="button" onclick="closeStructureOverlay()" data-i18n="document.surface.adminhtml.l231.c84">Close</button>
+        <button class="btn-cancel" id="seed-overlay-open-btn" type="button" onclick="openSeedMapInNewTab()" disabled data-i18n="action.openSeedMap">Open Seed Map</button>
+        <button class="btn-ok" type="button" onclick="openStructureSearchDialog()" data-i18n="document.surface.adminhtml.l233.c84">Search again</button>
       </div>
     </div>
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/ScrollTrigger.min.js"></script>
 <script src="admin-i18n.js"></script>
-<script src="admin.js?v=obsidian-20260820"></script>
+<script src="admin.js?v=cobalt-20260822"></script>
 </body>
 </html>
