@@ -15,14 +15,153 @@ let WORLD_INFO_CACHE = null;
 let WORLD_SEED = '';
 let STRUCTURE_QUERY = { x: 0, z: 0, radius: 5000, limitPerType: 8 };
 let LAST_STRUCTURE_RESULT = null;
-let LAST_STRUCTURE_CONTEXT = '';
+let LAST_STRUCTURE_CONTEXT = null;
 let ONLINE_PLAYERS = [];
 let REFRESH_IN_FLIGHT = {};
+let HERO_PULSE_TIMER = null;
+let STATUS_STATE = { state: 'off', text: '' };
+let VERSION_STATE = '';
+let TPS_VALUES = [];
+let ACTIVE_TOAST = null;
+let CONSOLE_HISTORY = [];
+let SOURCE_MESSAGE_KEYS = Object.create(null);
+let SEED_STATE = { seed: '', hint: null, rawHint: null };
+let STRUCTURE_STATUS_STATE = { text: null, summary: null, rawSummary: null };
+let STRUCTURE_PLACEHOLDER_STATE = { text: null, rawPayload: null };
+const STRUCTURE_LABEL_KEYS = {
+  village: 'structure.type.village',
+  stronghold: 'structure.type.stronghold',
+  desert_pyramid: 'structure.type.desert_pyramid',
+  monument: 'structure.type.monument',
+  jungle_temple: 'structure.type.jungle_temple',
+  swamp_hut: 'structure.type.swamp_hut',
+  igloo: 'structure.type.igloo',
+  mansion: 'structure.type.mansion',
+  spawn: 'structure.type.spawn'
+};
 const REFRESH_INTERVALS = {
   players: 20000,
   tps: 30000,
   world: 30000
 };
+
+function t(key, params) {
+  return window.EaglerXI18n ? EaglerXI18n.t(key, params) : key;
+}
+
+function localize(source) {
+  if (!window.EaglerXI18n) return String(source == null ? '' : source);
+  var value = String(source == null ? '' : source);
+  if (SOURCE_MESSAGE_KEYS[value]) return t(SOURCE_MESSAGE_KEYS[value]);
+  var messages = EaglerXI18n.locales['zh-CN'].messages;
+  var keys = Object.keys(messages);
+  for (var index = 0; index < keys.length; index += 1) {
+    if (messages[keys[index]] === value) {
+      SOURCE_MESSAGE_KEYS[value] = keys[index];
+      return t(keys[index]);
+    }
+  }
+  return value;
+}
+
+function presentation(key, params) {
+  return { key: key, params: params || {} };
+}
+
+function renderPresentation(value) {
+  if (!value || typeof value !== 'object' || !value.key) return localize(value || '');
+  var params = {};
+  Object.keys(value.params || {}).forEach(function (name) {
+    var param = value.params[name];
+    params[name] = param && typeof param === 'object' && param.key ? renderPresentation(param) : String(param == null ? '' : param);
+  });
+  return t(value.key, params);
+}
+
+function formatNumber(value, options) {
+  return new Intl.NumberFormat(EaglerXI18n.getLocale(), options).format(Number(value || 0));
+}
+
+function formatUiTime(date) {
+  return new Intl.DateTimeFormat(EaglerXI18n.getLocale(), {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+  }).format(date || new Date());
+}
+
+function isRegisteredLocale(localeId) {
+  return !!(window.EaglerXI18n && Object.prototype.hasOwnProperty.call(EaglerXI18n.locales, localeId));
+}
+
+function readLocalePreference() {
+  var fallback = EaglerXI18n.DEFAULT_LOCALE;
+  try {
+    var stored = localStorage.getItem(EaglerXI18n.PREFERENCE_KEY);
+    if (isRegisteredLocale(stored)) return stored;
+    if (stored !== null) localStorage.removeItem(EaglerXI18n.PREFERENCE_KEY);
+  } catch (e) { }
+  return fallback;
+}
+
+function persistLocalePreference(localeId) {
+  try {
+    localStorage.setItem(EaglerXI18n.PREFERENCE_KEY, localeId);
+  } catch (e) { }
+}
+
+function updateLocaleLabels() {
+  var selector = document.getElementById('locale-select');
+  if (!selector || !selector.options) return;
+  Array.prototype.forEach.call(selector.options, function (option) {
+    var locale = EaglerXI18n.locales[option.value];
+    option.textContent = locale ? locale.label : option.value;
+  });
+}
+
+function applyStaticLocale(localeId) {
+  if (!window.EaglerXI18n) return;
+  var activeLocale = EaglerXI18n.setLocale(isRegisteredLocale(localeId) ? localeId : EaglerXI18n.DEFAULT_LOCALE);
+  var bindingAttributes = [
+    ['data-i18n', 'textContent'],
+    ['data-i18n-title', 'title'],
+    ['data-i18n-placeholder', 'placeholder'],
+    ['data-i18n-aria-label', 'aria-label']
+  ];
+  document.documentElement.lang = activeLocale;
+  var documentTitle = document.querySelector('title[data-i18n]');
+  document.title = EaglerXI18n.t(documentTitle ? documentTitle.getAttribute('data-i18n') : 'header.title');
+  bindingAttributes.forEach(function (binding) {
+    Array.prototype.forEach.call(document.querySelectorAll('[' + binding[0] + ']'), function (element) {
+      var value = EaglerXI18n.t(element.getAttribute(binding[0]));
+      if (binding[1] === 'textContent') element.textContent = value;
+      else element.setAttribute(binding[1], value);
+    });
+  });
+  var selector = document.getElementById('locale-select');
+  if (selector) {
+    selector.value = activeLocale;
+    updateLocaleLabels();
+  }
+  rerenderLocalizedState();
+}
+
+function setupLocalePreference() {
+  if (!window.EaglerXI18n) return;
+  var selector = document.getElementById('locale-select');
+  if (!selector) return;
+  selector.textContent = '';
+  Object.keys(EaglerXI18n.locales).forEach(function (localeId) {
+    var option = document.createElement('option');
+    option.value = localeId;
+    option.textContent = EaglerXI18n.locales[localeId].label;
+    selector.appendChild(option);
+  });
+  applyStaticLocale(readLocalePreference());
+  selector.addEventListener('change', function () {
+    var localeId = isRegisteredLocale(selector.value) ? selector.value : EaglerXI18n.DEFAULT_LOCALE;
+    applyStaticLocale(localeId);
+    persistLocalePreference(localeId);
+  });
+}
 
 var LOADING_CARD_IDS = ['card-world','card-players','card-tps','card-rules','card-config','card-whitelist','card-seedmap'];
 function setCardLoading(id,on){var el=document.getElementById(id);if(!el)return;if(on){el.classList.add('card-loading');el.style.position='relative'}else{el.classList.remove('card-loading')}}
@@ -31,40 +170,178 @@ function beginRefresh(name){if(REFRESH_IN_FLIGHT[name])return false;REFRESH_IN_F
 function endRefresh(name){REFRESH_IN_FLIGHT[name]=false}
 function shouldAutoPoll(){return !document.hidden && !!TOKEN}
 
-function log(msg, cls) {
+function renderConsoleEntry(entry) {
   const c = document.getElementById('console');
   const div = document.createElement('div');
   const ts = document.createElement('span');
   ts.className = 'ts';
-  ts.textContent = new Date().toLocaleTimeString();
+  ts.textContent = formatUiTime(entry.date);
   div.appendChild(ts);
   const body = document.createElement('span');
-  body.className = cls || 'out';
-  body.textContent = msg;
+  body.className = entry.cls || 'out';
+  body.textContent = entry.kind === 'raw' ? entry.payload : (entry.key ? renderPresentation(entry) : localize(entry.source));
   div.appendChild(body);
   c.appendChild(div);
-  c.scrollTop = c.scrollHeight;
+}
+
+function renderConsoleHistory() {
+  const c = document.getElementById('console');
+  if (!c) return;
+  var wasAtBottom = c.scrollTop + c.clientHeight >= c.scrollHeight - 2;
+  c.textContent = '';
+  CONSOLE_HISTORY.forEach(renderConsoleEntry);
+  if (wasAtBottom) c.scrollTop = c.scrollHeight;
+}
+
+function log(msg, cls) {
+  CONSOLE_HISTORY.push({ kind: 'client', source: String(msg == null ? '' : msg), cls: cls || 'out', date: new Date() });
+  renderConsoleHistory();
+}
+
+function logClient(key, params, cls) {
+  CONSOLE_HISTORY.push({ kind: 'client', key: key, params: params || {}, cls: cls || 'out', date: new Date() });
+  renderConsoleHistory();
+}
+
+function logRaw(payload, cls) {
+  CONSOLE_HISTORY.push({ kind: 'raw', payload: String(payload == null ? '' : payload), cls: cls || 'out', date: new Date() });
+  renderConsoleHistory();
+}
+
+function renderToast() {
+  const toastElement = document.getElementById('toast');
+  if (!toastElement || !ACTIVE_TOAST) return;
+  toastElement.textContent = ACTIVE_TOAST.raw != null ? ACTIVE_TOAST.raw : (ACTIVE_TOAST.key ? renderPresentation(ACTIVE_TOAST) : localize(ACTIVE_TOAST.source));
+  if (Date.now() >= ACTIVE_TOAST.deadline) {
+    toastElement.classList.remove('show');
+    return;
+  }
+  toastElement.classList.add('show');
 }
 
 function toast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  clearTimeout(t._t);
-  t._t = setTimeout(function () { t.classList.remove('show'); }, 2000);
+  ACTIVE_TOAST = { source: String(msg == null ? '' : msg), deadline: Date.now() + 2000 };
+  const toastElement = document.getElementById('toast');
+  renderToast();
+  clearTimeout(toastElement._t);
+  toastElement._t = setTimeout(function () { toastElement.classList.remove('show'); }, 2000);
+}
+
+function toastClient(key, params) {
+  ACTIVE_TOAST = { key: key, params: params || {}, deadline: Date.now() + 2000 };
+  const toastElement = document.getElementById('toast');
+  renderToast();
+  clearTimeout(toastElement._t);
+  toastElement._t = setTimeout(function () { toastElement.classList.remove('show'); }, 2000);
+}
+
+function toastRaw(payload) {
+  ACTIVE_TOAST = { raw: String(payload == null ? '' : payload), deadline: Date.now() + 2000 };
+  const toastElement = document.getElementById('toast');
+  toastElement.textContent = ACTIVE_TOAST.raw;
+  toastElement.classList.add('show');
+  clearTimeout(toastElement._t);
+  toastElement._t = setTimeout(function () { toastElement.classList.remove('show'); }, 2000);
 }
 
 function setStatus(state, text) {
+  STATUS_STATE = { state: state, text: text || '' };
+  renderStatus();
+}
+
+function renderStatus() {
+  var state = STATUS_STATE.state;
+  var text = renderPresentation(STATUS_STATE.text);
   var d = document.getElementById('status-dot');
   d.className = state;
   document.getElementById('status-text').textContent = text;
+  var heroConnection = document.getElementById('hero-connection');
+  if (heroConnection) heroConnection.textContent = text || localize(state === 'on' ? '已连接' : '未连接');
+  var heroSignal = document.getElementById('hero-signal');
+  var heroSignalNote = document.getElementById('hero-signal-note');
+  if (heroSignal) heroSignal.textContent = localize(state === 'on' ? '稳定' : (state === 'auth' ? '待认证' : '离线'));
+  if (heroSignalNote) heroSignalNote.textContent = localize(state === 'on' ? '管理通道运行正常' : (state === 'auth' ? '系统正在等待认证' : '管理通道当前不可用'));
 }
 
-function setVersion(v) {
-  document.getElementById('ver-tag').textContent = v || '--';
+function setVersion(value) {
+  VERSION_STATE = value || '';
+  renderVersion();
+}
+
+function renderVersion() {
+  document.getElementById('ver-tag').textContent = renderPresentation(VERSION_STATE) || '--';
+}
+
+function startHeroPulse() {
+  var pulse = document.getElementById('hero-pulse-text');
+  if (!pulse) return;
+  clearInterval(HERO_PULSE_TIMER);
+  var index = 0;
+  var render = function () {
+    var players = document.getElementById('hero-player-count');
+    var tps = document.getElementById('hero-tps');
+    var version = SERVER_INFO.minecraftVersion || '--';
+    var messages = [
+      t(TOKEN ? 'hero.rconReady' : 'hero.rconWaiting'),
+      t('hero.paperReady', { version: version }),
+      t('hero.playersOnline', { count: formatNumber(ONLINE_PLAYERS.length) }),
+      t('hero.currentTps', { value: tps ? tps.textContent : '--' })
+    ];
+    pulse.textContent = messages[index % messages.length];
+    index += 1;
+  };
+  render();
+  HERO_PULSE_TIMER = setInterval(render, 3800);
+}
+
+function initRevealMotion() {
+  var links = Array.prototype.slice.call(document.querySelectorAll('.control-nav-link'));
+  var setActiveLink = function (link) {
+    links.forEach(function (item) { item.classList.toggle('is-active', item === link); });
+    if (window.innerWidth <= 820 && link.parentElement) {
+      link.parentElement.scrollTo({ left: link.offsetLeft - (link.parentElement.clientWidth - link.clientWidth) / 2, behavior: 'smooth' });
+    }
+  };
+  links.forEach(function (link) {
+    link.addEventListener('click', function () { setActiveLink(link); });
+  });
+  if ('IntersectionObserver' in window) {
+    var sectionObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        var link = links.find(function (item) { return item.getAttribute('href') === '#' + entry.target.id; });
+        if (link) setActiveLink(link);
+      });
+    }, { rootMargin: '-24% 0px -70% 0px', threshold: 0 });
+    links.forEach(function (link) {
+      var targetId = link.getAttribute('href').slice(1);
+      var target = document.getElementById(targetId);
+      if (target) sectionObserver.observe(target);
+    });
+  }
+
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var targets = Array.prototype.slice.call(document.querySelectorAll('.reveal-item'));
+  if (!targets.length) return;
+  document.body.classList.add('motion-enabled');
+  if (!('IntersectionObserver' in window)) {
+    targets.forEach(function (el) { el.classList.add('is-visible'); });
+    return;
+  }
+  var observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('is-visible');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: .12, rootMargin: '0px 0px -8% 0px' });
+  targets.forEach(function (el) { observer.observe(el); });
 }
 
 async function init() {
+  initRevealMotion();
+  startHeroPulse();
   try {
     var r = await fetch(BASE + '/api/status');
     if (!r.ok) throw new Error();
@@ -83,10 +360,10 @@ async function init() {
     SERVER_INFO.bridgePort = '';
     SERVER_INFO.nativeSeedFinderReady = false;
     SERVER_INFO.serverVersionText = '';
-    setStatus('off', 'RCON 未启用');
-    setVersion('RCON 关闭');
-    setSeedState('', '启动容器时设置 RCON 后可读取世界种子');
-    log('RCON 未启用 —— 启动容器时设置 -e RCON_PASSWORD=xxx 可开启', 'warn');
+    setStatus('off', presentation('status.rconDisabled'));
+    setVersion(presentation('status.rconDisabled'));
+    setSeedState('', presentation('status.rconSeedHint'));
+    logClient('console.rconDisabled', {}, 'warn');
   }
 }
 
@@ -210,16 +487,19 @@ function resetAuthUi() {
   ONLINE_PLAYERS = [];
   WORLD_INFO_CACHE = null;
   document.getElementById('player-count').textContent = '0';
+  var heroPlayerCount = document.getElementById('hero-player-count');
+  if (heroPlayerCount) heroPlayerCount.textContent = '0';
   document.getElementById('players').innerHTML = '<div class="empty-state">请先登录后查看玩家列表</div>';
   document.getElementById('tps-bars').innerHTML = '<div class="empty-state">请先登录后查看 TPS</div>';
+  var heroTps = document.getElementById('hero-tps');
+  if (heroTps) heroTps.textContent = '--';
   setWorldInfoPlaceholder('请先登录后查看世界基础信息');
   setSeedState('', '请先登录后读取世界种子');
   setStructureSource('');
 }
 
 function defaultSeedHint() {
-  if (!SERVER_INFO.nativeSeedFinderReady) return '登录后自动读取，可一键打开 mcseedmap.net；当前镜像未启用原生结构查找';
-  return '登录后自动读取，可一键打开 mcseedmap.net，也可直接查村庄 / 神庙 / 要塞 / 出生点';
+  return presentation(SERVER_INFO.nativeSeedFinderReady ? 'seed.defaultHintReady' : 'seed.defaultHintUnavailable');
 }
 
 function getSeedMapVersion() {
@@ -248,7 +528,7 @@ function updateSeedMapLink() {
       linkEl.classList.remove('disabled');
     } else {
       linkEl.href = 'javascript:void(0)';
-      linkEl.textContent = '读取种子后可在新标签页打开 mcseedmap.net';
+      linkEl.textContent = localize('读取种子后可在新标签页打开 mcseedmap.net');
       linkEl.classList.add('disabled');
     }
   }
@@ -315,19 +595,19 @@ async function openStructureSearchDialog(preset) {
     previewText: function (input) {
       var query = getStructureQuery(input || current);
       var player = input && input.player ? String(input.player).trim() : '';
-      if (player) return '按玩家“' + player + '”当前位置搜索，半径 ' + formatNumber(query.radius) + ' 格';
-      return '中心 X ' + formatNumber(query.x) + ' / Z ' + formatNumber(query.z) + '，半径 ' + formatNumber(query.radius) + ' 格';
+      if (player) return t('structure.playerPreview', { player: player, radius: formatNumber(query.radius) });
+      return t('structure.coordinatesPreview', { x: formatNumber(query.x), z: formatNumber(query.z), radius: formatNumber(query.radius) });
     }
   });
   if (!values) return;
   var playerName = String(values.player || '').trim();
   if (playerName) {
-    setStructureSource('搜索来源：按在线玩家“' + playerName + '”当前位置搜索');
-    setStructureStatus('正在读取玩家位置...', '玩家 ' + playerName);
-    renderStructurePlaceholder('正在通过 Dynmap 读取玩家“' + escapeHtml(playerName) + '”的实时坐标...');
+    setStructureSource(presentation('structure.sourcePlayer', { player: playerName }));
+    setStructureStatus('正在读取玩家位置...', presentation('structure.playerSummary', { player: playerName }));
+    renderStructurePlaceholder(presentation('structure.readingPlayer', { player: playerName }));
     try {
       var playerLocation = await fetchDynmapPlayerLocation(playerName);
-      var playerSourceText = '搜索来源：玩家“' + playerLocation.name + '”当前位置 · 世界 ' + playerLocation.world + ' · X ' + formatNumber(playerLocation.x) + ' / Z ' + formatNumber(playerLocation.z) + ' · 坐标来源 ' + (playerLocation.source === 'playerdata' ? '玩家存档快照' : 'Dynmap');
+      var playerSourceText = presentation('structure.sourcePlayerLocation', { player: playerLocation.name, world: playerLocation.world, x: formatNumber(playerLocation.x), z: formatNumber(playerLocation.z), source: playerLocation.source === 'playerdata' ? presentation('structure.sourcePlayerdata') : 'Dynmap' });
       setStructureSource(playerSourceText);
       await refreshStructureFinder({
         x: playerLocation.x,
@@ -336,12 +616,12 @@ async function openStructureSearchDialog(preset) {
         limitPerType: STRUCTURE_QUERY.limitPerType,
         sourceText: playerSourceText
       });
-      setStructureStatus('原生结构查找完成', '玩家 ' + playerLocation.name + ' 附近 · 范围 ' + formatNumber(getStructureQuery({ radius: values.radius }).radius) + ' 格');
+      setStructureStatus('原生结构查找完成', presentation('structure.playerRangeSummary', { player: playerLocation.name, radius: formatNumber(getStructureQuery({ radius: values.radius }).radius) }));
       return;
     } catch (e) {
-      setStructureStatus('玩家定位失败', e.message || 'unknown');
-      renderStructurePlaceholder('玩家定位失败：' + (e.message || 'unknown'));
-      toast(e.message || '读取玩家位置失败');
+      setStructureStatus(presentation('status.playerLookupFailed'), '', e.message || 'unknown');
+      renderStructurePlaceholder(presentation('status.playerLookupFailed'), e.message || 'unknown');
+      if (e.message) toastRaw(e.message); else toastClient('toast.playerLocationFailed');
       return;
     }
   }
@@ -351,7 +631,7 @@ async function openStructureSearchDialog(preset) {
     z: coordinateQuery.z,
     radius: coordinateQuery.radius,
     limitPerType: coordinateQuery.limitPerType,
-    sourceText: '搜索来源：按坐标中心 X ' + formatNumber(coordinateQuery.x) + ' / Z ' + formatNumber(coordinateQuery.z)
+    sourceText: presentation('structure.sourceCoordinates', { x: formatNumber(coordinateQuery.x), z: formatNumber(coordinateQuery.z) })
   });
 }
 
@@ -378,18 +658,8 @@ async function fetchDynmapPlayerLocation(playerName) {
 
 function setSeedState(seed, hint) {
   WORLD_SEED = seed || '';
-  var valueEl = document.getElementById('seed-value');
-  var hintEl = document.getElementById('seed-hint');
-  var copyBtn = document.getElementById('seed-copy-btn');
-  var openBtn = document.getElementById('seed-open-btn');
-  var searchBtn = document.getElementById('seed-search-btn');
-  var lastResultBtn = document.getElementById('seed-last-result-btn');
-  if (valueEl) valueEl.textContent = WORLD_SEED || '未读取';
-  if (hintEl) hintEl.textContent = hint || defaultSeedHint();
-  if (copyBtn) copyBtn.disabled = !WORLD_SEED;
-  if (openBtn) openBtn.disabled = !WORLD_SEED;
-  if (searchBtn) searchBtn.disabled = !WORLD_SEED || !SERVER_INFO.nativeSeedFinderReady;
-  updateSeedMapLink();
+  SEED_STATE = { seed: WORLD_SEED, hint: hint || defaultSeedHint(), rawHint: arguments.length > 2 ? arguments[2] : null };
+  renderSeedState();
   if (!WORLD_SEED) {
     LAST_STRUCTURE_RESULT = null;
     setStructureStatus('等待读取世界种子', '');
@@ -397,36 +667,51 @@ function setSeedState(seed, hint) {
     setSpawnCard(null);
     renderStructurePlaceholder('读取种子后可直接在这里查看原生结构坐标');
   }
+}
+
+function renderSeedState() {
+  var valueEl = document.getElementById('seed-value');
+  var hintEl = document.getElementById('seed-hint');
+  var copyBtn = document.getElementById('seed-copy-btn');
+  var openBtn = document.getElementById('seed-open-btn');
+  var searchBtn = document.getElementById('seed-search-btn');
+  var lastResultBtn = document.getElementById('seed-last-result-btn');
+  if (valueEl) valueEl.textContent = SEED_STATE.seed || localize('未读取');
+  if (hintEl) {
+    hintEl.textContent = renderPresentation(SEED_STATE.hint);
+    if (SEED_STATE.rawHint != null) {
+      hintEl.appendChild(document.createTextNode(' '));
+      var rawHint = document.createElement('span');
+      rawHint.className = 'raw-output';
+      rawHint.textContent = String(SEED_STATE.rawHint);
+      hintEl.appendChild(rawHint);
+    }
+  }
+  if (copyBtn) copyBtn.disabled = !SEED_STATE.seed;
+  if (openBtn) openBtn.disabled = !SEED_STATE.seed;
+  if (searchBtn) searchBtn.disabled = !SEED_STATE.seed || !SERVER_INFO.nativeSeedFinderReady;
+  updateSeedMapLink();
   if (lastResultBtn) lastResultBtn.disabled = !LAST_STRUCTURE_RESULT;
 }
 
-function formatNumber(n) {
-  return Number(n || 0).toLocaleString('zh-CN');
-}
-
-function setWorldInfoPlaceholder(text) {
+function setWorldInfoPlaceholder(text, rawPayload) {
   var el = document.getElementById('world-info');
   if (!el) return;
-  el.innerHTML = '<div class="empty-state">' + escapeHtml(text || '暂无世界信息') + '</div>';
-}
-
-function describeEnabled(value, onText, offText) {
-  var enabledText = onText || '开启';
-  var disabledText = offText || '关闭';
-  if (String(value).toLowerCase() === 'true') return enabledText;
-  if (String(value).toLowerCase() === 'false') return disabledText;
-  return '--';
-}
-
-function formatSpawnProtection(value) {
-  if (value === '' || value == null || typeof value === 'undefined') return '--';
-  var num = Number(value);
-  if (!isFinite(num)) return String(value);
-  return num <= 0 ? '关闭' : (formatNumber(num) + ' 格');
+  el.textContent = '';
+  var message = document.createElement('div');
+  message.className = 'empty-state';
+  message.textContent = localize(text || '暂无世界信息');
+  if (rawPayload != null) {
+    var raw = document.createElement('span');
+    raw.className = 'raw-output';
+    raw.textContent = String(rawPayload);
+    message.appendChild(raw);
+  }
+  el.appendChild(message);
 }
 
 function getServerVersionDisplay() {
-  var text = String(SERVER_INFO.serverVersionText || '').trim();
+  var text = String(SERVER_INFO.serverVersionText || '');
   if (text) return text;
   return SERVER_INFO.minecraftVersion ? ('MC ' + SERVER_INFO.minecraftVersion) : '--';
 }
@@ -471,14 +756,14 @@ function renderWorldInfo(info) {
   var ticks = Number(world && typeof world.servertime !== 'undefined' ? world.servertime : 0);
   var maxPlayers = CONFIG_CACHE['max-players'] || '--';
   var cards = [
-    { label: '世界', value: '主世界' },
-    { label: '游戏版本', value: SERVER_INFO.minecraftVersion ? ('MC ' + SERVER_INFO.minecraftVersion) : '--' },
-    { label: '在线玩家', value: String(ONLINE_PLAYERS.length) + ' / ' + String(maxPlayers) },
-    { label: '天气', value: weather },
-    { label: '时间', value: formatMinecraftClock(ticks) },
-    { label: '时段', value: describeMinecraftPhase(ticks) },
-    { label: '游戏刻', value: formatNumber(ticks) },
-    { label: '雷暴', value: world && world.isThundering ? '进行中' : '无' }
+    { label: localize('世界'), value: localize('主世界') },
+    { label: localize('游戏版本'), value: SERVER_INFO.minecraftVersion ? ('MC ' + SERVER_INFO.minecraftVersion) : '--' },
+    { label: localize('在线玩家'), value: formatNumber(ONLINE_PLAYERS.length) + ' / ' + String(maxPlayers) },
+    { label: localize('天气'), value: localize(weather) },
+    { label: localize('时间'), value: formatMinecraftClock(ticks) },
+    { label: localize('时段'), value: localize(describeMinecraftPhase(ticks)) },
+    { label: localize('游戏刻'), value: formatNumber(ticks) },
+    { label: localize('雷暴'), value: localize(world && world.isThundering ? '进行中' : '无') }
   ];
   el.innerHTML = '<div class="world-info-grid">' + cards.map(function (item) {
     return '<div class="world-info-item"><strong>' + escapeHtml(item.label) + '</strong><span>' + escapeHtml(item.value) + '</span></div>';
@@ -488,6 +773,57 @@ function renderWorldInfo(info) {
 function rerenderWorldInfo() {
   if (!WORLD_INFO_CACHE) return;
   renderWorldInfo(WORLD_INFO_CACHE);
+}
+
+function renderPlayers() {
+  var el = document.getElementById('players');
+  if (!el) return;
+  var count = formatNumber(ONLINE_PLAYERS.length);
+  document.getElementById('player-count').textContent = count;
+  var heroPlayerCount = document.getElementById('hero-player-count');
+  if (heroPlayerCount) heroPlayerCount.textContent = count;
+  el.innerHTML = ONLINE_PLAYERS.length ? ONLINE_PLAYERS.map(function (name, index) {
+    return '<div class="player-item"><div class="player-avatar" style="background:' + playerColor(index) + '">' + escapeHtml(name.charAt(0) || '?') + '</div><span class="player-name">' + escapeHtml(name) + '</span></div>';
+  }).join('') : '<div class="empty-state">' + escapeHtml(localize('暂无在线玩家')) + '</div>';
+}
+
+function renderTPS() {
+  var el = document.getElementById('tps-bars');
+  if (!el || !TPS_VALUES.length) return;
+  var labels = ['1m', '5m', '15m'];
+  var heroTps = document.getElementById('hero-tps');
+  if (heroTps) heroTps.textContent = formatNumber(TPS_VALUES[0], { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  el.innerHTML = TPS_VALUES.map(function (value, index) {
+    var pct = Math.min(100, value * 5);
+    var cls = value >= 19 ? 'good' : value >= 15 ? 'ok' : 'bad';
+    return '<div class="tps-row"><span class="tps-label">' + labels[index] + '</span><div class="tps-track"><div class="tps-fill ' + cls + '" style="width:' + pct + '%"></div></div><span class="tps-val">' + formatNumber(value, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '</span></div>';
+  }).join('');
+}
+
+function rerenderLocalizedState() {
+  if (!window.EaglerXI18n) return;
+  var dialogSnapshot = captureActionDialogSnapshot();
+  renderStatus();
+  renderVersion();
+  if (WORLD_INFO_CACHE) renderWorldInfo(WORLD_INFO_CACHE);
+  if (ONLINE_PLAYERS || TOKEN) renderPlayers();
+  if (TPS_VALUES.length) renderTPS();
+  renderSeedState();
+  renderStructureStatus();
+  renderStructureSource();
+  updateSeedMapLink();
+  if (LAST_STRUCTURE_RESULT) {
+    var overlay = document.getElementById('structure-overlay');
+    var wasOpen = overlay && !overlay.classList.contains('hidden');
+    renderStructureResults(LAST_STRUCTURE_RESULT);
+    if (!wasOpen && overlay) overlay.classList.add('hidden');
+  } else {
+    setSpawnCard(null);
+    renderStructurePlaceholderState();
+  }
+  if (ACTION_DIALOG) renderActionDialog(dialogSnapshot);
+  renderToast();
+  renderConsoleHistory();
 }
 
 function setToggleElementChecked(el, checked) {
@@ -572,7 +908,7 @@ async function refreshRuntimeToggles() {
     setToggleElementChecked(document.getElementById('whitelist-toggle'), !!d.whitelist_enabled);
     setToggleElementChecked(document.getElementById('pvp-unsupported-toggle'), !!d.pvp_enabled);
   } catch (e) {
-    log('读取运行时状态失败: ' + e.message, 'warn');
+    logClient('console.requestFailed', { error: e.message }, 'warn');
   } finally {
     setCardLoading('card-rules', false);
     setCardLoading('card-whitelist', false);
@@ -590,7 +926,7 @@ async function refreshServerVersion() {
     });
     var d = await r.json();
     if (d.success) {
-      SERVER_INFO.serverVersionText = String(d.response || '').replace(/\s+/g, ' ').trim();
+      SERVER_INFO.serverVersionText = String(d.response || '');
       rerenderWorldInfo();
     } else if (isAuthError(d.error)) {
       handleAuthFailure(d.error);
@@ -598,23 +934,37 @@ async function refreshServerVersion() {
   } catch (e) { }
 }
 
-function escapeJsSingleQuoted(s) {
-  return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+function setStructureStatus(text, summary, rawSummary) {
+  STRUCTURE_STATUS_STATE = { text: text || '', summary: summary || '', rawSummary: rawSummary == null ? null : String(rawSummary) };
+  renderStructureStatus();
 }
 
-function setStructureStatus(text, summary) {
+function renderStructureStatus() {
   var status = document.getElementById('seedmap-status');
   var summaryEl = document.getElementById('seedmap-summary');
-  if (status) status.textContent = text || '';
-  if (summaryEl) summaryEl.textContent = summary || '';
+  if (status) status.textContent = renderPresentation(STRUCTURE_STATUS_STATE.text);
+  if (summaryEl) {
+    summaryEl.textContent = renderPresentation(STRUCTURE_STATUS_STATE.summary);
+    if (STRUCTURE_STATUS_STATE.rawSummary != null) {
+      summaryEl.appendChild(document.createTextNode(' '));
+      var raw = document.createElement('span');
+      raw.className = 'raw-output';
+      raw.textContent = STRUCTURE_STATUS_STATE.rawSummary;
+      summaryEl.appendChild(raw);
+    }
+  }
 }
 
 function setStructureSource(text) {
+  LAST_STRUCTURE_CONTEXT = text || null;
+  renderStructureSource();
+}
+
+function renderStructureSource() {
   var sourceEl = document.getElementById('seedmap-source');
-  LAST_STRUCTURE_CONTEXT = text || '';
   if (!sourceEl) return;
   if (LAST_STRUCTURE_CONTEXT) {
-    sourceEl.textContent = LAST_STRUCTURE_CONTEXT;
+    sourceEl.textContent = renderPresentation(LAST_STRUCTURE_CONTEXT);
     sourceEl.classList.remove('hidden');
   } else {
     sourceEl.textContent = '';
@@ -622,19 +972,42 @@ function setStructureSource(text) {
   }
 }
 
-function renderStructurePlaceholder(text) {
-  var el = document.getElementById('seedmap-results');
-  if (!el) return;
-  el.innerHTML = '<div class="empty-state">' + escapeHtml(text || '暂无结果') + '</div>';
+function renderStructurePlaceholder(text, rawPayload) {
+  STRUCTURE_PLACEHOLDER_STATE = { text: text || '', rawPayload: rawPayload == null ? null : String(rawPayload) };
+  renderStructurePlaceholderState();
 }
 
-async function teleportPlayerToPoint(x, z, label) {
+function renderStructurePlaceholderState() {
+  var el = document.getElementById('seedmap-results');
+  if (!el) return;
+  el.textContent = '';
+  var message = document.createElement('div');
+  message.className = 'empty-state';
+  message.textContent = renderPresentation(STRUCTURE_PLACEHOLDER_STATE.text || '暂无结果');
+  if (STRUCTURE_PLACEHOLDER_STATE.rawPayload != null) {
+    var raw = document.createElement('span');
+    raw.className = 'raw-output';
+    raw.textContent = STRUCTURE_PLACEHOLDER_STATE.rawPayload;
+    message.appendChild(raw);
+  }
+  el.appendChild(message);
+}
+
+function structureLabelDescriptor(key, fallbackLabel) {
+  var messageKey = STRUCTURE_LABEL_KEYS[String(key || '')];
+  return messageKey ? presentation(messageKey) : String(fallbackLabel || t('structure.type.unknown'));
+}
+
+function getStructureLabel(key, fallbackLabel) {
+  return renderPresentation(structureLabelDescriptor(key, fallbackLabel));
+}
+
+async function teleportPlayerToPoint(x, z, structureKey, fallbackLabel) {
   if (!TOKEN) return;
-  var pointLabel = String(label || '该点位');
   var values = await showActionDialog({
     kicker: '世界传送',
     title: '传送玩家到此处',
-    description: '将玩家安全传送到“' + pointLabel + '”附近的地表。这里不再直接用 tp 到固定 Y，而是用 spreadplayers 让玩家落到附近安全地面，避免卡地下或悬空。',
+    description: presentation('dialog.teleportPointDescription', { point: structureLabelDescriptor(structureKey, fallbackLabel) }),
     confirmText: '执行传送',
     fields: [
       playerField('玩家名', 'Steve')
@@ -652,18 +1025,17 @@ function setSpawnCard(spawn, effectiveSeedKind) {
   var el = document.getElementById('seedmap-spawn');
   if (!el) return;
   if (!spawn) {
-    el.innerHTML = '<div class="empty-state">搜索完成后会显示世界出生点</div>';
+    el.innerHTML = '<div class="empty-state">' + escapeHtml(localize('搜索完成后会显示世界出生点')) + '</div>';
     return;
   }
   var note = effectiveSeedKind === 'string-hash'
-    ? '当前世界种子是文本，Minecraft 会先做 Java String.hashCode 再参与结构计算。'
-    : '以下出生点为 cubiomes 近似计算结果，通常足够用于面板内找结构。';
-  var spawnLabel = escapeJsSingleQuoted('世界出生点');
+    ? localize('当前世界种子是文本，Minecraft 会先做 Java String.hashCode 再参与结构计算。')
+    : localize('以下出生点为 cubiomes 近似计算结果，通常足够用于面板内找结构。');
   el.innerHTML = '' +
     '<div class="seedmap-spawn-card">' +
-      '<div class="seedmap-spawn-title"><strong>世界出生点</strong><span class="seedmap-spawn-meta">距离当前中心 ' + formatNumber(spawn.distance || 0) + ' 格</span></div>' +
+      '<div class="seedmap-spawn-title"><strong>' + escapeHtml(localize('世界出生点')) + '</strong><span class="seedmap-spawn-meta">' + escapeHtml(localize('距离当前中心')) + ' ' + formatNumber(spawn.distance || 0) + ' ' + escapeHtml(localize('格')) + '</span></div>' +
       '<div class="seedmap-spawn-coords">X ' + escapeHtml(spawn.x) + ' / Z ' + escapeHtml(spawn.z) + '</div>' +
-      '<div class="seedmap-inline-note"><div class="seedmap-inline-actions"><button class="pill-btn seedmap-mini-btn" type="button" onclick="fillStructureCenter(' + Number(spawn.x || 0) + ', ' + Number(spawn.z || 0) + ', true)">以出生点为中心重新搜索</button><button class="pill-btn seedmap-mini-btn" type="button" onclick="teleportPlayerToPoint(' + Number(spawn.x || 0) + ', ' + Number(spawn.z || 0) + ', \'' + spawnLabel + '\')">传送玩家到此处</button></div></div>' +
+      '<div class="seedmap-inline-note"><div class="seedmap-inline-actions"><button class="pill-btn seedmap-mini-btn" type="button" onclick="fillStructureCenter(' + Number(spawn.x || 0) + ', ' + Number(spawn.z || 0) + ', true)">' + escapeHtml(localize('以出生点为中心重新搜索')) + '</button><button class="pill-btn seedmap-mini-btn" type="button" onclick="teleportPlayerToPoint(' + Number(spawn.x || 0) + ', ' + Number(spawn.z || 0) + ', \'spawn\', \'\')">' + escapeHtml(localize('传送玩家到此处')) + '</button></div></div>' +
       '<div class="seedmap-spawn-note">' + escapeHtml(note) + '</div>' +
     '</div>';
 }
@@ -699,8 +1071,8 @@ async function useSpawnAsCenter() {
 function renderStructureResults(data) {
   LAST_STRUCTURE_RESULT = data || null;
   setSpawnCard(data && data.spawn, data && data.effective_seed_kind);
-  setStructureSource(LAST_STRUCTURE_CONTEXT || ('搜索来源：按坐标中心 X ' + formatNumber(data && data.center ? data.center.x : 0) + ' / Z ' + formatNumber(data && data.center ? data.center.z : 0)));
-  setStructureStatus('原生结构查找完成', '范围 ' + formatNumber(data.radius) + ' 格 · 共 ' + formatNumber(data.total_matches || 0) + ' 个点位');
+  setStructureSource(LAST_STRUCTURE_CONTEXT || presentation('structure.sourceCoordinates', { x: formatNumber(data && data.center ? data.center.x : 0), z: formatNumber(data && data.center ? data.center.z : 0) }));
+  setStructureStatus('原生结构查找完成', presentation('structure.resultSummary', { radius: formatNumber(data.radius), total: formatNumber(data.total_matches || 0) }));
   openStructureOverlay();
 
   var lastResultBtn = document.getElementById('seed-last-result-btn');
@@ -709,25 +1081,27 @@ function renderStructureResults(data) {
   var el = document.getElementById('seedmap-results');
   if (!el) return;
   if (!data || !data.groups || !data.groups.length) {
-    el.innerHTML = '<div class="empty-state">当前范围内暂时没找到结构点位，你可以调整中心坐标或搜索半径后重试</div>';
+    el.innerHTML = '<div class="empty-state">' + escapeHtml(localize('当前范围内暂时没找到结构点位，你可以调整中心坐标或搜索半径后重试')) + '</div>';
     return;
   }
 
   el.innerHTML = data.groups.map(function (group) {
+    var groupLabel = getStructureLabel(group.key, group.label);
+    var structureKey = escapeHtml(JSON.stringify(String(group.key || '')));
+    var fallbackLabel = escapeHtml(JSON.stringify(String(group.label || '')));
     var rows = (group.entries || []).map(function (entry) {
-      var teleportLabel = escapeJsSingleQuoted(String(group.label || '该点位'));
       return '' +
         '<div class="seedmap-row">' +
           '<div class="seedmap-coords">X ' + escapeHtml(entry.x) + ' / Z ' + escapeHtml(entry.z) + '</div>' +
-          '<div class="seedmap-distance">距离 ' + formatNumber(entry.distance || 0) + ' 格</div>' +
-          '<div class="seedmap-row-actions"><button class="pill-btn seedmap-mini-btn" type="button" onclick="fillStructureCenter(' + Number(entry.x || 0) + ', ' + Number(entry.z || 0) + ', true)">以此为中心</button><button class="pill-btn seedmap-mini-btn" type="button" onclick="teleportPlayerToPoint(' + Number(entry.x || 0) + ', ' + Number(entry.z || 0) + ', \'' + teleportLabel + '\')">传送玩家到此处</button></div>' +
+          '<div class="seedmap-distance">' + escapeHtml(localize('距离')) + ' ' + formatNumber(entry.distance || 0) + ' ' + escapeHtml(localize('格')) + '</div>' +
+          '<div class="seedmap-row-actions"><button class="pill-btn seedmap-mini-btn" type="button" onclick="fillStructureCenter(' + Number(entry.x || 0) + ', ' + Number(entry.z || 0) + ', true)">' + escapeHtml(localize('以此为中心')) + '</button><button class="pill-btn seedmap-mini-btn" type="button" onclick="teleportPlayerToPoint(' + Number(entry.x || 0) + ', ' + Number(entry.z || 0) + ', ' + structureKey + ', ' + fallbackLabel + ')">' + escapeHtml(localize('传送玩家到此处')) + '</button></div>' +
         '</div>';
     }).join('');
     return '' +
       '<div class="seedmap-group">' +
         '<div class="seedmap-group-head">' +
-          '<strong>' + escapeHtml(group.label) + '</strong>' +
-          '<span class="seedmap-group-meta">显示 ' + formatNumber((group.entries || []).length) + ' / ' + formatNumber(group.total_found || 0) + '</span>' +
+          '<strong>' + escapeHtml(groupLabel) + '</strong>' +
+          '<span class="seedmap-group-meta">' + escapeHtml(localize('显示')) + ' ' + formatNumber((group.entries || []).length) + ' / ' + formatNumber(group.total_found || 0) + '</span>' +
         '</div>' +
         '<div class="seedmap-list">' + rows + '</div>' +
       '</div>';
@@ -746,12 +1120,12 @@ async function refreshStructureFinder(queryOverride) {
   }
   var rawQuery = queryOverride || {};
   var query = getStructureQuery(rawQuery);
-  var sourceText = typeof rawQuery.sourceText === 'string' && rawQuery.sourceText
+  var sourceText = rawQuery.sourceText
     ? rawQuery.sourceText
-    : '搜索来源：按坐标中心 X ' + formatNumber(query.x) + ' / Z ' + formatNumber(query.z);
+    : presentation('structure.sourceCoordinates', { x: formatNumber(query.x), z: formatNumber(query.z) });
   openStructureOverlay();
   setStructureSource(sourceText);
-  setStructureStatus('正在计算结构坐标...', '中心 X ' + formatNumber(query.x) + ' / Z ' + formatNumber(query.z));
+  setStructureStatus('正在计算结构坐标...', presentation('structure.coordinatesSummary', { x: formatNumber(query.x), z: formatNumber(query.z) }));
   renderStructurePlaceholder('正在调用后端原生结构算法，请稍候...');
   try {
     var d = await structuresRequest({
@@ -763,14 +1137,14 @@ async function refreshStructureFinder(queryOverride) {
     if (d.success) {
       renderStructureResults(d);
     } else if (!isAuthError(d.error)) {
-      setStructureStatus('结构查找失败', d.error || 'unknown');
-      renderStructurePlaceholder('结构查找失败：' + (d.error || 'unknown'));
-      log('结构查找失败: ' + (d.error || 'unknown'), 'warn');
+      setStructureStatus('结构查找失败', '', d.error || 'unknown');
+      renderStructurePlaceholder('结构查找失败', d.error || 'unknown');
+      logClient('console.requestFailed', { error: d.error || 'unknown' }, 'warn');
     }
   } catch (e) {
-    setStructureStatus('结构查找失败', e.message || 'network error');
-    renderStructurePlaceholder('结构查找失败：' + (e.message || 'network error'));
-    log('结构查找失败: ' + e.message, 'warn');
+    setStructureStatus('结构查找失败', '', e.message || 'network error');
+    renderStructurePlaceholder('结构查找失败', e.message || 'network error');
+    logClient('console.requestFailed', { error: e.message }, 'warn');
   }
 }
 
@@ -888,7 +1262,7 @@ function handleAuthFailure(message) {
   if (_modalCb) return;
   resetAuthUi();
   setStatus('auth', '请重新登录');
-  log('登录态已失效：' + (message || '认证失败') + '，请重新输入密码', 'warn');
+  logClient('console.requestFailed', { error: message || localize('认证失败') }, 'warn');
   toast('登录态已失效，请重新认证');
   openLoginModal();
 }
@@ -934,7 +1308,7 @@ function openLoginModal() {
       finishAuthenticated('认证成功，登录态将在当前浏览器会话中保持');
     } else {
       setStatus('off', '密码错误');
-      log('认证失败：' + (result.error || 'unknown'), 'err');
+      logClient('console.requestFailed', { error: result.error || 'unknown' }, 'err');
       toast('密码错误或登录失败，请重试');
       setTimeout(openLoginModal, 0);
     }
@@ -1002,17 +1376,17 @@ function renderActionFields(fields) {
     label.className = 'dialog-field';
 
     var title = document.createElement('span');
-    title.textContent = field.label || field.name;
+    title.textContent = field.labelKey ? t(field.labelKey) : localize(field.label || field.name);
     label.appendChild(title);
 
     var input = document.createElement('input');
     input.className = 'dialog-input';
     input.type = field.type || 'text';
     input.autocomplete = 'off';
-    input.placeholder = field.placeholder || '';
+    input.placeholder = field.placeholderKey ? t(field.placeholderKey) : localize(field.placeholder || '');
     input.value = typeof field.value === 'undefined' ? '' : String(field.value);
     input.setAttribute('data-field', field.name);
-    if (field.required) input.setAttribute('data-required', 'true');
+    if (field.required) input.required = true;
     if (typeof field.min !== 'undefined') input.min = field.min;
     if (typeof field.max !== 'undefined') input.max = field.max;
     label.appendChild(input);
@@ -1081,7 +1455,7 @@ function renderActionFields(fields) {
     if (field.hint) {
       var hint = document.createElement('small');
       hint.className = 'dialog-hint';
-      hint.textContent = field.hint;
+      hint.textContent = field.hintKey ? t(field.hintKey) : localize(field.hint);
       label.appendChild(hint);
     }
 
@@ -1097,16 +1471,63 @@ function focusFirstActionField() {
 function showActionDialog(config) {
   return new Promise(function (resolve) {
     ACTION_DIALOG = { config: config || {}, resolve: resolve };
-    document.getElementById('action-kicker').textContent = config.kicker || '快捷操作';
-    document.getElementById('action-title').textContent = config.title || '输入参数';
-    document.getElementById('action-desc').textContent = config.description || '请填写命令参数';
-    document.getElementById('action-confirm').textContent = config.confirmText || '确定';
-    document.getElementById('action-confirm').classList.toggle('danger-btn', !!config.danger);
-    renderActionFields(config.fields || []);
-    document.getElementById('action-overlay').classList.remove('hidden');
-    updateActionPreview();
+    renderActionDialog();
     setTimeout(focusFirstActionField, 0);
   });
+}
+
+function renderActionDialog(snapshot) {
+  if (!ACTION_DIALOG) return;
+  var config = ACTION_DIALOG.config;
+  document.getElementById('action-kicker').textContent = config.kickerKey ? t(config.kickerKey) : (config.kicker ? renderPresentation(config.kicker) : t('dialog.action.defaultKicker'));
+  document.getElementById('action-title').textContent = config.titleKey ? t(config.titleKey) : (config.title ? renderPresentation(config.title) : t('dialog.action.defaultTitle'));
+  document.getElementById('action-desc').textContent = config.descriptionKey ? t(config.descriptionKey) : (config.description ? renderPresentation(config.description) : t('dialog.action.defaultDescription'));
+  document.getElementById('action-confirm').textContent = config.confirmKey ? t(config.confirmKey) : (config.confirmText ? renderPresentation(config.confirmText) : t('dialog.action.confirm'));
+  document.getElementById('action-confirm').classList.toggle('danger-btn', !!config.danger);
+  renderActionFields(config.fields || []);
+  document.getElementById('action-overlay').classList.remove('hidden');
+  restoreActionDialogSnapshot(snapshot);
+  updateActionPreview();
+}
+
+function captureActionDialogSnapshot() {
+  if (!ACTION_DIALOG) return null;
+  var active = document.activeElement;
+  var fields = {};
+  Array.prototype.forEach.call(document.querySelectorAll('#action-fields .dialog-input'), function (input) {
+    fields[input.getAttribute('data-field')] = { value: input.value, checked: input.checked, selectedIndex: input.selectedIndex, required: input.required, min: input.min, max: input.max };
+  });
+  return {
+    fields: fields,
+    danger: document.getElementById('action-confirm').classList.contains('danger-btn'),
+    focus: active && active.getAttribute ? active.getAttribute('data-field') : '',
+    start: active && typeof active.selectionStart === 'number' ? active.selectionStart : null,
+    end: active && typeof active.selectionEnd === 'number' ? active.selectionEnd : null,
+    direction: active && active.selectionDirection ? active.selectionDirection : 'none'
+  };
+}
+
+function restoreActionDialogSnapshot(snapshot) {
+  if (!snapshot) return;
+  Object.keys(snapshot.fields).forEach(function (name) {
+    var input = getActionFieldElement(name);
+    var saved = snapshot.fields[name];
+    if (!input) return;
+    input.value = saved.value;
+    input.checked = saved.checked;
+    input.required = saved.required;
+    input.min = saved.min;
+    input.max = saved.max;
+    if (typeof saved.selectedIndex === 'number' && saved.selectedIndex >= 0) input.selectedIndex = saved.selectedIndex;
+  });
+  document.getElementById('action-confirm').classList.toggle('danger-btn', snapshot.danger);
+  if (snapshot.focus) {
+    var focused = getActionFieldElement(snapshot.focus);
+    if (focused) {
+      focused.focus();
+      if (snapshot.start !== null && snapshot.end !== null && focused.setSelectionRange) focused.setSelectionRange(snapshot.start, snapshot.end, snapshot.direction);
+    }
+  }
 }
 
 function closeActionDialog(result) {
@@ -1134,7 +1555,7 @@ function submitActionDialog(event) {
     }
   });
   if (missingField) {
-    toast('请填写“' + (missingField.label || missingField.name) + '”');
+    toastClient('validation.requiredField', { name: missingField.labelKey ? t(missingField.labelKey) : localize(missingField.label || missingField.name) });
     var input = getActionFieldElement(missingField.name);
     if (input) input.focus();
     return;
@@ -1151,7 +1572,8 @@ async function runDialogCommand(config) {
   if (!values) return;
   var cmd = typeof config.buildCommand === 'function' ? config.buildCommand(values) : '';
   if (!cmd) return;
-  send(cmd);
+  var result = await send(cmd);
+  if (result && result.success) toastClient('toast.commandSubmitted');
 }
 
 function playerField(label, placeholder) {
@@ -1261,12 +1683,12 @@ async function locatePlayerInfo() {
   if (!values || !values.player) return;
   try {
     var info = await fetchDynmapPlayerLocation(values.player);
-    var sourceText = info.source === 'playerdata' ? '玩家存档快照' : (info.source === 'dynmap' ? 'Dynmap' : info.source || 'unknown');
-    log('玩家坐标 [' + info.name + ']: 世界=' + info.world + ' X=' + info.x + ' Y=' + info.y + ' Z=' + info.z + '（来源：' + sourceText + '）', 'info');
-    toast(info.name + ' @ ' + info.x + ', ' + info.y + ', ' + info.z);
+    var sourceText = info.source === 'playerdata' ? presentation('structure.sourcePlayerdata') : (info.source === 'dynmap' ? 'Dynmap' : info.source || 'unknown');
+    logClient('console.playerCoordinates', { player: info.name, world: info.world, x: info.x, y: info.y, z: info.z, source: sourceText }, 'info');
+    toastClient('toast.playerCoordinates', { player: info.name, x: info.x, y: info.y, z: info.z });
   } catch (e) {
-    log('读取玩家坐标失败: ' + (e.message || 'unknown'), 'err');
-    toast(e.message || '读取玩家坐标失败');
+    logClient('console.requestFailed', { error: e.message || 'unknown' }, 'err');
+    if (e.message) toastRaw(e.message); else toast('读取玩家坐标失败');
   }
 }
 
@@ -1650,7 +2072,7 @@ async function runCustomCommandDialog() {
 async function send(cmd, opts) {
   if (!TOKEN) { toast('请先登录'); openLoginModal(); return; }
   opts = opts || {};
-  log('> ' + cmd, 'cmd');
+  logRaw(cmd, 'cmd');
   try {
     var r = await fetch(BASE + '/api/rcon', {
       method: 'POST',
@@ -1659,7 +2081,8 @@ async function send(cmd, opts) {
     });
     var d = await r.json();
     if (d.success) {
-      log(d.response || '(无输出)', 'out');
+      if (d.response) logRaw(d.response, 'out');
+      else logClient('console.emptyOutput', {}, 'out');
       var effect = classifyCommandRefresh(cmd);
       if (!opts.skipAutoRefresh) {
         if (effect.world || effect.config) queueWorldInfoRefresh(500, true);
@@ -1671,11 +2094,11 @@ async function send(cmd, opts) {
         handleAuthFailure(d.error);
         return d;
       }
-      log('错误: ' + (d.error || 'unknown'), 'err');
+      logClient('console.requestFailed', { error: d.error || 'unknown' }, 'err');
       return d;
     }
   } catch (e) {
-    log('请求失败: ' + e.message, 'err');
+    logClient('console.requestFailed', { error: e.message }, 'err');
     return { success: false, error: e.message };
   }
 }
@@ -1729,7 +2152,7 @@ async function refreshConfig() {
       rerenderWorldInfo();
     }
   } catch (e) {
-    log('读取 server.properties 失败: ' + e.message, 'warn');
+    logClient('console.requestFailed', { error: e.message }, 'warn');
   } finally {
     setCardLoading('card-config', false);
     endRefresh('config');
@@ -1747,25 +2170,13 @@ async function refreshPlayers() {
     });
     var d = await r.json();
     if (d.success) {
-      var el = document.getElementById('players');
       var resp = d.response || '';
       var m = resp.match(/(\d+)\/(\d+)/);
       if (m) {
-        document.getElementById('player-count').textContent = m[1];
         var namesStr = resp.split(':')[1] || '';
         var names = namesStr.trim() ? namesStr.split(',').map(function (s) { return s.trim(); }) : [];
         ONLINE_PLAYERS = names.slice();
-        if (names.length) {
-          el.innerHTML = names.map(function (n, i) {
-            var safe = escapeHtml(n);
-            var initial = escapeHtml(n.charAt(0) || '?');
-            return '<div class="player-item"><div class="player-avatar" style="background:' + playerColor(i) + '">' + initial + '</div><span class="player-name">' + safe + '</span></div>';
-          }).join('');
-        } else {
-          el.innerHTML = '<div class="empty-state">暂无在线玩家</div>';
-          document.getElementById('player-count').textContent = '0';
-          ONLINE_PLAYERS = [];
-        }
+        renderPlayers();
         rerenderWorldInfo();
       }
     } else if (isAuthError(d.error)) {
@@ -1773,8 +2184,10 @@ async function refreshPlayers() {
     }
   } catch (e) {
     ONLINE_PLAYERS = [];
-    document.getElementById('player-count').textContent = '0';
-    document.getElementById('players').innerHTML = '<div class="empty-state">读取在线玩家失败</div>';
+    document.getElementById('player-count').textContent = formatNumber(0);
+    var heroPlayerCount = document.getElementById('hero-player-count');
+    if (heroPlayerCount) heroPlayerCount.textContent = '0';
+    document.getElementById('players').innerHTML = '<div class="empty-state">' + escapeHtml(localize('读取在线玩家失败')) + '</div>';
   } finally {
     setCardLoading('card-players', false);
     endRefresh('players');
@@ -1792,24 +2205,20 @@ async function refreshTPS() {
     });
     var d = await r.json();
     if (d.success) {
-      var el = document.getElementById('tps-bars');
       var resp = d.response || '';
       var tail = resp.split(':').pop() || resp;
       var ms = tail.match(/\*?\d+\.?\d*/g);
       if (ms && ms.length >= 3) {
-        var labels = ['1m', '5m', '15m'];
-        el.innerHTML = ms.slice(-3).map(function (v, i) {
-          v = parseFloat(v.replace('*', ''));
-          var pct = Math.min(100, v * 5);
-          var cls = v >= 19 ? 'good' : v >= 15 ? 'ok' : 'bad';
-          return '<div class="tps-row"><span class="tps-label">' + labels[i] + '</span><div class="tps-track"><div class="tps-fill ' + cls + '" style="width:' + pct + '%"></div></div><span class="tps-val">' + v.toFixed(1) + '</span></div>';
-        }).join('');
+        TPS_VALUES = ms.slice(-3).map(function (value) { return parseFloat(value.replace('*', '')); });
+        renderTPS();
       }
     } else if (isAuthError(d.error)) {
       handleAuthFailure(d.error);
     }
   } catch (e) {
-    document.getElementById('tps-bars').innerHTML = '<div class="empty-state">读取 TPS 失败</div>';
+    var heroTps = document.getElementById('hero-tps');
+    if (heroTps) heroTps.textContent = '--';
+    document.getElementById('tps-bars').innerHTML = '<div class="empty-state">' + escapeHtml(localize('读取 TPS 失败')) + '</div>';
   } finally {
     setCardLoading('card-tps', false);
     endRefresh('tps');
@@ -1825,7 +2234,7 @@ async function refreshWorldInfo(forceRefresh) {
     WORLD_INFO_CACHE = d;
     renderWorldInfo(d);
   } catch (e) {
-    setWorldInfoPlaceholder('读取世界状态失败：' + (e.message || 'unknown'));
+    setWorldInfoPlaceholder('读取世界状态失败', e.message || 'unknown');
   } finally {
     setCardLoading('card-world', false);
     endRefresh('world');
@@ -1835,13 +2244,13 @@ async function refreshWorldInfo(forceRefresh) {
 async function refreshSeedMap() {
   if (!TOKEN) return;
   if (!beginRefresh('seedmap')) return;
-  setSeedState('', '正在读取当前世界种子...');
+  setSeedState('', presentation('seed.reading'));
   try {
     var d = await seedRequest({});
     if (d.success) {
       var sourceText = d.source === 'server.properties' ? 'server.properties' : (d.source === 'rcon' ? 'RCON /seed' : '未知来源');
       LAST_STRUCTURE_RESULT = null;
-      setSeedState(d.seed || '', '来源：' + sourceText + ' · ' + defaultSeedHint());
+      setSeedState(d.seed || '', presentation('seed.source', { source: sourceText, hint: defaultSeedHint() }));
       if (SERVER_INFO.nativeSeedFinderReady) {
         setSpawnCard(null);
         setStructureStatus('可开始搜索', '点击“搜索附近”后会弹出悬浮框');
@@ -1851,12 +2260,12 @@ async function refreshSeedMap() {
         renderStructurePlaceholder('当前镜像里还没有原生结构组件，重建镜像后这里会直接显示结构坐标');
       }
     } else if (!isAuthError(d.error)) {
-      setSeedState('', '读取种子失败：' + (d.error || 'unknown'));
-      log('读取世界种子失败: ' + (d.error || 'unknown'), 'warn');
+      setSeedState('', presentation('seed.readFailed'), d.error || 'unknown');
+      logClient('console.requestFailed', { error: d.error || 'unknown' }, 'warn');
     }
   } catch (e) {
-    setSeedState('', '读取种子失败：' + e.message);
-    log('读取世界种子失败: ' + e.message, 'warn');
+    setSeedState('', presentation('seed.readFailed'), e.message || 'unknown');
+    logClient('console.requestFailed', { error: e.message }, 'warn');
   } finally {
     setCardLoading('card-seedmap', false);
     endRefresh('seedmap');
@@ -1967,8 +2376,9 @@ async function restartServer() {
   try {
     var d = await systemRequest({ action: 'restart_server' });
     if (d.success) {
-      toast(d.message || '服务器正在重启');
-      log(d.message || '服务器正在重启，稍后会恢复连接', 'warn');
+      toastClient('toast.serverRestarting');
+      logClient('console.serverRestarting', {}, 'warn');
+      if (d.message) logRaw(d.message, 'out');
       setStatus('auth', '重启中');
       setTimeout(refreshPlayers, 12000);
       setTimeout(refreshTPS, 16000);
@@ -1977,11 +2387,11 @@ async function restartServer() {
         if (TOKEN) setStatus('on', '已连接');
       }, 18000);
     } else {
-      log('服务器重启失败: ' + (d.error || 'unknown'), 'err');
-      toast(d.error || '服务器重启失败');
+      logClient('console.requestFailed', { error: d.error || 'unknown' }, 'err');
+      if (d.error) toastRaw(d.error); else toast('服务器重启失败');
     }
   } catch (e) {
-    log('服务器重启请求失败: ' + e.message, 'err');
+    logClient('console.requestFailed', { error: e.message }, 'err');
     toast('服务器重启请求失败');
   }
 }
@@ -2017,16 +2427,17 @@ async function toggleConfigBool(el, msg) {
     });
     if (d.success) {
       CONFIG_CACHE[key] = cb.checked ? 'true' : 'false';
-      toast(msg || d.message || '配置已保存，重启后生效');
-      log((msg || ('配置已更新: ' + key)) + ' [' + CONFIG_CACHE[key] + ']', 'info');
+      if (msg) toast(msg); else toastClient('toast.configSaved');
+      logClient('console.configUpdated', { key: key, value: CONFIG_CACHE[key] }, 'info');
+      if (d.message) logRaw(d.message, 'out');
     } else {
       cb.checked = !cb.checked;
-      log('配置更新失败: ' + (d.error || 'unknown'), 'err');
-      toast(d.error || '配置更新失败');
+      logClient('console.requestFailed', { error: d.error || 'unknown' }, 'err');
+      if (d.error) toastRaw(d.error); else toast('配置更新失败');
     }
   } catch (e) {
     cb.checked = !cb.checked;
-    log('配置请求失败: ' + e.message, 'err');
+    logClient('console.requestFailed', { error: e.message }, 'err');
   }
 }
 
@@ -2045,14 +2456,15 @@ async function saveConfigField(key, inputId, msg) {
     var d = await configRequest({ action: 'set', updates: updates });
     if (d.success) {
       CONFIG_CACHE[key] = value;
-      toast(msg || d.message || '配置已保存，重启后生效');
-      log((msg || ('配置已更新: ' + key)) + ' [' + value + ']', 'info');
+      if (msg) toast(msg); else toastClient('toast.configSaved');
+      logClient('console.configUpdated', { key: key, value: value }, 'info');
+      if (d.message) logRaw(d.message, 'out');
     } else {
-      log('配置更新失败: ' + (d.error || 'unknown'), 'err');
-      toast(d.error || '配置更新失败');
+      logClient('console.requestFailed', { error: d.error || 'unknown' }, 'err');
+      if (d.error) toastRaw(d.error); else toast('配置更新失败');
     }
   } catch (e) {
-    log('配置请求失败: ' + e.message, 'err');
+    logClient('console.requestFailed', { error: e.message }, 'err');
   }
 }
 
@@ -2086,4 +2498,5 @@ async function toggleWL(el) {
   }
 }
 
+setupLocalePreference();
 init();
