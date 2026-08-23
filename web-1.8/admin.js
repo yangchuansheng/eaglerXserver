@@ -30,6 +30,7 @@ let STRUCTURE_STATUS_STATE = { text: null, summary: null, rawSummary: null };
 let STRUCTURE_PLACEHOLDER_STATE = { text: null, rawPayload: null };
 let PLUGIN_INVENTORY = null;
 let PLUGIN_REFRESHING = false;
+let PLUGIN_UPLOAD_IN_FLIGHT = false;
 const STRUCTURE_LABEL_KEYS = {
   village: 'structure.type.village',
   stronghold: 'structure.type.stronghold',
@@ -380,6 +381,82 @@ async function pluginRequest(payload) {
   return d;
 }
 
+function updatePluginUploadSelection(showSelection) {
+  var input = document.getElementById('plugin-upload-input');
+  var button = document.getElementById('plugin-upload-btn');
+  var status = document.getElementById('plugin-upload-status');
+  var file = input && input.files && input.files[0];
+  if (button) button.disabled = PLUGIN_UPLOAD_IN_FLIGHT || !TOKEN || !file;
+  if (showSelection !== false && status && !PLUGIN_UPLOAD_IN_FLIGHT && file) status.textContent = file.name;
+}
+
+function setPluginUploadStatus(value, cls) {
+  var status = document.getElementById('plugin-upload-status');
+  if (!status) return;
+  status.className = 'plugin-upload-status' + (cls ? ' ' + cls : '');
+  status.textContent = String(value || '');
+}
+
+function uploadPlugin() {
+  var input = document.getElementById('plugin-upload-input');
+  var file = input && input.files && input.files[0];
+  if (!TOKEN) {
+    handleAuthFailure('token required');
+    return;
+  }
+  if (!file) {
+    setPluginUploadStatus(t('status.plugin.uploadNoFile'), 'error');
+    return;
+  }
+  if (PLUGIN_UPLOAD_IN_FLIGHT) return;
+
+  var progress = document.getElementById('plugin-upload-progress');
+  var button = document.getElementById('plugin-upload-btn');
+  var xhr = new XMLHttpRequest();
+  PLUGIN_UPLOAD_IN_FLIGHT = true;
+  if (button) button.disabled = true;
+  if (progress) {
+    progress.value = 0;
+    progress.classList.remove('hidden');
+  }
+  setPluginUploadStatus(t('status.plugin.uploading'), '');
+  xhr.open('POST', BASE + '/api/plugins/upload', true);
+  xhr.timeout = 35000;
+  xhr.setRequestHeader('Authorization', 'Bearer ' + TOKEN);
+  xhr.setRequestHeader('X-Plugin-Filename', file.name);
+  xhr.setRequestHeader('Content-Type', 'application/java-archive');
+  xhr.upload.onprogress = function (event) {
+    if (!progress || !event.lengthComputable) return;
+    progress.value = Math.round(event.loaded / event.total * 100);
+  };
+  xhr.onload = function () {
+    var data = null;
+    try { data = JSON.parse(xhr.responseText || '{}'); } catch (e) { data = {}; }
+    if (xhr.status === 401 || xhr.status === 403 || isAuthError(data.error)) {
+      handleAuthFailure(data.error || 'token expired');
+      return;
+    }
+    if (xhr.status >= 200 && xhr.status < 300 && data.success) {
+      setPluginUploadStatus(t('status.plugin.uploadSuccess', { filename: data.filename || file.name }), 'success');
+      input.value = '';
+      refreshPlugins();
+      return;
+    }
+    setPluginUploadStatus(data.error || t('status.plugin.uploadFailed'), 'error');
+  };
+  xhr.onerror = function () { setPluginUploadStatus(t('status.plugin.uploadConnectionFailed'), 'error'); };
+  xhr.ontimeout = function () { setPluginUploadStatus(t('status.plugin.uploadTimeout'), 'error'); };
+  xhr.onloadend = function () {
+    PLUGIN_UPLOAD_IN_FLIGHT = false;
+    if (progress) {
+      if (xhr.status >= 200 && xhr.status < 300) progress.value = 100;
+      setTimeout(function () { progress.classList.add('hidden'); }, 800);
+    }
+    updatePluginUploadSelection(false);
+  };
+  xhr.send(file);
+}
+
 function formatPluginBytes(value) {
   var bytes = Math.max(0, Number(value || 0));
   if (bytes < 1024) return formatNumber(bytes) + ' B';
@@ -400,9 +477,18 @@ function renderPluginInventory() {
   var banner = document.getElementById('plugin-restart-banner');
   var restartText = document.getElementById('plugin-restart-text');
   var restartButton = document.getElementById('plugin-restart-btn');
+  var warningTitle = document.getElementById('plugin-upload-warning-title');
+  var warningText = document.getElementById('plugin-upload-warning-text');
+  var fileLabel = document.getElementById('plugin-upload-file-label');
+  var uploadButton = document.getElementById('plugin-upload-btn');
   if (!title || !note || !version || !list || !banner || !restartText || !restartButton) return;
   title.textContent = t('status.plugin.title');
   note.textContent = t('status.plugin.note');
+  if (warningTitle) warningTitle.textContent = t('status.plugin.warningTitle');
+  if (warningText) warningText.textContent = t('status.plugin.warningText');
+  if (fileLabel) fileLabel.firstChild.textContent = t('status.plugin.chooseFile');
+  if (uploadButton) uploadButton.textContent = t('status.plugin.upload');
+  updatePluginUploadSelection();
   if (!PLUGIN_INVENTORY) {
     version.textContent = 'MC --';
     banner.classList.add('hidden');

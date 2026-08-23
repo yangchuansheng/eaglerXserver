@@ -35,6 +35,8 @@ class MockAdminServer:
             {'filename': 'FixturePlugin.jar', 'enabled': True, 'size': 4096, 'modified_at': '2026-08-23T01:02:03Z'},
             {'filename': 'DisabledPlugin.jar', 'enabled': False, 'size': 2048, 'modified_at': '2026-08-22T01:02:03Z'},
         ]
+        self.uploaded_plugin_names = set()
+        self.expire_next_upload = False
         self.records = []
         self.server = None
         self.thread = None
@@ -47,8 +49,9 @@ class MockAdminServer:
     def record(self, method, route, status, command='', raw=''):
         entry = {'method': method, 'route': route, 'status': status, 'command': command}
         if raw:
-            entry['raw_sha256'] = hashlib.sha256(raw.encode('utf-8')).hexdigest()
-            entry['raw_bytes'] = len(raw.encode('utf-8'))
+            raw_bytes = raw if isinstance(raw, bytes) else raw.encode('utf-8')
+            entry['raw_sha256'] = hashlib.sha256(raw_bytes).hexdigest()
+            entry['raw_bytes'] = len(raw_bytes)
         self.records.append(entry)
 
     def __enter__(self):
@@ -101,6 +104,29 @@ class MockAdminServer:
 
             def do_POST(self):
                 route = self.path.split('?', 1)[0]
+                if route == '/api/plugins/upload':
+                    try:
+                        length = int(self.headers.get('Content-Length', '0'))
+                    except ValueError:
+                        fixture.record(self.command, route, 400)
+                        self.json(400, {'success': False, 'error': 'invalid content length'})
+                        return
+                    raw = self.rfile.read(length)
+                    if not secrets.compare_digest(self.headers.get('Authorization', ''), 'Bearer ' + fixture.token):
+                        self.json(403, {'success': False, 'error': 'token required'}, raw=raw)
+                        return
+                    if fixture.expire_next_upload:
+                        fixture.expire_next_upload = False
+                        self.json(403, {'success': False, 'error': 'token expired'}, raw=raw)
+                        return
+                    filename = self.headers.get('X-Plugin-Filename', '')
+                    if filename.casefold() in {name.casefold() for name in fixture.uploaded_plugin_names}:
+                        self.json(409, {'success': False, 'error': 'plugin filename already exists'}, raw=raw)
+                        return
+                    fixture.uploaded_plugin_names.add(filename)
+                    fixture.plugin_entries.append({'filename': filename, 'enabled': True, 'size': length, 'modified_at': '2026-08-23T02:03:04Z'})
+                    self.json(201, {'success': True, 'filename': filename, 'pending_restart': True}, raw=raw)
+                    return
                 payload = self.read_json()
                 if payload is None:
                     self.json(400, {'success': False, 'error': 'invalid json'})
@@ -389,8 +415,32 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 for route in ('/api/login', '/api/rcon', '/api/world-state', '/api/runtime-state', '/api/config', '/api/seed', '/api/plugins'):
                     self.assert_recorded(server, route)
                 self.emit_evidence(root, stage, 'en', '/api/login')
+                stage = 'plugin-upload'
+                browser.run(stage, 'eval', "(() => { const input = document.querySelector('#plugin-upload-input'); const data = new Uint8Array([80,75,3,4,1,2,3,4,80,75,5,6]); const file = new File([data], 'FixtureUpload.jar', { type: 'application/java-archive' }); const transfer = new DataTransfer(); transfer.items.add(file); input.files = transfer.files; updatePluginUploadSelection(); return true; })()")
+                browser.check(stage, "document.querySelector('#plugin-upload-btn').disabled === false && document.querySelector('#plugin-upload-warning-text').textContent.includes('executes code')")
+                browser.run(stage, 'eval', "uploadPlugin(); true")
+                browser.run(stage, 'wait', 500)
+                browser.check(stage, "document.querySelector('#plugin-upload-status').textContent.includes('Uploaded FixtureUpload.jar') && document.querySelector('#plugin-list').textContent.includes('FixtureUpload.jar') && !document.querySelector('#plugin-restart-banner').classList.contains('hidden')")
+                self.assert_recorded(server, '/api/plugins/upload')
+                stage = 'plugin-upload-duplicate-and-expiry'
+                browser.run(stage, 'select', '#locale-select', 'zh-CN')
+                browser.check(stage, "document.querySelector('#plugin-upload-warning-text').textContent.includes('Paper') && document.querySelector('#plugin-upload-btn').textContent === '上传插件'")
+                browser.run(stage, 'eval', "(() => { const input = document.querySelector('#plugin-upload-input'); const file = new File([new Uint8Array([80,75,3,4])], 'FixtureUpload.jar', { type: 'application/java-archive' }); const transfer = new DataTransfer(); transfer.items.add(file); input.files = transfer.files; updatePluginUploadSelection(); return true; })()")
+                browser.run(stage, 'eval', 'uploadPlugin(); true')
+                browser.run(stage, 'wait', 1000)
+                browser.check(stage, "document.querySelector('#plugin-upload-status').textContent.includes('plugin filename already exists')")
+                server.expire_next_upload = True
+                browser.run(stage, 'eval', "(() => { const input = document.querySelector('#plugin-upload-input'); const file = new File([new Uint8Array([80,75,3,4,5])], 'FixtureExpiry.jar', { type: 'application/java-archive' }); const transfer = new DataTransfer(); transfer.items.add(file); input.files = transfer.files; updatePluginUploadSelection(); return true; })()")
+                browser.run(stage, 'eval', 'uploadPlugin(); true')
+                browser.run(stage, 'wait', 300)
+                browser.check(stage, "!document.querySelector('#modal-overlay').classList.contains('hidden') && document.querySelector('#status-text').textContent.includes('请输入密码')")
+                browser.run(stage, 'fill', '#modal-pw', server.fixture_password)
+                browser.run(stage, 'click', '#modal-btns .btn-ok')
+                browser.run(stage, 'wait', 1000)
+                browser.check(stage, "document.querySelector('#plugin-upload-warning-text').textContent.includes('Paper') && document.querySelector('#plugin-list').textContent.includes('FixtureUpload.jar')")
+                self.assert_recorded(server, '/api/plugins/upload')
                 stage = 'locale-persist'
-                browser.batch(stage, [['select', '#locale-select', 'zh-CN'], ['snapshot', '-i']])
+                browser.batch(stage, [['snapshot', '-i']])
                 browser.check(stage, "document.documentElement.lang === 'zh-CN' && localStorage.getItem('eaglerx_admin_locale') === 'zh-CN' && document.querySelector('#locale-select').value === 'zh-CN' && document.querySelector('#ver-tag').textContent.includes('RCON:25575') && document.querySelector('#seedmap-spawn').textContent.includes('搜索完成后会显示世界出生点') && document.querySelector('#plugin-title').textContent === '插件仓库' && document.querySelector('#plugin-list').textContent.includes('启用') && document.querySelector('#plugin-list').textContent.includes('停用') && document.querySelector('#plugin-restart-text').textContent.includes('待重启插件变更')")
                 browser.batch(stage, [['reload'], ['wait', '500'], ['snapshot', '-i']])
                 browser.check(stage, "document.documentElement.lang === 'zh-CN' && document.querySelector('#locale-select').value === 'zh-CN'")

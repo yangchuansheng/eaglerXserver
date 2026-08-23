@@ -983,7 +983,17 @@
   "status.plugin.size": "Size",
   "status.plugin.modified": "Modified",
   "status.plugin.enabled": "Enabled",
-  "status.plugin.disabled": "Disabled"
+  "status.plugin.disabled": "Disabled",
+  "status.plugin.warningTitle": "Security warning",
+  "status.plugin.warningText": "A custom plugin package executes code with Paper process permissions.",
+  "status.plugin.chooseFile": "Choose one JAR package",
+  "status.plugin.upload": "Upload plugin",
+  "status.plugin.uploading": "Uploading and validating package...",
+  "status.plugin.uploadSuccess": "Uploaded {filename}; restart Paper to activate it.",
+  "status.plugin.uploadFailed": "Plugin upload failed.",
+  "status.plugin.uploadConnectionFailed": "Upload connection failed; the repository was unchanged.",
+  "status.plugin.uploadTimeout": "Upload timed out; the repository was unchanged.",
+  "status.plugin.uploadNoFile": "Choose one .jar package first."
 };
   var zhCN = {
   "document.surface.adminhtml.l6.c21": "EaglercraftX 管理台",
@@ -1961,7 +1971,17 @@
   "status.plugin.size": "大小",
   "status.plugin.modified": "修改时间",
   "status.plugin.enabled": "启用",
-  "status.plugin.disabled": "停用"
+  "status.plugin.disabled": "停用",
+  "status.plugin.warningTitle": "安全警告",
+  "status.plugin.warningText": "自定义插件包会以 Paper 进程权限执行代码。",
+  "status.plugin.chooseFile": "选择一个 JAR 插件包",
+  "status.plugin.upload": "上传插件",
+  "status.plugin.uploading": "正在上传并校验插件包...",
+  "status.plugin.uploadSuccess": "已上传 {filename}；重启 Paper 后生效。",
+  "status.plugin.uploadFailed": "插件上传失败。",
+  "status.plugin.uploadConnectionFailed": "上传连接失败，插件仓库保持不变。",
+  "status.plugin.uploadTimeout": "上传超时，插件仓库保持不变。",
+  "status.plugin.uploadNoFile": "请先选择一个 .jar 插件包。"
 };
   var locales = {
     en: { id: 'en', label: 'English', messages: en },

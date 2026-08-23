@@ -22,18 +22,25 @@ import threading
 import sys
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from http.client import HTTPConnection
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 from plugin_repository import (  # noqa: E402
+    PluginArchiveError,
+    PluginConflictError,
+    PluginFilenameError,
+    PluginUploadError,
     RepositoryError,
     UPLOAD_LIMIT as PLUGIN_UPLOAD_LIMIT,
     clear_pending_restart,
+    create_upload_temp,
     list_repository,
     pending_restart,
+    publish_uploaded_plugin,
     repository_path,
+    validate_plugin_filename,
 )
 
 PORT = 5201
@@ -62,6 +69,8 @@ RCON_CONNECT_INTERVAL = float(os.environ.get('RCON_CONNECT_INTERVAL', '0.08'))
 RCON_SOCKET_TIMEOUT = float(os.environ.get('RCON_SOCKET_TIMEOUT', '5'))
 MAX_JSON_BODY = 64 * 1024
 REQUEST_READ_TIMEOUT = 10
+PLUGIN_UPLOAD_READ_TIMEOUT = 30
+PLUGIN_UPLOAD_CHUNK_SIZE = 1024 * 1024
 LOGIN_MAX_FAILURES = 5
 LOGIN_LOCKOUT_SECONDS = 10 * 60
 
@@ -1047,6 +1056,19 @@ def authenticate_request(data):
     return False, detail, None
 
 
+def authenticate_authorization_header(value):
+    """Verify the bearer token used by raw upload requests."""
+
+    header = str(value or '').strip()
+    scheme, separator, token = header.partition(' ')
+    if not separator or scheme.lower() != 'bearer' or not token.strip():
+        return False, 'token required', None
+    ok, detail = verify_auth_token(token.strip())
+    if ok:
+        return True, None, 'bearer'
+    return False, detail, None
+
+
 def login_retry_after(client_ip, now=None):
     now = time.time() if now is None else now
     with _login_attempts_lock:
@@ -1284,6 +1306,8 @@ class Handler(SimpleHTTPRequestHandler):
             self._handle_runtime_state()
         elif RCON_ENABLED and parsed.path == '/api/world-state':
             self._handle_world_state()
+        elif RCON_ENABLED and parsed.path == '/api/plugins/upload':
+            self._handle_plugin_upload(parsed)
         elif RCON_ENABLED and parsed.path == '/api/plugins':
             self._handle_plugins()
         elif RCON_ENABLED and parsed.path == '/api/system':
@@ -1518,8 +1542,147 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(200, {'success': True, **plugin_inventory()})
         except RepositoryError as error:
             self._json(500, {'success': False, 'error': str(error)})
-        except OSError as error:
-            self._json(500, {'success': False, 'error': str(error)})
+        except OSError:
+            self._json(500, {'success': False, 'error': 'plugin repository unavailable'})
+
+    def _plugin_upload_filename(self, parsed):
+        filename = self.headers.get('X-Plugin-Filename') or self.headers.get('X-Filename')
+        if not filename:
+            disposition = self.headers.get('Content-Disposition', '')
+            match = re.search(r'(?:^|;)\s*filename="?([^";]+)"?', disposition, re.IGNORECASE)
+            filename = match.group(1) if match else ''
+        if not filename:
+            filename = parse_qs(parsed.query, keep_blank_values=True).get('filename', [''])[0]
+        return validate_plugin_filename(filename)
+
+    def _read_plugin_upload(self, temporary, length):
+        previous_timeout = self.connection.gettimeout()
+        try:
+            self.connection.settimeout(PLUGIN_UPLOAD_READ_TIMEOUT)
+            remaining = length
+            with open(temporary, 'wb') as stream:
+                while remaining:
+                    try:
+                        chunk = self.rfile.read(min(PLUGIN_UPLOAD_CHUNK_SIZE, remaining))
+                    except socket.timeout as error:
+                        raise RuntimeError('upload timed out') from error
+                    except (ConnectionError, OSError) as error:
+                        raise RuntimeError('upload connection failed') from error
+                    if not chunk:
+                        raise RuntimeError('incomplete upload body')
+                    stream.write(chunk)
+                    remaining -= len(chunk)
+                stream.flush()
+                os.fsync(stream.fileno())
+        finally:
+            try:
+                self.connection.settimeout(previous_timeout)
+            except OSError:
+                # A disconnected client cannot receive a response or reuse this connection.
+                pass
+
+    def _handle_plugin_upload(self, parsed=None):
+        parsed = parsed or urlparse(self.path)
+        authed, error, _ = authenticate_authorization_header(self.headers.get('Authorization'))
+        if not authed:
+            self._json(403, {'success': False, 'error': error})
+            return
+
+        try:
+            filename = self._plugin_upload_filename(parsed)
+        except PluginFilenameError as upload_error:
+            self._json(400, {
+                'success': False,
+                'error': str(upload_error),
+                'code': upload_error.code,
+            })
+            return
+
+        raw_length = self.headers.get('Content-Length')
+        if raw_length is None:
+            self._json(411, {'success': False, 'error': 'content length required', 'code': 'length_required'})
+            return
+        try:
+            length = int(raw_length)
+        except (TypeError, ValueError):
+            self._json(400, {'success': False, 'error': 'invalid content length', 'code': 'invalid_length'})
+            return
+        if length < 0:
+            self._json(400, {'success': False, 'error': 'invalid content length', 'code': 'invalid_length'})
+            return
+        if length == 0:
+            self._json(400, {'success': False, 'error': 'upload body is empty', 'code': 'empty_upload'})
+            return
+        if length > PLUGIN_UPLOAD_LIMIT:
+            self._json(413, {
+                'success': False,
+                'error': 'upload exceeds 64 MiB limit',
+                'code': 'upload_too_large',
+                'upload_limit': PLUGIN_UPLOAD_LIMIT,
+            })
+            return
+
+        temporary = None
+        try:
+            temporary = create_upload_temp(plugin_repository_root())
+            try:
+                self._read_plugin_upload(temporary, length)
+            except RuntimeError as upload_error:
+                message = str(upload_error)
+                code = {
+                    'upload timed out': 'upload_timeout',
+                    'upload connection failed': 'upload_connection_failed',
+                    'incomplete upload body': 'incomplete_upload',
+                }.get(message, 'upload_failed')
+                self._json(408 if code == 'upload_timeout' else 400, {
+                    'success': False,
+                    'error': message,
+                    'code': code,
+                })
+                return
+
+            plugin = publish_uploaded_plugin(
+                plugin_repository_root(),
+                filename,
+                temporary,
+                MINECRAFT_VERSION,
+            )
+            self._json(201, {
+                'success': True,
+                'plugin': plugin,
+                'filename': filename,
+                'pending_restart': True,
+            })
+        except PluginConflictError as upload_error:
+            self._json(409, {
+                'success': False,
+                'error': str(upload_error),
+                'code': upload_error.code,
+            })
+        except PluginArchiveError as upload_error:
+            self._json(400, {
+                'success': False,
+                'error': str(upload_error),
+                'code': upload_error.code,
+            })
+        except PluginUploadError as upload_error:
+            self._json(500, {
+                'success': False,
+                'error': str(upload_error),
+                'code': upload_error.code,
+            })
+        except RepositoryError:
+            self._json(500, {
+                'success': False,
+                'error': 'plugin repository unavailable',
+                'code': 'repository_unavailable',
+            })
+        finally:
+            if temporary and os.path.lexists(os.fspath(temporary)):
+                try:
+                    os.unlink(os.fspath(temporary))
+                except OSError:
+                    pass
 
     def _handle_runtime_state(self):
         data = self._read_json_body(allow_empty=True)
