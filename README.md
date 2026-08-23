@@ -80,6 +80,8 @@ docker run -d \
 
 入口脚本为当前版本创建独立的 `plugins-1.8` 或 `plugins-1.12` 仓库。仓库首次启动时接收镜像内置的插件包和插件数据，随后以仓库内容作为 Paper 下一次启动的插件状态；仓库标记完成后，后续镜像更新保留管理员已经移除或调整的条目。
 
+两个版本的仓库始终隔离。并行运行时为每个容器使用独立的宿主机目录，例如 `/data/eagler-1.8` 与 `/data/eagler-1.12`，并分别配置端口；不要让两个正在运行的版本共享世界或插件状态。
+
 完整运行目录挂载会自动持久化仓库：
 
 ```bash
@@ -100,6 +102,8 @@ docker run -d \
 ```
 
 管理面板的插件仓库卡片展示当前版本、启用/停用状态、文件大小、修改时间和待重启标记。启用/停用状态在下一次 Paper 启动时生效。
+
+插件上传接受包含根目录 `plugin.yml` 的 JAR，单次上传上限为 64 MiB。上传、启用、停用和删除都会写入待重启标记；控制台的重启按钮或 `/api/system` 的 `restart_server` 操作完成受控重启后，Paper 才会读取新的插件集合。删除只移除插件 JAR，保留该插件目录中的配置和数据库文件，之后重新安装同名包可以继续使用这些数据。上传的 JAR 会在 Paper JVM 中执行任意代码，只接受可信来源并在部署前审查、扫描和备份。
 
 ## 管理 API
 
@@ -141,6 +145,27 @@ docker build -t eaglerx1.8server .
 ./build.sh 2.1
 ./build.sh 2.1 push
 ```
+
+## 发布闸门
+
+执行本地可重复检查：
+
+```bash
+./script/release_gate.sh --evidence-dir artifacts/release-gate
+```
+
+闸门覆盖 Python 语法、完整 server/plugin 回归、`web-1.8` 与 `web-1.12` 的 English/简体中文浏览器矩阵、双版本运行资源和双前端镜像校验。浏览器证据使用本地 Mock Admin API，输出只保留状态、哈希、字节数和边界；本地 Docker 不可用时会记录 live boundary。
+
+发布前使用 Docker 执行双版本挂载、Paper 重启、插件运行态、容器替换和数据保留验证：
+
+```bash
+./script/release_gate.sh \
+  --build --live --require-live \
+  --image eaglerx-release-gate:local \
+  --evidence-dir artifacts/release-gate
+```
+
+`summary.json` 仅在完整 live gate 通过时将 `release_ready` 设为 `true`。证据目录不会写入密码、令牌、HTTP/RCON 原文或插件数据。完整流程与部署边界见 [`docs/release-gate.md`](docs/release-gate.md)。
 
 ## Credits
 
