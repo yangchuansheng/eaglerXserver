@@ -31,6 +31,7 @@ let STRUCTURE_PLACEHOLDER_STATE = { text: null, rawPayload: null };
 let PLUGIN_INVENTORY = null;
 let PLUGIN_REFRESHING = false;
 let PLUGIN_UPLOAD_IN_FLIGHT = false;
+let PLUGIN_TRANSITION_IN_FLIGHT = false;
 const STRUCTURE_LABEL_KEYS = {
   village: 'structure.type.village',
   stronghold: 'structure.type.stronghold',
@@ -387,7 +388,7 @@ function updatePluginUploadSelection(showSelection) {
   var status = document.getElementById('plugin-upload-status');
   var file = input && input.files && input.files[0];
   if (button) button.disabled = PLUGIN_UPLOAD_IN_FLIGHT || !TOKEN || !file;
-  if (showSelection !== false && status && !PLUGIN_UPLOAD_IN_FLIGHT && file) status.textContent = file.name;
+  if (showSelection !== false && status && !PLUGIN_UPLOAD_IN_FLIGHT && !PLUGIN_TRANSITION_IN_FLIGHT && file) status.textContent = file.name;
 }
 
 function setPluginUploadStatus(value, cls) {
@@ -469,6 +470,47 @@ function formatPluginModified(value) {
   return isNaN(date.getTime()) ? String(value || '--') : new Intl.DateTimeFormat(EaglerXI18n.getLocale(), { dateStyle: 'short', timeStyle: 'short' }).format(date);
 }
 
+function pluginTransitionError(data) {
+  var code = String(data && data.code || '');
+  if (code === 'missing_resource') return t('status.plugin.missing');
+  if (code === 'state_conflict') return t('status.plugin.stale');
+  if (code === 'destination_conflict') return t('status.plugin.destinationConflict');
+  return String(data && data.error || t('status.plugin.transitionFailed'));
+}
+
+async function transitionPlugin(button) {
+  if (!button || PLUGIN_TRANSITION_IN_FLIGHT || !TOKEN) return;
+  var filename = button.getAttribute('data-plugin-filename') || '';
+  var action = button.getAttribute('data-plugin-action') || '';
+  if (!filename || (action !== 'enable' && action !== 'disable')) return;
+
+  PLUGIN_TRANSITION_IN_FLIGHT = true;
+  button.disabled = true;
+  setPluginUploadStatus(t('status.plugin.transitioning'), '');
+  try {
+    var d = await pluginRequest({
+      action: action,
+      filename: filename,
+      expected_enabled: action === 'disable'
+    });
+    if (d.success) {
+      setPluginUploadStatus(t('status.plugin.transitionSuccess', { filename: filename }), 'success');
+      await refreshPlugins();
+      return;
+    }
+    if (!isAuthError(d.error)) {
+      setPluginUploadStatus(pluginTransitionError(d), 'error');
+      await refreshPlugins();
+    }
+  } catch (e) {
+    setPluginUploadStatus(t('status.plugin.transitionFailed'), 'error');
+    await refreshPlugins();
+  } finally {
+    PLUGIN_TRANSITION_IN_FLIGHT = false;
+    renderPluginInventory();
+  }
+}
+
 function renderPluginInventory() {
   var title = document.getElementById('plugin-title');
   var note = document.getElementById('plugin-note');
@@ -488,7 +530,7 @@ function renderPluginInventory() {
   if (warningText) warningText.textContent = t('status.plugin.warningText');
   if (fileLabel) fileLabel.firstChild.textContent = t('status.plugin.chooseFile');
   if (uploadButton) uploadButton.textContent = t('status.plugin.upload');
-  updatePluginUploadSelection();
+  updatePluginUploadSelection(false);
   if (!PLUGIN_INVENTORY) {
     version.textContent = 'MC --';
     banner.classList.add('hidden');
@@ -507,13 +549,18 @@ function renderPluginInventory() {
     list.innerHTML = '<div class="empty-state">' + escapeHtml(t('status.plugin.empty')) + '</div>';
     return;
   }
-  var rows = ['<div class="plugin-table">', '<div class="plugin-row plugin-header"><span>' + escapeHtml(t('status.plugin.package')) + '</span><span>' + escapeHtml(t('status.plugin.state')) + '</span><span>' + escapeHtml(t('status.plugin.size')) + '</span><span>' + escapeHtml(t('status.plugin.modified')) + '</span></div>'];
+  var rows = ['<div class="plugin-table">', '<div class="plugin-row plugin-header"><span>' + escapeHtml(t('status.plugin.package')) + '</span><span>' + escapeHtml(t('status.plugin.state')) + '</span><span>' + escapeHtml(t('status.plugin.size')) + '</span><span>' + escapeHtml(t('status.plugin.modified')) + '</span><span>' + escapeHtml(t('status.plugin.action')) + '</span></div>'];
   entries.forEach(function (entry) {
     var enabled = !!entry.enabled;
-    rows.push('<div class="plugin-row"><span class="plugin-name" title="' + escapeHtml(entry.filename || '') + '">' + escapeHtml(entry.filename || '') + '</span><span class="plugin-state' + (enabled ? '' : ' disabled') + '">' + escapeHtml(enabled ? t('status.plugin.enabled') : t('status.plugin.disabled')) + '</span><span class="plugin-meta">' + escapeHtml(formatPluginBytes(entry.size)) + '</span><span class="plugin-meta">' + escapeHtml(formatPluginModified(entry.modified_at || entry.modified_time || entry.mtime)) + '</span></div>');
+    var action = enabled ? 'disable' : 'enable';
+    var actionLabel = enabled ? t('status.plugin.disableAction') : t('status.plugin.enableAction');
+    rows.push('<div class="plugin-row"><span class="plugin-name" title="' + escapeHtml(entry.filename || '') + '">' + escapeHtml(entry.filename || '') + '</span><span class="plugin-state' + (enabled ? '' : ' disabled') + '">' + escapeHtml(enabled ? t('status.plugin.enabled') : t('status.plugin.disabled')) + '</span><span class="plugin-meta">' + escapeHtml(formatPluginBytes(entry.size)) + '</span><span class="plugin-meta">' + escapeHtml(formatPluginModified(entry.modified_at || entry.modified_time || entry.mtime)) + '</span><button class="pill-btn plugin-action" type="button" data-plugin-action="' + action + '" data-plugin-filename="' + escapeHtml(entry.filename || '') + '">' + escapeHtml(actionLabel) + '</button></div>');
   });
   rows.push('</div>');
   list.innerHTML = rows.join('');
+  list.querySelectorAll('.plugin-action').forEach(function (button) {
+    button.addEventListener('click', function () { transitionPlugin(button); });
+  });
 }
 
 async function refreshPlugins() {
@@ -2551,6 +2598,7 @@ async function restartServer() {
       logClient('console.serverRestarting', {}, 'warn');
       if (d.message) logRaw(d.message, 'out');
       setStatus('auth', '重启中');
+      refreshPlugins();
       setTimeout(refreshPlayers, 12000);
       setTimeout(refreshTPS, 16000);
       setTimeout(refreshSeedMap, 16000);

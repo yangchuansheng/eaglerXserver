@@ -54,6 +54,24 @@ class PluginConflictError(PluginUploadError):
     code = "duplicate_filename"
 
 
+class PluginLifecycleError(RepositoryError):
+    """Raised when a package state transition cannot be completed safely."""
+
+    code = "plugin_lifecycle_failed"
+
+
+class PluginNotFoundError(PluginLifecycleError):
+    code = "missing_resource"
+
+
+class PluginStateConflictError(PluginLifecycleError):
+    code = "state_conflict"
+
+
+class PluginDestinationConflictError(PluginLifecycleError):
+    code = "destination_conflict"
+
+
 _UPLOAD_TEMP_NAME_RE = re.compile(
     rf"^{re.escape(UPLOAD_TEMP_PREFIX)}[A-Za-z0-9_-]+{re.escape(UPLOAD_TEMP_SUFFIX)}$"
 )
@@ -326,6 +344,38 @@ def _find_existing_plugin(repository_paths_data, filename):
     return None
 
 
+def _find_plugin_states(repository_paths_data, filename):
+    """Return matching package entries while preserving their repository state."""
+
+    target_name = filename.casefold()
+    matches = []
+    for state in ("enabled", "disabled"):
+        for entry in repository_paths_data[state].iterdir():
+            if entry.name.casefold() != target_name:
+                continue
+            if entry.is_symlink() or not entry.is_file():
+                raise PluginDestinationConflictError(f"plugin package entry is unsafe: {entry.name!r}")
+            matches.append((state, entry))
+    return matches
+
+
+def _plugin_metadata(path, enabled, pending=None):
+    stat = Path(path).stat()
+    modified_at = datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat().replace("+00:00", "Z")
+    metadata = {
+        "filename": Path(path).name,
+        "enabled": bool(enabled),
+        "size": stat.st_size,
+        "bytes": stat.st_size,
+        "modified_at": modified_at,
+        "modified_time": modified_at,
+        "mtime": stat.st_mtime,
+    }
+    if pending is not None:
+        metadata["pending_restart"] = bool(pending)
+    return metadata
+
+
 def _mark_pending_restart_locked(repository, reason):
     _write_json_atomic(repository_paths(repository)["pending_restart"], {
         "schema": 1,
@@ -370,18 +420,7 @@ def publish_uploaded_plugin(repository, filename, temporary, version):
             except OSError as error:
                 raise PluginUploadError("cannot publish plugin package") from error
 
-            stat = target.stat()
-            modified_at = datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat().replace("+00:00", "Z")
-            return {
-                "filename": filename,
-                "enabled": True,
-                "size": stat.st_size,
-                "bytes": stat.st_size,
-                "modified_at": modified_at,
-                "modified_time": modified_at,
-                "mtime": stat.st_mtime,
-                "pending_restart": True,
-            }
+            return _plugin_metadata(target, True, pending=True)
     finally:
         if not published:
             _remove_file(temporary)
@@ -481,6 +520,7 @@ def list_repository(repository, version):
     version = validate_version(version)
     paths = _validate_repository_layout(repository, version)
     entries = {}
+    seen_names = set()
     for enabled in (True, False):
         state_path = paths["enabled"] if enabled else paths["disabled"]
         for item in state_path.iterdir():
@@ -488,21 +528,61 @@ def list_repository(repository, version):
                 continue
             if item.is_symlink() or not item.is_file():
                 raise RepositoryError(f"unsafe plugin package entry: {item.name!r}")
-            if item.name in entries:
+            name_key = item.name.casefold()
+            if name_key in seen_names:
                 raise RepositoryError(f"plugin package has duplicate repository state: {item.name!r}")
-            stat = item.stat()
-            modified_at = datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat().replace("+00:00", "Z")
-            entries[item.name] = {
-                "filename": item.name,
-                "enabled": enabled,
-                "size": stat.st_size,
-                "bytes": stat.st_size,
-                "modified_at": modified_at,
-                "modified_time": modified_at,
-                "mtime": stat.st_mtime,
-            }
+            seen_names.add(name_key)
+            entries[item.name] = _plugin_metadata(item, enabled)
     return sorted(entries.values(), key=lambda entry: entry["filename"].casefold())
 
+
+def transition_plugin(repository, filename, enabled, version, expected_enabled=None):
+    """Atomically move one package between the enabled and disabled states."""
+
+    version = validate_version(version)
+    filename = validate_plugin_filename(filename)
+    if not isinstance(enabled, bool):
+        raise PluginLifecycleError("target plugin state must be boolean")
+    if expected_enabled is not None and not isinstance(expected_enabled, bool):
+        raise PluginLifecycleError("expected plugin state must be boolean")
+
+    repository = Path(repository)
+    with operation_lock(repository):
+        paths = _validate_repository_layout(repository, version)
+        matches = _find_plugin_states(paths, filename)
+        if not matches:
+            raise PluginNotFoundError(f"plugin package not found: {filename}")
+        if len(matches) > 1:
+            raise PluginDestinationConflictError(f"plugin package has duplicate repository state: {filename}")
+
+        source_state, source = matches[0]
+        current_enabled = source_state == "enabled"
+        if expected_enabled is not None and current_enabled != expected_enabled:
+            raise PluginStateConflictError(f"plugin package state is stale: {filename}")
+        if current_enabled == enabled:
+            target_state = "enabled" if enabled else "disabled"
+            raise PluginStateConflictError(f"plugin package is already {target_state}: {filename}")
+
+        destination_state = "enabled" if enabled else "disabled"
+        destination_dir = paths[destination_state]
+        destination = destination_dir / source.name
+        destination_name = source.name.casefold()
+        if any(item.name.casefold() == destination_name for item in destination_dir.iterdir()):
+            raise PluginDestinationConflictError(f"plugin package destination already exists: {filename}")
+
+        try:
+            os.replace(source, destination)
+            try:
+                _mark_pending_restart_locked(repository, f"plugin package {source.name} {'enabled' if enabled else 'disabled'}")
+            except Exception:
+                os.replace(destination, source)
+                raise
+        except PluginLifecycleError:
+            raise
+        except OSError as error:
+            raise PluginLifecycleError(f"cannot transition plugin package: {error.strerror or error}") from error
+
+        return _plugin_metadata(destination, enabled, pending=True)
 
 def pending_restart(repository):
     paths = repository_paths(repository)

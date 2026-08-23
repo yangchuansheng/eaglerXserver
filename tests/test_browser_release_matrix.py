@@ -37,6 +37,10 @@ class MockAdminServer:
         ]
         self.uploaded_plugin_names = set()
         self.expire_next_upload = False
+        self.plugin_conflict_next = False
+        self.plugin_pending_restart = True
+        self.restart_failure_next = False
+        self.restart_success_next = False
         self.records = []
         self.server = None
         self.thread = None
@@ -125,6 +129,7 @@ class MockAdminServer:
                         return
                     fixture.uploaded_plugin_names.add(filename)
                     fixture.plugin_entries.append({'filename': filename, 'enabled': True, 'size': length, 'modified_at': '2026-08-23T02:03:04Z'})
+                    fixture.plugin_pending_restart = True
                     self.json(201, {'success': True, 'filename': filename, 'pending_restart': True}, raw=raw)
                     return
                 payload = self.read_json()
@@ -140,6 +145,7 @@ class MockAdminServer:
                 if route not in {
                     '/api/rcon', '/api/config', '/api/world-state', '/api/runtime-state',
                     '/api/seed', '/api/structures', '/api/player-location', '/api/plugins',
+                    '/api/system',
                 }:
                     self.json(404, {'success': False, 'error': 'not found'})
                     return
@@ -172,13 +178,47 @@ class MockAdminServer:
                         self.json(200, {'success': True, 'updated': payload.get('updates', {}), 'message': 'Fixture configuration saved'})
                     return
                 if route == '/api/plugins':
+                    action = str(payload.get('action', 'list')).strip().lower()
+                    if action in ('enable', 'disable'):
+                        filename = str(payload.get('filename', ''))
+                        entry = next((item for item in fixture.plugin_entries if item.get('filename') == filename), None)
+                        if not entry:
+                            self.json(404, {'success': False, 'error': 'plugin package unavailable', 'code': 'missing_resource'})
+                            return
+                        if fixture.plugin_conflict_next:
+                            fixture.plugin_conflict_next = False
+                            self.json(409, {'success': False, 'error': 'plugin state changed', 'code': 'state_conflict'})
+                            return
+                        expected = payload.get('expected_enabled')
+                        if isinstance(expected, bool) and entry['enabled'] != expected:
+                            self.json(409, {'success': False, 'error': 'plugin state changed', 'code': 'state_conflict'})
+                            return
+                        target = action == 'enable'
+                        if entry['enabled'] == target:
+                            self.json(409, {'success': False, 'error': 'plugin state changed', 'code': 'state_conflict'})
+                            return
+                        entry['enabled'] = target
+                        fixture.plugin_pending_restart = True
+                        self.json(200, {'success': True, 'action': action, 'filename': filename, 'plugin': entry, 'pending_restart': True})
+                        return
                     self.json(200, {
                         'success': True,
                         'minecraft_version': '1.8',
                         'entries': fixture.plugin_entries,
-                        'pending_restart': True,
+                        'pending_restart': fixture.plugin_pending_restart,
                         'upload_limit': 64 * 1024 * 1024,
                     })
+                    return
+                if route == '/api/system':
+                    if payload.get('action') != 'restart_server':
+                        self.json(400, {'success': False, 'error': 'invalid action'})
+                    elif fixture.restart_failure_next:
+                        fixture.restart_failure_next = False
+                        self.json(500, {'success': False, 'error': 'fixture restart failed'})
+                    else:
+                        fixture.plugin_pending_restart = False if fixture.restart_success_next else fixture.plugin_pending_restart
+                        fixture.restart_success_next = False
+                        self.json(200, {'success': True, 'restart_in_progress': True})
                     return
                 if route == '/api/world-state':
                     self.json(200, {'success': True, 'world': 'fixture-world', 'servertime': 6000, 'hasStorm': False, 'isThundering': False, 'timestamp': 1700000000000})
@@ -439,9 +479,42 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 browser.run(stage, 'wait', 1000)
                 browser.check(stage, "document.querySelector('#plugin-upload-warning-text').textContent.includes('Paper') && document.querySelector('#plugin-list').textContent.includes('FixtureUpload.jar')")
                 self.assert_recorded(server, '/api/plugins/upload')
+                stage = 'plugin-lifecycle'
+                browser.run(stage, 'select', '#locale-select', 'en')
+                browser.check(stage, "document.querySelectorAll('.plugin-action').length === 3")
+                browser.run(stage, 'eval', "(() => { const button = Array.from(document.querySelectorAll('.plugin-action')).find((item) => item.dataset.pluginFilename === 'FixturePlugin.jar'); button.click(); return true; })()")
+                browser.run(stage, 'wait', 1000)
+                browser.check(stage, "document.querySelector('#plugin-status') === null || (document.querySelector('#plugin-list').textContent.includes('Disabled') && document.querySelector('.plugin-action[data-plugin-action=enable]'))")
+                browser.check(stage, "!document.querySelector('#plugin-restart-banner').classList.contains('hidden')")
+                server.plugin_conflict_next = True
+                browser.run(stage, 'eval', "(() => { const button = Array.from(document.querySelectorAll('.plugin-action')).find((item) => item.dataset.pluginFilename === 'FixturePlugin.jar'); button.click(); return true; })()")
+                browser.run(stage, 'wait', 1000)
+                browser.check(stage, "document.querySelector('#plugin-upload-status').textContent.includes('Plugin state changed')")
+                browser.check(stage, "document.querySelectorAll('.plugin-action[data-plugin-action=enable]').length >= 1")
+                browser.run(stage, 'eval', "(() => { const button = Array.from(document.querySelectorAll('.plugin-action')).find((item) => item.dataset.pluginFilename === 'FixturePlugin.jar'); button.click(); return true; })()")
+                browser.run(stage, 'wait', 1000)
+                browser.check(stage, "document.querySelectorAll('.plugin-action').length === 3")
+                self.assert_recorded(server, '/api/plugins')
+                stage = 'plugin-restart-marker'
+                server.restart_failure_next = True
+                browser.run(stage, 'eval', "systemRequest({ action: 'restart_server' }).then(function () { return refreshPlugins(); }); true")
+                browser.run(stage, 'wait', 500)
+                browser.check(stage, "!document.querySelector('#plugin-restart-banner').classList.contains('hidden')")
+                server.restart_success_next = True
+                browser.run(stage, 'eval', "systemRequest({ action: 'restart_server' }).then(function () { return refreshPlugins(); }); true")
+                browser.run(stage, 'wait', 500)
+                browser.check(stage, "document.querySelector('#plugin-restart-banner').classList.contains('hidden')")
+                server.plugin_pending_restart = True
+                browser.run(stage, 'eval', "refreshPlugins(); true")
+                browser.run(stage, 'wait', 300)
+                self.assert_recorded(server, '/api/system')
+                browser.run(stage, 'select', '#locale-select', 'zh-CN')
                 stage = 'locale-persist'
                 browser.batch(stage, [['snapshot', '-i']])
-                browser.check(stage, "document.documentElement.lang === 'zh-CN' && localStorage.getItem('eaglerx_admin_locale') === 'zh-CN' && document.querySelector('#locale-select').value === 'zh-CN' && document.querySelector('#ver-tag').textContent.includes('RCON:25575') && document.querySelector('#seedmap-spawn').textContent.includes('搜索完成后会显示世界出生点') && document.querySelector('#plugin-title').textContent === '插件仓库' && document.querySelector('#plugin-list').textContent.includes('启用') && document.querySelector('#plugin-list').textContent.includes('停用') && document.querySelector('#plugin-restart-text').textContent.includes('待重启插件变更')")
+                browser.check(stage, "document.documentElement.lang === 'zh-CN' && localStorage.getItem('eaglerx_admin_locale') === 'zh-CN' && document.querySelector('#locale-select').value === 'zh-CN'")
+                browser.check(stage, "document.querySelector('#ver-tag').textContent.includes('RCON:25575') && document.querySelector('#seedmap-spawn').textContent.includes('搜索完成后会显示世界出生点')")
+                browser.check(stage, "document.querySelector('#plugin-title').textContent === '插件仓库'")
+                browser.check(stage, "document.querySelector('#plugin-restart-text').textContent.includes('待重启插件变更')")
                 browser.batch(stage, [['reload'], ['wait', '500'], ['snapshot', '-i']])
                 browser.check(stage, "document.documentElement.lang === 'zh-CN' && document.querySelector('#locale-select').value === 'zh-CN'")
                 browser.check(stage, "document.querySelector('#hero-connection').textContent.includes('已连接') && document.querySelector('#world-info').textContent.includes('世界') && document.querySelector('#players').textContent.includes('FixtureAlex')")

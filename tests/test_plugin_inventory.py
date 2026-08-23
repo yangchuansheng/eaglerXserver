@@ -109,6 +109,81 @@ class PluginRepositoryTests(unittest.TestCase):
             plugin_repository.clear_pending_restart(repository)
             self.assertFalse(plugin_repository.pending_restart(repository))
 
+    def test_plugin_lifecycle_moves_bytes_atomically_and_persists_marker(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = self.make_source(root, 'Lifecycle.jar', b'\x00\x01package-bytes')
+            repository = root / 'data' / 'plugins-1.8'
+            plugin_repository.init_repository(source, repository, '1.8')
+            original = (repository / 'enabled' / 'Lifecycle.jar').read_bytes()
+
+            disabled = plugin_repository.transition_plugin(repository, 'Lifecycle.jar', False, '1.8', True)
+            self.assertFalse(disabled['enabled'])
+            self.assertEqual(original, (repository / 'disabled' / 'Lifecycle.jar').read_bytes())
+            self.assertFalse((repository / 'enabled' / 'Lifecycle.jar').exists())
+            self.assertTrue(plugin_repository.pending_restart(repository))
+
+            plugin_repository.clear_pending_restart(repository)
+            enabled = plugin_repository.transition_plugin(repository, 'Lifecycle.jar', True, '1.8', False)
+            self.assertTrue(enabled['enabled'])
+            self.assertEqual(original, (repository / 'enabled' / 'Lifecycle.jar').read_bytes())
+            self.assertTrue(plugin_repository.pending_restart(repository))
+
+    def test_plugin_lifecycle_rejects_missing_stale_destination_and_unsafe_requests(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = self.make_source(root)
+            repository = root / 'data' / 'plugins-1.8'
+            plugin_repository.init_repository(source, repository, '1.8')
+
+            with self.assertRaises(plugin_repository.PluginNotFoundError):
+                plugin_repository.transition_plugin(repository, 'Missing.jar', False, '1.8')
+            with self.assertRaises(plugin_repository.PluginFilenameError):
+                plugin_repository.transition_plugin(repository, '../Bundled.jar', False, '1.8')
+            with self.assertRaises(plugin_repository.PluginStateConflictError):
+                plugin_repository.transition_plugin(repository, 'Bundled.jar', False, '1.8', False)
+
+            (repository / 'disabled' / 'Bundled.jar').write_bytes(b'conflicting-destination')
+            with self.assertRaises(plugin_repository.PluginDestinationConflictError):
+                plugin_repository.transition_plugin(repository, 'Bundled.jar', False, '1.8', True)
+            self.assertEqual(b'bundled', (repository / 'enabled' / 'Bundled.jar').read_bytes())
+
+    def test_plugin_lifecycle_rolls_back_when_marker_persistence_fails(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = self.make_source(root)
+            repository = root / 'data' / 'plugins-1.8'
+            plugin_repository.init_repository(source, repository, '1.8')
+            with mock.patch.object(plugin_repository, '_mark_pending_restart_locked', side_effect=plugin_repository.RepositoryError('disk full')):
+                with self.assertRaises(plugin_repository.RepositoryError):
+                    plugin_repository.transition_plugin(repository, 'Bundled.jar', False, '1.8', True)
+            self.assertEqual(b'bundled', (repository / 'enabled' / 'Bundled.jar').read_bytes())
+            self.assertFalse((repository / 'disabled' / 'Bundled.jar').exists())
+
+    def test_concurrent_plugin_lifecycle_transitions_have_one_final_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = self.make_source(root)
+            repository = root / 'data' / 'plugins-1.8'
+            plugin_repository.init_repository(source, repository, '1.8')
+            outcomes = []
+
+            def transition():
+                try:
+                    outcomes.append(plugin_repository.transition_plugin(repository, 'Bundled.jar', False, '1.8', True)['enabled'])
+                except plugin_repository.PluginLifecycleError as error:
+                    outcomes.append(error.code)
+
+            threads = [threading.Thread(target=transition) for _ in range(2)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=5)
+
+            self.assertEqual([False, 'state_conflict'], sorted(outcomes, key=str))
+            self.assertEqual(b'bundled', (repository / 'disabled' / 'Bundled.jar').read_bytes())
+            self.assertFalse((repository / 'enabled' / 'Bundled.jar').exists())
+
 
 class PluginApiTests(unittest.TestCase):
     @classmethod
@@ -157,6 +232,45 @@ class PluginApiTests(unittest.TestCase):
             self.assertEqual(64 * 1024 * 1024, body['upload_limit'])
             self.assertEqual(['A.jar'], [entry['filename'] for entry in body['entries']])
             self.assertFalse(body['pending_restart'])
+
+    def test_lifecycle_api_auth_and_conflict_contract(self):
+        server = self.http_server
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / 'source'
+            source.mkdir()
+            (source / 'A.jar').write_bytes(b'package')
+            repository = root / 'plugins-1.8'
+            plugin_repository.init_repository(source, repository, '1.8')
+            server.MINECRAFT_VERSION = '1.8'
+            server.PLUGIN_REPOSITORY_ROOT = str(repository)
+            token, _ = server.create_auth_token()
+
+            unauthenticated = self.make_handler({'action': 'disable', 'filename': 'A.jar'})
+            unauthenticated._handle_plugins()
+            self.assertEqual(403, unauthenticated.responses[0][0])
+
+            disabled = self.make_handler({
+                'action': 'disable', 'filename': 'A.jar', 'expected_enabled': True, 'token': token,
+            })
+            disabled._handle_plugins()
+            self.assertEqual(200, disabled.responses[0][0])
+            self.assertFalse(disabled.responses[0][1]['plugin']['enabled'])
+            self.assertEqual(b'package', (repository / 'disabled' / 'A.jar').read_bytes())
+
+            stale = self.make_handler({
+                'action': 'disable', 'filename': 'A.jar', 'expected_enabled': True, 'token': token,
+            })
+            stale._handle_plugins()
+            self.assertEqual((409, 'state_conflict'), (stale.responses[0][0], stale.responses[0][1]['code']))
+
+            missing = self.make_handler({'action': 'enable', 'filename': 'Missing.jar', 'token': token})
+            missing._handle_plugins()
+            self.assertEqual((404, 'missing_resource'), (missing.responses[0][0], missing.responses[0][1]['code']))
+
+            unsafe = self.make_handler({'action': 'enable', 'filename': '../A.jar', 'token': token})
+            unsafe._handle_plugins()
+            self.assertEqual((400, 'invalid_filename'), (unsafe.responses[0][0], unsafe.responses[0][1]['code']))
 
 
 class PluginUploadTests(unittest.TestCase):

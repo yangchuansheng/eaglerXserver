@@ -30,7 +30,11 @@ if SCRIPT_DIR not in sys.path:
 from plugin_repository import (  # noqa: E402
     PluginArchiveError,
     PluginConflictError,
+    PluginDestinationConflictError,
     PluginFilenameError,
+    PluginLifecycleError,
+    PluginNotFoundError,
+    PluginStateConflictError,
     PluginUploadError,
     RepositoryError,
     UPLOAD_LIMIT as PLUGIN_UPLOAD_LIMIT,
@@ -40,6 +44,7 @@ from plugin_repository import (  # noqa: E402
     pending_restart,
     publish_uploaded_plugin,
     repository_path,
+    transition_plugin,
     validate_plugin_filename,
 )
 
@@ -1535,8 +1540,79 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(403, {'success': False, 'error': error})
             return
 
-        if str(data.get('action', 'list')).strip().lower() != 'list':
-            self._json(400, {'success': False, 'error': 'invalid action'})
+        action = str(data.get('action', 'list')).strip().lower()
+        if action in ('enable', 'disable'):
+            filename = data.get('filename', data.get('plugin', ''))
+            if not isinstance(filename, str) or not filename.strip():
+                self._json(400, {'success': False, 'error': 'filename required', 'code': 'filename_required'})
+                return
+
+            expected_enabled = data.get('expected_enabled')
+            if expected_enabled is None and 'expected_state' in data:
+                expected_state = str(data.get('expected_state', '')).strip().lower()
+                if expected_state not in ('enabled', 'disabled'):
+                    self._json(400, {'success': False, 'error': 'expected_state must be enabled or disabled', 'code': 'invalid_expected_state'})
+                    return
+                expected_enabled = expected_state == 'enabled'
+            if expected_enabled is None and 'enabled' in data and isinstance(data.get('enabled'), bool):
+                expected_enabled = data['enabled']
+            if expected_enabled is not None and not isinstance(expected_enabled, bool):
+                self._json(400, {'success': False, 'error': 'expected_enabled must be boolean', 'code': 'invalid_expected_state'})
+                return
+
+            try:
+                plugin = transition_plugin(
+                    plugin_repository_root(),
+                    filename,
+                    action == 'enable',
+                    MINECRAFT_VERSION,
+                    expected_enabled=expected_enabled,
+                )
+            except PluginFilenameError as lifecycle_error:
+                self._json(400, {
+                    'success': False,
+                    'error': str(lifecycle_error),
+                    'code': lifecycle_error.code,
+                })
+                return
+            except PluginNotFoundError as lifecycle_error:
+                self._json(404, {
+                    'success': False,
+                    'error': str(lifecycle_error),
+                    'code': lifecycle_error.code,
+                })
+                return
+            except (PluginStateConflictError, PluginDestinationConflictError) as lifecycle_error:
+                self._json(409, {
+                    'success': False,
+                    'error': str(lifecycle_error),
+                    'code': lifecycle_error.code,
+                })
+                return
+            except PluginLifecycleError as lifecycle_error:
+                self._json(500, {
+                    'success': False,
+                    'error': str(lifecycle_error),
+                    'code': lifecycle_error.code,
+                })
+                return
+            except RepositoryError:
+                self._json(500, {'success': False, 'error': 'plugin repository unavailable', 'code': 'repository_unavailable'})
+                return
+
+            self._json(200, {
+                'success': True,
+                'action': action,
+                'filename': plugin['filename'],
+                'plugin': plugin,
+                'enabled': plugin['enabled'],
+                'pending_restart': True,
+                'restart_required': True,
+            })
+            return
+
+        if action != 'list':
+            self._json(400, {'success': False, 'error': 'invalid action', 'code': 'invalid_action'})
             return
         try:
             self._json(200, {'success': True, **plugin_inventory()})

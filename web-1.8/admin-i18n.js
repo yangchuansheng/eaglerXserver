@@ -993,7 +993,16 @@
   "status.plugin.uploadFailed": "Plugin upload failed.",
   "status.plugin.uploadConnectionFailed": "Upload connection failed; the repository was unchanged.",
   "status.plugin.uploadTimeout": "Upload timed out; the repository was unchanged.",
-  "status.plugin.uploadNoFile": "Choose one .jar package first."
+  "status.plugin.uploadNoFile": "Choose one .jar package first.",
+  "status.plugin.action": "Action",
+  "status.plugin.enableAction": "Enable next start",
+  "status.plugin.disableAction": "Disable next start",
+  "status.plugin.transitioning": "Updating next-start state...",
+  "status.plugin.transitionSuccess": "Updated {filename}; restart Paper to activate it.",
+  "status.plugin.transitionFailed": "Plugin state update failed.",
+  "status.plugin.missing": "Plugin package is unavailable.",
+  "status.plugin.stale": "Plugin state changed; repository refreshed.",
+  "status.plugin.destinationConflict": "Plugin state has a destination conflict; repository refreshed."
 };
   var zhCN = {
   "document.surface.adminhtml.l6.c21": "EaglercraftX 管理台",
@@ -1981,7 +1990,16 @@
   "status.plugin.uploadFailed": "插件上传失败。",
   "status.plugin.uploadConnectionFailed": "上传连接失败，插件仓库保持不变。",
   "status.plugin.uploadTimeout": "上传超时，插件仓库保持不变。",
-  "status.plugin.uploadNoFile": "请先选择一个 .jar 插件包。"
+  "status.plugin.uploadNoFile": "请先选择一个 .jar 插件包。",
+  "status.plugin.action": "动作",
+  "status.plugin.enableAction": "下次启动启用",
+  "status.plugin.disableAction": "下次启动停用",
+  "status.plugin.transitioning": "正在更新下次启动状态...",
+  "status.plugin.transitionSuccess": "已更新 {filename}；重启 Paper 后生效。",
+  "status.plugin.transitionFailed": "插件状态更新失败。",
+  "status.plugin.missing": "插件包已不可用。",
+  "status.plugin.stale": "插件状态已变化，仓库已刷新。",
+  "status.plugin.destinationConflict": "插件目标状态冲突，仓库已刷新。"
 };
   var locales = {
     en: { id: 'en', label: 'English', messages: en },
