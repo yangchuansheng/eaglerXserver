@@ -28,6 +28,8 @@ let SOURCE_MESSAGE_KEYS = Object.create(null);
 let SEED_STATE = { seed: '', hint: null, rawHint: null };
 let STRUCTURE_STATUS_STATE = { text: null, summary: null, rawSummary: null };
 let STRUCTURE_PLACEHOLDER_STATE = { text: null, rawPayload: null };
+let PLUGIN_INVENTORY = null;
+let PLUGIN_REFRESHING = false;
 const STRUCTURE_LABEL_KEYS = {
   village: 'structure.type.village',
   stronghold: 'structure.type.stronghold',
@@ -163,7 +165,7 @@ function setupLocalePreference() {
   });
 }
 
-var LOADING_CARD_IDS = ['card-world','card-players','card-tps','card-rules','card-config','card-whitelist','card-seedmap'];
+var LOADING_CARD_IDS = ['card-world','card-players','card-tps','card-rules','card-config','card-whitelist','card-seedmap','card-plugins'];
 function setCardLoading(id,on){var el=document.getElementById(id);if(!el)return;if(on){el.classList.add('card-loading');el.style.position='relative'}else{el.classList.remove('card-loading')}}
 function setAllCardsLoading(on){for(var i=0;i<LOADING_CARD_IDS.length;i++)setCardLoading(LOADING_CARD_IDS[i],on)}
 function beginRefresh(name){if(REFRESH_IN_FLIGHT[name])return false;REFRESH_IN_FLIGHT[name]=true;return true}
@@ -367,6 +369,84 @@ async function init() {
   }
 }
 
+async function pluginRequest(payload) {
+  var r = await fetch(BASE + '/api/plugins', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(buildAuthPayload(payload))
+  });
+  var d = await r.json();
+  if (!d.success && isAuthError(d.error)) handleAuthFailure(d.error);
+  return d;
+}
+
+function formatPluginBytes(value) {
+  var bytes = Math.max(0, Number(value || 0));
+  if (bytes < 1024) return formatNumber(bytes) + ' B';
+  if (bytes < 1024 * 1024) return formatNumber(bytes / 1024, { maximumFractionDigits: 1 }) + ' KB';
+  return formatNumber(bytes / (1024 * 1024), { maximumFractionDigits: 1 }) + ' MB';
+}
+
+function formatPluginModified(value) {
+  var date = new Date(value);
+  return isNaN(date.getTime()) ? String(value || '--') : new Intl.DateTimeFormat(EaglerXI18n.getLocale(), { dateStyle: 'short', timeStyle: 'short' }).format(date);
+}
+
+function renderPluginInventory() {
+  var title = document.getElementById('plugin-title');
+  var note = document.getElementById('plugin-note');
+  var version = document.getElementById('plugin-version');
+  var list = document.getElementById('plugin-list');
+  var banner = document.getElementById('plugin-restart-banner');
+  var restartText = document.getElementById('plugin-restart-text');
+  var restartButton = document.getElementById('plugin-restart-btn');
+  if (!title || !note || !version || !list || !banner || !restartText || !restartButton) return;
+  title.textContent = t('status.plugin.title');
+  note.textContent = t('status.plugin.note');
+  if (!PLUGIN_INVENTORY) {
+    version.textContent = 'MC --';
+    banner.classList.add('hidden');
+    list.innerHTML = '<div class="empty-state">' + escapeHtml(t('status.plugin.login')) + '</div>';
+    return;
+  }
+  var activeVersion = String(PLUGIN_INVENTORY.minecraft_version || SERVER_INFO.minecraftVersion || '--');
+  version.textContent = t('status.plugin.version', { version: activeVersion });
+  restartText.textContent = t('status.plugin.pending', { version: activeVersion });
+  restartButton.textContent = t('status.plugin.restart');
+  banner.classList.toggle('hidden', !PLUGIN_INVENTORY.pending_restart);
+  var entries = (PLUGIN_INVENTORY.entries || PLUGIN_INVENTORY.plugins || []).slice().sort(function (a, b) {
+    return String(a.filename || '').localeCompare(String(b.filename || ''), undefined, { sensitivity: 'base' });
+  });
+  if (!entries.length) {
+    list.innerHTML = '<div class="empty-state">' + escapeHtml(t('status.plugin.empty')) + '</div>';
+    return;
+  }
+  var rows = ['<div class="plugin-table">', '<div class="plugin-row plugin-header"><span>' + escapeHtml(t('status.plugin.package')) + '</span><span>' + escapeHtml(t('status.plugin.state')) + '</span><span>' + escapeHtml(t('status.plugin.size')) + '</span><span>' + escapeHtml(t('status.plugin.modified')) + '</span></div>'];
+  entries.forEach(function (entry) {
+    var enabled = !!entry.enabled;
+    rows.push('<div class="plugin-row"><span class="plugin-name" title="' + escapeHtml(entry.filename || '') + '">' + escapeHtml(entry.filename || '') + '</span><span class="plugin-state' + (enabled ? '' : ' disabled') + '">' + escapeHtml(enabled ? t('status.plugin.enabled') : t('status.plugin.disabled')) + '</span><span class="plugin-meta">' + escapeHtml(formatPluginBytes(entry.size)) + '</span><span class="plugin-meta">' + escapeHtml(formatPluginModified(entry.modified_at || entry.modified_time || entry.mtime)) + '</span></div>');
+  });
+  rows.push('</div>');
+  list.innerHTML = rows.join('');
+}
+
+async function refreshPlugins() {
+  if (!TOKEN || PLUGIN_REFRESHING) return;
+  PLUGIN_REFRESHING = true;
+  try {
+    var d = await pluginRequest({ action: 'list' });
+    if (d.success) {
+      PLUGIN_INVENTORY = d;
+      renderPluginInventory();
+    }
+  } catch (e) {
+    logClient('console.requestFailed', { error: e.message }, 'warn');
+  } finally {
+    setCardLoading('card-plugins', false);
+    PLUGIN_REFRESHING = false;
+  }
+}
+
 async function configRequest(payload) {
   var r = await fetch(BASE + '/api/config', {
     method: 'POST',
@@ -484,6 +564,8 @@ function clearAuthState() {
 
 function resetAuthUi() {
   setStatus('auth', '请输入密码');
+  PLUGIN_INVENTORY = null;
+  renderPluginInventory();
   ONLINE_PLAYERS = [];
   WORLD_INFO_CACHE = null;
   document.getElementById('player-count').textContent = '0';
@@ -808,6 +890,7 @@ function rerenderLocalizedState() {
   if (WORLD_INFO_CACHE) renderWorldInfo(WORLD_INFO_CACHE);
   if (ONLINE_PLAYERS || TOKEN) renderPlayers();
   if (TPS_VALUES.length) renderTPS();
+  renderPluginInventory();
   renderSeedState();
   renderStructureStatus();
   renderStructureSource();
@@ -1191,6 +1274,8 @@ async function runInitialDashboardRefreshes() {
     await refreshServerVersion();
     await sleep(120);
     await refreshConfig();
+    await sleep(120);
+    await refreshPlugins();
     await sleep(120);
     await refreshSeedMap();
   } finally {
@@ -2383,6 +2468,7 @@ async function restartServer() {
       setTimeout(refreshPlayers, 12000);
       setTimeout(refreshTPS, 16000);
       setTimeout(refreshSeedMap, 16000);
+      setTimeout(refreshPlugins, 12000);
       setTimeout(function () {
         if (TOKEN) setStatus('on', '已连接');
       }, 18000);

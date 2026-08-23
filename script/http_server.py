@@ -19,9 +19,22 @@ import re
 import math
 import ctypes
 import threading
+import sys
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from http.client import HTTPConnection
 from urllib.parse import urlparse
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+from plugin_repository import (  # noqa: E402
+    RepositoryError,
+    UPLOAD_LIMIT as PLUGIN_UPLOAD_LIMIT,
+    clear_pending_restart,
+    list_repository,
+    pending_restart,
+    repository_path,
+)
 
 PORT = 5201
 WEB_ROOT = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'web')
@@ -32,6 +45,11 @@ RCON_PORT = 25575
 RCON_PASSWORD = os.environ.get('RCON_PASSWORD', '')
 RCON_ENABLED = bool(RCON_PASSWORD)
 MINECRAFT_VERSION = os.environ.get('MINECRAFT_VERSION', '')
+PERSISTENT_DATA_ROOT = os.environ.get('PERSISTENT_DATA_ROOT') or os.environ.get('SERVER_DATA_DIR') or os.path.join(os.path.dirname(os.path.dirname(__file__)), 'server-data')
+if MINECRAFT_VERSION in ('1.8', '1.12'):
+    PLUGIN_REPOSITORY_ROOT = os.environ.get('PLUGIN_REPOSITORY_ROOT') or os.fspath(repository_path(PERSISTENT_DATA_ROOT, MINECRAFT_VERSION))
+else:
+    PLUGIN_REPOSITORY_ROOT = os.environ.get('PLUGIN_REPOSITORY_ROOT', '')
 DYNMAP_HOST = os.environ.get('DYNMAP_HOST', '127.0.0.1')
 DYNMAP_PORT = int(os.environ.get('DYNMAP_PORT', '8123'))
 AUTH_TOKEN_TTL = int(os.environ.get('ADMIN_AUTH_TOKEN_TTL', str(8 * 3600)))
@@ -1096,6 +1114,32 @@ def wait_for_server_stop(timeout=60):
     raise RuntimeError(f'server did not stop in time (pane command: {last_cmd or "unknown"})')
 
 
+def plugin_repository_root():
+    if not PLUGIN_REPOSITORY_ROOT:
+        raise RepositoryError('plugin repository is unavailable without a supported Minecraft version')
+    return PLUGIN_REPOSITORY_ROOT
+
+
+def plugin_inventory():
+    repository = plugin_repository_root()
+    entries = list_repository(repository, MINECRAFT_VERSION)
+    return {
+        'minecraft_version': MINECRAFT_VERSION,
+        'entries': entries,
+        'plugins': entries,
+        'pending_restart': pending_restart(repository),
+        'upload_limit': PLUGIN_UPLOAD_LIMIT,
+        'upload_limit_bytes': PLUGIN_UPLOAD_LIMIT,
+    }
+
+
+def clear_plugin_restart_marker():
+    repository = plugin_repository_root()
+    if not os.path.isdir(repository):
+        return
+    clear_pending_restart(repository)
+
+
 def restart_server_process():
     if not _restart_lock.acquire(blocking=False):
         return False
@@ -1112,6 +1156,7 @@ def restart_server_process():
             if server_pane_dead():
                 raise RuntimeError('server exited during restart')
             if server_pane_command().lower() in ('java', 'java.bin'):
+                clear_plugin_restart_marker()
                 return True
             time.sleep(1)
         raise RuntimeError('server did not start in time')
@@ -1239,6 +1284,8 @@ class Handler(SimpleHTTPRequestHandler):
             self._handle_runtime_state()
         elif RCON_ENABLED and parsed.path == '/api/world-state':
             self._handle_world_state()
+        elif RCON_ENABLED and parsed.path == '/api/plugins':
+            self._handle_plugins()
         elif RCON_ENABLED and parsed.path == '/api/system':
             self._handle_system()
         else:
@@ -1453,6 +1500,26 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(200, {'success': True, **state})
         except Exception as e:
             self._json(500, {'success': False, 'error': str(e)})
+
+    def _handle_plugins(self):
+        data = self._read_json_body()
+        if data is None:
+            return
+
+        authed, error, _ = authenticate_request(data)
+        if not authed:
+            self._json(403, {'success': False, 'error': error})
+            return
+
+        if str(data.get('action', 'list')).strip().lower() != 'list':
+            self._json(400, {'success': False, 'error': 'invalid action'})
+            return
+        try:
+            self._json(200, {'success': True, **plugin_inventory()})
+        except RepositoryError as error:
+            self._json(500, {'success': False, 'error': str(error)})
+        except OSError as error:
+            self._json(500, {'success': False, 'error': str(error)})
 
     def _handle_runtime_state(self):
         data = self._read_json_body(allow_empty=True)

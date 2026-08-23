@@ -970,7 +970,20 @@
   "dialog.teleportPointDescription": "Safely teleports the player near “{point}” using spreadplayers so they land on nearby terrain.",
   "dialog.structureDescription": "The search results for the coordinates you entered appear here. To change the center point, choose Search again.",
   "card.structureResultsEmpty": "Choose Search nearby to display structure coordinates within the current range.",
-  "action.openSeedMap": "Open Seed Map"
+  "action.openSeedMap": "Open Seed Map",
+  "status.plugin.title": "Plugin repository",
+  "status.plugin.note": "Repository state for the next Paper start. Bundled and persistent plugin packages are shown for the active Minecraft version.",
+  "status.plugin.login": "Log in to view the plugin repository.",
+  "status.plugin.version": "MC {version}",
+  "status.plugin.pending": "Plugin changes are pending for the next Paper start on Minecraft {version}.",
+  "status.plugin.restart": "Restart Paper",
+  "status.plugin.empty": "No plugin packages are present in this repository.",
+  "status.plugin.package": "Package",
+  "status.plugin.state": "Next start",
+  "status.plugin.size": "Size",
+  "status.plugin.modified": "Modified",
+  "status.plugin.enabled": "Enabled",
+  "status.plugin.disabled": "Disabled"
 };
   var zhCN = {
   "document.surface.adminhtml.l6.c21": "EaglercraftX 管理台",
@@ -1935,7 +1948,20 @@
   "dialog.teleportPointDescription": "使用 spreadplayers 将玩家安全传送到“{point}”附近的地表。",
   "dialog.structureDescription": "这里会显示你输入坐标后的搜索结果。需要更换中心点时，请选择“重新搜索”。",
   "card.structureResultsEmpty": "点击“搜索附近”后，这里会显示当前范围内的结构坐标列表。",
-  "action.openSeedMap": "打开 Seed Map"
+  "action.openSeedMap": "打开 Seed Map",
+  "status.plugin.title": "插件仓库",
+  "status.plugin.note": "这里显示当前 Minecraft 版本在下一次 Paper 启动时使用的插件仓库状态，包含内置和持久化插件包。",
+  "status.plugin.login": "登录后查看插件仓库。",
+  "status.plugin.version": "MC {version}",
+  "status.plugin.pending": "Minecraft {version} 存在待重启插件变更。",
+  "status.plugin.restart": "重启 Paper",
+  "status.plugin.empty": "该仓库暂无插件包。",
+  "status.plugin.package": "插件包",
+  "status.plugin.state": "下次启动",
+  "status.plugin.size": "大小",
+  "status.plugin.modified": "修改时间",
+  "status.plugin.enabled": "启用",
+  "status.plugin.disabled": "停用"
 };
   var locales = {
     en: { id: 'en', label: 'English', messages: en },

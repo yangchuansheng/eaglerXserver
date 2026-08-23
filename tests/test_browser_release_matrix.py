@@ -31,6 +31,10 @@ class MockAdminServer:
         self.token = secrets.token_urlsafe(24)
         self.raw_response = fixture_text(32, 32, 70, 105, 120, 116, 117, 114, 101, 32, 114, 97, 119, 32, 111, 117, 116, 112, 117, 116, 10, 85, 110, 105, 99, 111, 100, 101, 32, 10003, 32, 60, 111, 112, 97, 113, 117, 101, 32, 118, 97, 108, 117, 101, 62, 32, 32)
         self.controlled_error = fixture_text(70, 105, 120, 116, 117, 114, 101, 32, 98, 97, 99, 107, 101, 110, 100, 32, 101, 114, 114, 111, 114, 58, 32, 60, 114, 101, 99, 111, 118, 101, 114, 121, 45, 114, 101, 113, 117, 105, 114, 101, 100, 62, 32, 10003)
+        self.plugin_entries = [
+            {'filename': 'FixturePlugin.jar', 'enabled': True, 'size': 4096, 'modified_at': '2026-08-23T01:02:03Z'},
+            {'filename': 'DisabledPlugin.jar', 'enabled': False, 'size': 2048, 'modified_at': '2026-08-22T01:02:03Z'},
+        ]
         self.records = []
         self.server = None
         self.thread = None
@@ -109,7 +113,7 @@ class MockAdminServer:
                     return
                 if route not in {
                     '/api/rcon', '/api/config', '/api/world-state', '/api/runtime-state',
-                    '/api/seed', '/api/structures', '/api/player-location',
+                    '/api/seed', '/api/structures', '/api/player-location', '/api/plugins',
                 }:
                     self.json(404, {'success': False, 'error': 'not found'})
                     return
@@ -140,6 +144,15 @@ class MockAdminServer:
                         }})
                     else:
                         self.json(200, {'success': True, 'updated': payload.get('updates', {}), 'message': 'Fixture configuration saved'})
+                    return
+                if route == '/api/plugins':
+                    self.json(200, {
+                        'success': True,
+                        'minecraft_version': '1.8',
+                        'entries': fixture.plugin_entries,
+                        'pending_restart': True,
+                        'upload_limit': 64 * 1024 * 1024,
+                    })
                     return
                 if route == '/api/world-state':
                     self.json(200, {'success': True, 'world': 'fixture-world', 'servertime': 6000, 'hasStorm': False, 'isThundering': False, 'timestamp': 1700000000000})
@@ -372,13 +385,13 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 self.emit_evidence(root, stage, 'en', '/admin')
                 stage = 'authenticate'
                 browser.batch(stage, [['fill', '#modal-pw', server.fixture_password], ['click', '#modal-btns .btn-ok'], ['wait', '1200'], ['snapshot', '-i']])
-                browser.check(stage, "document.querySelector('#players').innerText.includes('FixtureAlex') && document.querySelector('#world-info').innerText.includes('1.8.8') && document.querySelector('#cfg-motd').value === 'Fixture MOTD'")
-                for route in ('/api/login', '/api/rcon', '/api/world-state', '/api/runtime-state', '/api/config', '/api/seed'):
+                browser.check(stage, "document.querySelector('#players').innerText.includes('FixtureAlex') && document.querySelector('#world-info').innerText.includes('1.8.8') && document.querySelector('#cfg-motd').value === 'Fixture MOTD' && document.querySelector('#plugin-version').textContent === 'MC 1.8' && document.querySelector('#plugin-list').textContent.includes('FixturePlugin.jar') && document.querySelector('#plugin-list').textContent.includes('DisabledPlugin.jar') && !document.querySelector('#plugin-restart-banner').classList.contains('hidden')")
+                for route in ('/api/login', '/api/rcon', '/api/world-state', '/api/runtime-state', '/api/config', '/api/seed', '/api/plugins'):
                     self.assert_recorded(server, route)
                 self.emit_evidence(root, stage, 'en', '/api/login')
                 stage = 'locale-persist'
                 browser.batch(stage, [['select', '#locale-select', 'zh-CN'], ['snapshot', '-i']])
-                browser.check(stage, "document.documentElement.lang === 'zh-CN' && localStorage.getItem('eaglerx_admin_locale') === 'zh-CN' && document.querySelector('#locale-select').value === 'zh-CN' && document.querySelector('#ver-tag').textContent.includes('RCON:25575') && document.querySelector('#seedmap-spawn').textContent.includes('搜索完成后会显示世界出生点')")
+                browser.check(stage, "document.documentElement.lang === 'zh-CN' && localStorage.getItem('eaglerx_admin_locale') === 'zh-CN' && document.querySelector('#locale-select').value === 'zh-CN' && document.querySelector('#ver-tag').textContent.includes('RCON:25575') && document.querySelector('#seedmap-spawn').textContent.includes('搜索完成后会显示世界出生点') && document.querySelector('#plugin-title').textContent === '插件仓库' && document.querySelector('#plugin-list').textContent.includes('启用') && document.querySelector('#plugin-list').textContent.includes('停用') && document.querySelector('#plugin-restart-text').textContent.includes('待重启插件变更')")
                 browser.batch(stage, [['reload'], ['wait', '500'], ['snapshot', '-i']])
                 browser.check(stage, "document.documentElement.lang === 'zh-CN' && document.querySelector('#locale-select').value === 'zh-CN'")
                 browser.check(stage, "document.querySelector('#hero-connection').textContent.includes('已连接') && document.querySelector('#world-info').textContent.includes('世界') && document.querySelector('#players').textContent.includes('FixtureAlex')")

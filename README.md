@@ -76,6 +76,31 @@ docker run -d \
 
 并行运行两个版本时，为每个容器配置独立挂载目录和宿主机端口，例如第二个容器使用 `-p 5300:5200 -p 127.0.0.1:5301:5201`。
 
+## 插件仓库持久化
+
+入口脚本为当前版本创建独立的 `plugins-1.8` 或 `plugins-1.12` 仓库。仓库首次启动时接收镜像内置的插件包和插件数据，随后以仓库内容作为 Paper 下一次启动的插件状态；仓库标记完成后，后续镜像更新保留管理员已经移除或调整的条目。
+
+完整运行目录挂载会自动持久化仓库：
+
+```bash
+docker run -d \
+  -v /data/eagler-1.12:/eaglerX-1.8-server \
+  -e MINECRAFT_VERSION=1.12 \
+  registry.cn-hangzhou.aliyuncs.com/chenxuan/eaglerx1.8server:2.1
+```
+
+需要单独挂载数据目录时，设置 `PERSISTENT_DATA_ROOT`。该目录同时保存旧版兼容世界目录和版本隔离插件仓库：
+
+```bash
+docker run -d \
+  -v /data/eagler-1.12-data:/eaglerx-data \
+  -e PERSISTENT_DATA_ROOT=/eaglerx-data \
+  -e MINECRAFT_VERSION=1.12 \
+  registry.cn-hangzhou.aliyuncs.com/chenxuan/eaglerx1.8server:2.1
+```
+
+管理面板的插件仓库卡片展示当前版本、启用/停用状态、文件大小、修改时间和待重启标记。启用/停用状态在下一次 Paper 启动时生效。
+
 ## 管理 API
 
 请求体上限为 64 KiB，读取超时为 10 秒。
@@ -105,6 +130,7 @@ curl -s http://127.0.0.1:5201/api/rcon \
 |------|--------|------|
 | `MINECRAFT_VERSION` | 必填 | `1.8` 或 `1.12` |
 | `RCON_PASSWORD` | 空 | 设置后启用 RCON 与管理 API |
+| `PERSISTENT_DATA_ROOT` | `${APP_DIR}/server-data` | 独立持久化世界与版本隔离插件仓库的目录；`SERVER_DATA_DIR` 作为兼容别名 |
 | `ADMIN_AUTH_TOKEN_TTL` | `28800` | 管理令牌有效期，单位为秒 |
 | `ADMIN_AUTH_SECRET` | 从 RCON 密码派生 | 可选的令牌签名密钥 |
 

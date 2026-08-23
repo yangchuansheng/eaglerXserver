@@ -240,6 +240,49 @@ class StartScriptTests(unittest.TestCase):
             self.assertNotEqual(0, result.returncode)
             self.assertEqual('keep me', active_path.read_text(encoding='utf-8'))
 
+    def test_startup_initializes_and_activates_persistent_plugin_repository(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            app_dir = root / 'app'
+            server_dir = app_dir / 'server-1.8'
+            (server_dir / 'plugins' / 'ExamplePlugin').mkdir(parents=True)
+            (server_dir / 'plugins' / 'Example.jar').write_bytes(b'bundled plugin')
+            (server_dir / 'plugins' / 'ExamplePlugin' / 'config.yml').write_text('configured', encoding='utf-8')
+            (server_dir / 'server.properties').write_text('level-name=world\n', encoding='utf-8')
+            (app_dir / 'web-1.8').mkdir(parents=True)
+            (app_dir / 'bungee').mkdir(parents=True)
+            (app_dir / 'bungee' / 'run.sh').write_text('#!/bin/sh\n', encoding='utf-8')
+            (app_dir / 'script').mkdir(parents=True)
+            (app_dir / 'script' / 'http_server.py').write_text('#!/usr/bin/env python3\n', encoding='utf-8')
+            shutil.copy2(ROOT / 'script' / 'plugin_repository.py', app_dir / 'script' / 'plugin_repository.py')
+            fake_bin = root / 'bin'
+            fake_bin.mkdir()
+            fake_tmux = fake_bin / 'tmux'
+            fake_tmux.write_text('#!/bin/sh\nexit 1\n', encoding='utf-8')
+            fake_tmux.chmod(0o755)
+            data_root = root / 'persistent'
+            env = os.environ.copy()
+            env.update({
+                'APP_DIR': str(app_dir),
+                'IMAGE_APP_DIR': str(app_dir),
+                'MINECRAFT_VERSION': '1.8',
+                'RCON_PASSWORD': '',
+                'PERSISTENT_DATA_ROOT': str(data_root),
+                'PATH': str(fake_bin) + os.pathsep + env.get('PATH', ''),
+            })
+            result = subprocess.run(
+                [str(START_SCRIPT)], cwd=ROOT, env=env,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, timeout=10, check=False,
+            )
+            repository = data_root / 'plugins-1.8'
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn('[plugins] repository initialized', result.stdout)
+            self.assertTrue((repository / '.eaglerx-plugin-repository').is_file())
+            self.assertTrue((server_dir / 'plugins').is_symlink())
+            self.assertEqual(b'bundled plugin', (repository / 'enabled' / 'Example.jar').read_bytes())
+            self.assertEqual('configured', (repository / 'enabled' / 'ExamplePlugin' / 'config.yml').read_text(encoding='utf-8'))
+
 
 @unittest.skipUnless(shutil.which('tmux'), 'tmux is required')
 class TmuxLifecycleTests(unittest.TestCase):

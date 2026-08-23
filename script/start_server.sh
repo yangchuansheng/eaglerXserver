@@ -62,7 +62,7 @@ safe_link_dir() {
         fi
         rmdir "${target}"
     fi
-    ln -sfnT "${source}" "${target}"
+    ln -sfn "${source}" "${target}"
 }
 
 read_server_property() {
@@ -86,6 +86,21 @@ PY
 safe_link_dir "${WEB_DIR}" "${ACTIVE_WEB_DIR}"
 safe_link_dir "${SERVER_DIR}" "${ACTIVE_SERVER_DIR}"
 echo "[start] web/ -> web-${VERSION}, server/ -> server-${VERSION}"
+
+# The configured data root is shared by the full-runtime mount and the legacy
+# world-only mount. Each selected Minecraft version gets an isolated plugin
+# repository beneath it.
+PERSISTENT_DATA_ROOT="${PERSISTENT_DATA_ROOT:-${SERVER_DATA_DIR:-${APP_DIR}/server-data}}"
+PLUGIN_REPOSITORY_DIR="${PERSISTENT_DATA_ROOT}/plugins-${VERSION}"
+python3 "${APP_DIR}/script/plugin_repository.py" init \
+    --source "${ACTIVE_SERVER_DIR}/plugins" \
+    --repository "${PLUGIN_REPOSITORY_DIR}" \
+    --version "${VERSION}"
+python3 "${APP_DIR}/script/plugin_repository.py" activate \
+    --source "${ACTIVE_SERVER_DIR}/plugins" \
+    --repository "${PLUGIN_REPOSITORY_DIR}" \
+    --version "${VERSION}"
+echo "[start] plugin repository ready for Minecraft ${VERSION}"
 
 echo -e "#By changing the setting below to TRUE you are indicating your agreement to our EULA (https://account.mojang.com/documents/minecraft_eula).\n#$(date)\neula=true" > "${ACTIVE_SERVER_DIR}/eula.txt"
 
@@ -128,7 +143,7 @@ fi
 
 # Optional legacy world-only persistence. Full-dir bind mount is preferred:
 #   -v /host/eaglerX-1.8-server:/eaglerX-1.8-server
-SERVER_DATA_DIR="${SERVER_DATA_DIR:-${APP_DIR}/server-data}"
+SERVER_DATA_DIR="${PERSISTENT_DATA_ROOT}"
 LEVEL_NAME="$(read_server_property "level-name")"
 LEVEL_NAME="${LEVEL_NAME:-world}"
 if [ -d "${SERVER_DATA_DIR}" ] && { [ -e "${SERVER_DATA_DIR}/${LEVEL_NAME}" ] || [ -e "${SERVER_DATA_DIR}/world" ]; }; then
@@ -148,7 +163,7 @@ if [ -d "${SERVER_DATA_DIR}" ] && { [ -e "${SERVER_DATA_DIR}/${LEVEL_NAME}" ] ||
             echo "[start] WARN: skip legacy mount for ${target_name}; target is a real directory"
             return 0
         fi
-        ln -sfnT "${source_path}" "${ACTIVE_SERVER_DIR}/${target_name}"
+        ln -sfn "${source_path}" "${ACTIVE_SERVER_DIR}/${target_name}"
     }
     link_world_dir "${LEVEL_NAME}" "world" "${LEVEL_NAME}"
     link_world_dir "${LEVEL_NAME}_nether" "world_nether" "${LEVEL_NAME}_nether"

@@ -1392,5 +1392,16 @@ body.motion-enabled .reveal-item.is-visible { opacity: 1; transform: none; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 
+.plugin-restart-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0; padding: 10px 12px; border: 1px solid rgba(242,201,76,.36); border-radius: 10px; color: var(--gold); background: rgba(242,201,76,.08); font-size: 12px; }
+.plugin-restart-banner.hidden { display: none; }
+.plugin-table { display: grid; gap: 2px; overflow-x: auto; }
+.plugin-row { display: grid; grid-template-columns: minmax(150px, 1.4fr) 90px minmax(84px, .7fr) minmax(150px, 1fr); align-items: center; gap: 10px; min-width: 520px; padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,.035); font-size: 12px; }
+.plugin-row.plugin-header { color: var(--text-dim); background: transparent; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.plugin-name { overflow: hidden; color: var(--text); font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.plugin-state { color: var(--accent); font-weight: 800; }
+.plugin-state.disabled { color: var(--text-dim); }
+.plugin-meta { color: var(--text-dim); }
+@media (max-width: 520px) { .plugin-restart-banner { align-items: stretch; flex-direction: column; }.plugin-restart-banner .pill-btn { width: 100%; min-height: 38px; }.plugin-row { min-width: 0; grid-template-columns: minmax(0, 1fr) auto; }.plugin-row > :nth-child(3), .plugin-row > :nth-child(4) { display: none; } }
+
 @keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
 .card-loading > * { opacity: .35; pointer-events: none; user-select: none; }.card-loading::after { content: ""; position: absolute; inset: 0; border-radius: 12px; background: linear-gradient(90deg, transparent 0%, rgba(155,231,127,.08) 40%, rgba(155,231,127,.15) 50%, rgba(155,231,127,.08) 60%, transparent 100%); background-size: 800px 100%; animation: shimmer 1.8s infinite linear; pointer-events: none; }
