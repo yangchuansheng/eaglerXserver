@@ -184,6 +184,137 @@ class PluginRepositoryTests(unittest.TestCase):
             self.assertEqual(b'bundled', (repository / 'disabled' / 'Bundled.jar').read_bytes())
             self.assertFalse((repository / 'enabled' / 'Bundled.jar').exists())
 
+    @staticmethod
+    def make_plugin_archive(payload=b'plugin'):
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, 'w') as archive:
+            archive.writestr('plugin.yml', 'name: FixturePlugin\nmain: fixture.Main\nversion: 1\n')
+            archive.writestr('fixture/Main.class', payload)
+        return stream.getvalue()
+
+    def test_delete_retains_data_and_allows_same_name_reinstallation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = self.make_source(root, 'Retained.jar', b'old-package')
+            repository = root / 'data' / 'plugins-1.8'
+            plugin_repository.init_repository(source, repository, '1.8')
+            data_dir = repository / 'enabled' / 'ExamplePlugin'
+            database = data_dir / 'state.db'
+            database.write_bytes(b'\x00retained-business-state\xff')
+            config_bytes = (data_dir / 'config.yml').read_bytes()
+            database_bytes = database.read_bytes()
+
+            removed = plugin_repository.delete_plugin(repository, 'Retained.jar', '1.8', True)
+            self.assertTrue(removed['data_retained'])
+            self.assertTrue(removed['enabled'])
+            self.assertFalse((repository / 'enabled' / 'Retained.jar').exists())
+            self.assertEqual(config_bytes, (data_dir / 'config.yml').read_bytes())
+            self.assertEqual(database_bytes, database.read_bytes())
+            self.assertTrue(plugin_repository.pending_restart(repository))
+
+            temporary = plugin_repository.create_upload_temp(repository)
+            temporary.write_bytes(self.make_plugin_archive(b'reinstalled'))
+            plugin_repository.publish_uploaded_plugin(repository, 'Retained.jar', temporary, '1.8')
+            with zipfile.ZipFile(repository / 'enabled' / 'Retained.jar') as archive:
+                self.assertEqual(b'reinstalled', archive.read('fixture/Main.class'))
+            self.assertEqual(config_bytes, (data_dir / 'config.yml').read_bytes())
+            self.assertEqual(database_bytes, database.read_bytes())
+
+    def test_delete_disabled_package_retains_data(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = self.make_source(root, 'Disabled.jar', b'disabled-package')
+            repository = root / 'data' / 'plugins-1.12'
+            plugin_repository.init_repository(source, repository, '1.12')
+            data_file = repository / 'enabled' / 'ExamplePlugin' / 'config.yml'
+            original_data = data_file.read_bytes()
+            plugin_repository.transition_plugin(repository, 'Disabled.jar', False, '1.12', True)
+            plugin_repository.clear_pending_restart(repository)
+
+            removed = plugin_repository.delete_plugin(repository, 'Disabled.jar', '1.12', False)
+            self.assertFalse(removed['enabled'])
+            self.assertFalse((repository / 'disabled' / 'Disabled.jar').exists())
+            self.assertEqual(original_data, data_file.read_bytes())
+            self.assertTrue(plugin_repository.pending_restart(repository))
+
+    def test_delete_rejects_missing_stale_conflicting_and_unsafe_entries(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = self.make_source(root, 'Boundary.jar', b'boundary-package')
+            repository = root / 'data' / 'plugins-1.8'
+            plugin_repository.init_repository(source, repository, '1.8')
+            package = repository / 'enabled' / 'Boundary.jar'
+            original = package.read_bytes()
+
+            with self.assertRaises(plugin_repository.PluginNotFoundError):
+                plugin_repository.delete_plugin(repository, 'Missing.jar', '1.8')
+            with self.assertRaises(plugin_repository.PluginStateConflictError):
+                plugin_repository.delete_plugin(repository, 'Boundary.jar', '1.8', False)
+            for unsafe in ('../Boundary.jar', 'nested/Boundary.jar', '.pending-restart', 'enabled'):
+                with self.subTest(unsafe=unsafe), self.assertRaises(plugin_repository.PluginFilenameError):
+                    plugin_repository.delete_plugin(repository, unsafe, '1.8')
+
+            (repository / 'disabled' / 'Boundary.jar').write_bytes(b'conflict')
+            with self.assertRaises(plugin_repository.PluginDestinationConflictError):
+                plugin_repository.delete_plugin(repository, 'Boundary.jar', '1.8', True)
+            self.assertEqual(original, package.read_bytes())
+            (repository / 'disabled' / 'Boundary.jar').unlink()
+
+            directory = repository / 'enabled' / 'Directory.jar'
+            directory.mkdir()
+            with self.assertRaises(plugin_repository.PluginDestinationConflictError):
+                plugin_repository.delete_plugin(repository, 'Directory.jar', '1.8')
+            directory.rmdir()
+
+            outside = root / 'outside.jar'
+            outside.write_bytes(b'outside')
+            symlink = repository / 'enabled' / 'Symlink.jar'
+            symlink.symlink_to(outside)
+            with self.assertRaises(plugin_repository.RepositoryError):
+                plugin_repository.delete_plugin(repository, 'Symlink.jar', '1.8')
+            self.assertEqual(b'outside', outside.read_bytes())
+            symlink.unlink()
+
+    def test_delete_rolls_back_when_pending_marker_persistence_fails(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = self.make_source(root, 'Rollback.jar', b'rollback-package')
+            repository = root / 'data' / 'plugins-1.8'
+            plugin_repository.init_repository(source, repository, '1.8')
+            with mock.patch.object(plugin_repository, '_mark_pending_restart_locked', side_effect=plugin_repository.RepositoryError('disk full')):
+                with self.assertRaises(plugin_repository.RepositoryError):
+                    plugin_repository.delete_plugin(repository, 'Rollback.jar', '1.8', True)
+            self.assertEqual(b'rollback-package', (repository / 'enabled' / 'Rollback.jar').read_bytes())
+            self.assertFalse(plugin_repository.pending_restart(repository))
+
+    def test_concurrent_deletes_have_one_result_and_retain_data(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = self.make_source(root, 'ConcurrentDelete.jar', b'concurrent-package')
+            repository = root / 'data' / 'plugins-1.8'
+            plugin_repository.init_repository(source, repository, '1.8')
+            data_file = repository / 'enabled' / 'ExamplePlugin' / 'config.yml'
+            original_data = data_file.read_bytes()
+            outcomes = []
+
+            def delete():
+                try:
+                    outcomes.append(plugin_repository.delete_plugin(repository, 'ConcurrentDelete.jar', '1.8', True)['data_retained'])
+                except plugin_repository.PluginLifecycleError as error:
+                    outcomes.append(error.code)
+
+            threads = [threading.Thread(target=delete) for _ in range(2)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=5)
+
+            self.assertEqual(1, outcomes.count(True))
+            self.assertEqual(1, outcomes.count('missing_resource'))
+            self.assertFalse((repository / 'enabled' / 'ConcurrentDelete.jar').exists())
+            self.assertEqual(original_data, data_file.read_bytes())
+            self.assertTrue(plugin_repository.pending_restart(repository))
+
 
 class PluginApiTests(unittest.TestCase):
     @classmethod
@@ -271,6 +402,59 @@ class PluginApiTests(unittest.TestCase):
             unsafe = self.make_handler({'action': 'enable', 'filename': '../A.jar', 'token': token})
             unsafe._handle_plugins()
             self.assertEqual((400, 'invalid_filename'), (unsafe.responses[0][0], unsafe.responses[0][1]['code']))
+
+    def test_delete_api_requires_auth_preserves_data_and_reports_pending_restart(self):
+        server = self.http_server
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / 'source'
+            source.mkdir()
+            (source / 'Enabled.jar').write_bytes(b'enabled-package')
+            (source / 'Disabled.jar').write_bytes(b'disabled-package')
+            (source / 'PluginData').mkdir()
+            (source / 'PluginData' / 'config.yml').write_bytes(b'operator config')
+            repository = root / 'plugins-1.8'
+            plugin_repository.init_repository(source, repository, '1.8')
+            server.MINECRAFT_VERSION = '1.8'
+            server.PLUGIN_REPOSITORY_ROOT = str(repository)
+            token, _ = server.create_auth_token()
+
+            unauthenticated = self.make_handler({'action': 'delete', 'filename': 'Enabled.jar'})
+            unauthenticated._handle_plugins()
+            self.assertEqual(403, unauthenticated.responses[0][0])
+
+            stale = self.make_handler({
+                'action': 'delete', 'filename': 'Enabled.jar', 'expected_enabled': False, 'token': token,
+            })
+            stale._handle_plugins()
+            self.assertEqual((409, 'state_conflict'), (stale.responses[0][0], stale.responses[0][1]['code']))
+            self.assertTrue((repository / 'enabled' / 'Enabled.jar').is_file())
+
+            enabled = self.make_handler({
+                'action': 'delete', 'filename': 'Enabled.jar', 'expected_enabled': True, 'token': token,
+            })
+            enabled._handle_plugins()
+            status, body, _ = enabled.responses[0]
+            self.assertEqual(200, status)
+            self.assertEqual('delete', body['action'])
+            self.assertTrue(body['data_retained'])
+            self.assertTrue(body['restart_required'])
+            self.assertFalse((repository / 'enabled' / 'Enabled.jar').exists())
+            self.assertEqual(b'operator config', (repository / 'enabled' / 'PluginData' / 'config.yml').read_bytes())
+            self.assertTrue(plugin_repository.pending_restart(repository))
+
+            missing = self.make_handler({'action': 'delete', 'filename': 'Enabled.jar', 'token': token})
+            missing._handle_plugins()
+            self.assertEqual((404, 'missing_resource'), (missing.responses[0][0], missing.responses[0][1]['code']))
+
+            plugin_repository.transition_plugin(repository, 'Disabled.jar', False, '1.8', True)
+            plugin_repository.clear_pending_restart(repository)
+            disabled = self.make_handler({
+                'action': 'delete', 'filename': 'Disabled.jar', 'expected_enabled': False, 'token': token,
+            })
+            disabled._handle_plugins()
+            self.assertEqual(200, disabled.responses[0][0])
+            self.assertFalse((repository / 'disabled' / 'Disabled.jar').exists())
 
 
 class PluginUploadTests(unittest.TestCase):

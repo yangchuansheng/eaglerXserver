@@ -972,10 +972,10 @@
   "card.structureResultsEmpty": "Choose Search nearby to display structure coordinates within the current range.",
   "action.openSeedMap": "Open Seed Map",
   "status.plugin.title": "Plugin repository",
-  "status.plugin.note": "Repository state for the next Paper start. Bundled and persistent plugin packages are shown for the active Minecraft version.",
+  "status.plugin.note": "Repository state for the next Paper start. The currently loaded plugin code may continue running until Paper restarts. Bundled and persistent plugin packages are shown for the active Minecraft version.",
   "status.plugin.login": "Log in to view the plugin repository.",
   "status.plugin.version": "MC {version}",
-  "status.plugin.pending": "Plugin changes are pending for the next Paper start on Minecraft {version}.",
+  "status.plugin.pending": "Plugin changes are pending for the next Paper start on Minecraft {version}. The currently loaded code may continue running until Paper restarts.",
   "status.plugin.restart": "Restart Paper",
   "status.plugin.empty": "No plugin packages are present in this repository.",
   "status.plugin.package": "Package",
@@ -1002,7 +1002,14 @@
   "status.plugin.transitionFailed": "Plugin state update failed.",
   "status.plugin.missing": "Plugin package is unavailable.",
   "status.plugin.stale": "Plugin state changed; repository refreshed.",
-  "status.plugin.destinationConflict": "Plugin state has a destination conflict; repository refreshed."
+  "status.plugin.destinationConflict": "Plugin state has a destination conflict; repository refreshed.",
+  "status.plugin.deleteKicker": "Destructive plugin action",
+  "status.plugin.deleteTitle": "Delete {filename}?",
+  "status.plugin.deleteDescription": "Delete the package artifact for {filename}. Plugin data, configuration, and databases will be retained. The currently loaded code may continue running until Paper restarts.",
+  "status.plugin.deleteConfirm": "Delete package",
+  "status.plugin.deletePreview": "delete package {filename}",
+  "status.plugin.deleteAction": "Delete package",
+  "status.plugin.deleteSuccess": "Removed {filename}; plugin data was retained. Restart Paper to stop currently loaded code."
 };
   var zhCN = {
   "document.surface.adminhtml.l6.c21": "EaglercraftX 管理台",
@@ -1969,10 +1976,10 @@
   "card.structureResultsEmpty": "点击“搜索附近”后，这里会显示当前范围内的结构坐标列表。",
   "action.openSeedMap": "打开 Seed Map",
   "status.plugin.title": "插件仓库",
-  "status.plugin.note": "这里显示当前 Minecraft 版本在下一次 Paper 启动时使用的插件仓库状态，包含内置和持久化插件包。",
+  "status.plugin.note": "这里显示当前 Minecraft 版本在下一次 Paper 启动时使用的插件仓库状态。当前已加载的插件代码可能会继续运行，直到 Paper 重启。包含内置和持久化插件包。",
   "status.plugin.login": "登录后查看插件仓库。",
   "status.plugin.version": "MC {version}",
-  "status.plugin.pending": "Minecraft {version} 存在待重启插件变更。",
+  "status.plugin.pending": "Minecraft {version} 存在待重启插件变更。当前已加载代码可能会继续运行，直到 Paper 重启。",
   "status.plugin.restart": "重启 Paper",
   "status.plugin.empty": "该仓库暂无插件包。",
   "status.plugin.package": "插件包",
@@ -1999,7 +2006,14 @@
   "status.plugin.transitionFailed": "插件状态更新失败。",
   "status.plugin.missing": "插件包已不可用。",
   "status.plugin.stale": "插件状态已变化，仓库已刷新。",
-  "status.plugin.destinationConflict": "插件目标状态冲突，仓库已刷新。"
+  "status.plugin.destinationConflict": "插件目标状态冲突，仓库已刷新。",
+  "status.plugin.deleteKicker": "危险插件操作",
+  "status.plugin.deleteTitle": "删除 {filename}？",
+  "status.plugin.deleteDescription": "将删除插件包文件 {filename}。插件数据、配置和数据库会保留。当前已加载代码可能会继续运行，直到 Paper 重启。",
+  "status.plugin.deleteConfirm": "删除插件包",
+  "status.plugin.deletePreview": "删除插件包 {filename}",
+  "status.plugin.deleteAction": "删除插件包",
+  "status.plugin.deleteSuccess": "已删除 {filename}；插件数据已保留。重启 Paper 后停止当前已加载代码。"
 };
   var locales = {
     en: { id: 'en', label: 'English', messages: en },

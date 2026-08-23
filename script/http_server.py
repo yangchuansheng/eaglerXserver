@@ -40,6 +40,7 @@ from plugin_repository import (  # noqa: E402
     UPLOAD_LIMIT as PLUGIN_UPLOAD_LIMIT,
     clear_pending_restart,
     create_upload_temp,
+    delete_plugin,
     list_repository,
     pending_restart,
     publish_uploaded_plugin,
@@ -1541,7 +1542,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         action = str(data.get('action', 'list')).strip().lower()
-        if action in ('enable', 'disable'):
+        if action in ('enable', 'disable', 'delete'):
             filename = data.get('filename', data.get('plugin', ''))
             if not isinstance(filename, str) or not filename.strip():
                 self._json(400, {'success': False, 'error': 'filename required', 'code': 'filename_required'})
@@ -1561,13 +1562,21 @@ class Handler(SimpleHTTPRequestHandler):
                 return
 
             try:
-                plugin = transition_plugin(
-                    plugin_repository_root(),
-                    filename,
-                    action == 'enable',
-                    MINECRAFT_VERSION,
-                    expected_enabled=expected_enabled,
-                )
+                if action == 'delete':
+                    plugin = delete_plugin(
+                        plugin_repository_root(),
+                        filename,
+                        MINECRAFT_VERSION,
+                        expected_enabled=expected_enabled,
+                    )
+                else:
+                    plugin = transition_plugin(
+                        plugin_repository_root(),
+                        filename,
+                        action == 'enable',
+                        MINECRAFT_VERSION,
+                        expected_enabled=expected_enabled,
+                    )
             except PluginFilenameError as lifecycle_error:
                 self._json(400, {
                     'success': False,
@@ -1608,6 +1617,7 @@ class Handler(SimpleHTTPRequestHandler):
                 'enabled': plugin['enabled'],
                 'pending_restart': True,
                 'restart_required': True,
+                'data_retained': bool(plugin.get('data_retained', False)),
             })
             return
 

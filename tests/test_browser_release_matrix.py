@@ -179,7 +179,7 @@ class MockAdminServer:
                     return
                 if route == '/api/plugins':
                     action = str(payload.get('action', 'list')).strip().lower()
-                    if action in ('enable', 'disable'):
+                    if action in ('enable', 'disable', 'delete'):
                         filename = str(payload.get('filename', ''))
                         entry = next((item for item in fixture.plugin_entries if item.get('filename') == filename), None)
                         if not entry:
@@ -192,6 +192,18 @@ class MockAdminServer:
                         expected = payload.get('expected_enabled')
                         if isinstance(expected, bool) and entry['enabled'] != expected:
                             self.json(409, {'success': False, 'error': 'plugin state changed', 'code': 'state_conflict'})
+                            return
+                        if action == 'delete':
+                            fixture.plugin_entries.remove(entry)
+                            fixture.plugin_pending_restart = True
+                            self.json(200, {
+                                'success': True,
+                                'action': action,
+                                'filename': filename,
+                                'plugin': entry,
+                                'data_retained': True,
+                                'pending_restart': True,
+                            })
                             return
                         target = action == 'enable'
                         if entry['enabled'] == target:
@@ -494,6 +506,22 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 browser.run(stage, 'eval', "(() => { const button = Array.from(document.querySelectorAll('.plugin-action')).find((item) => item.dataset.pluginFilename === 'FixturePlugin.jar'); button.click(); return true; })()")
                 browser.run(stage, 'wait', 1000)
                 browser.check(stage, "document.querySelectorAll('.plugin-action').length === 3")
+                browser.run(stage, 'eval', "(() => { const button = Array.from(document.querySelectorAll('.plugin-delete-action')).find((item) => item.dataset.pluginFilename === 'FixturePlugin.jar'); button.click(); return true; })()")
+                browser.run(stage, 'wait', 200)
+                browser.check(stage, "!document.querySelector('#action-overlay').classList.contains('hidden') && document.querySelector('#action-title').textContent.includes('FixturePlugin.jar') && document.querySelector('#action-desc').textContent.includes('Plugin data') && document.querySelector('#action-preview').textContent.includes('FixturePlugin.jar')")
+                browser.run(stage, 'click', '#action-overlay .btn-cancel')
+                browser.check(stage, "document.querySelector('#plugin-list').textContent.includes('FixturePlugin.jar')")
+                browser.run(stage, 'select', '#locale-select', 'zh-CN')
+                browser.run(stage, 'eval', "(() => { const button = Array.from(document.querySelectorAll('.plugin-delete-action')).find((item) => item.dataset.pluginFilename === 'FixturePlugin.jar'); button.click(); return true; })()")
+                browser.run(stage, 'wait', 200)
+                browser.check(stage, "document.querySelector('#action-title').textContent.includes('FixturePlugin.jar') && document.querySelector('#action-desc').textContent.includes('插件数据')")
+                browser.run(stage, 'click', '#action-overlay .btn-cancel')
+                browser.run(stage, 'select', '#locale-select', 'en')
+                browser.run(stage, 'eval', "(() => { const button = Array.from(document.querySelectorAll('.plugin-delete-action')).find((item) => item.dataset.pluginFilename === 'FixturePlugin.jar'); button.click(); return true; })()")
+                browser.run(stage, 'wait', 200)
+                browser.run(stage, 'click', '#action-confirm')
+                browser.run(stage, 'wait', 1000)
+                browser.check(stage, "!document.querySelector('#plugin-list').textContent.includes('FixturePlugin.jar') && document.querySelector('#plugin-upload-status').textContent.includes('Removed FixturePlugin.jar') && !document.querySelector('#plugin-restart-banner').classList.contains('hidden')")
                 self.assert_recorded(server, '/api/plugins')
                 stage = 'plugin-restart-marker'
                 server.restart_failure_next = True

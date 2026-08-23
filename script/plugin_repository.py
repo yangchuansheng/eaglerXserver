@@ -584,6 +584,58 @@ def transition_plugin(repository, filename, enabled, version, expected_enabled=N
 
         return _plugin_metadata(destination, enabled, pending=True)
 
+
+def delete_plugin(repository, filename, version, expected_enabled=None):
+    """Remove one package artifact while retaining every sibling data entry."""
+
+    version = validate_version(version)
+    filename = validate_plugin_filename(filename)
+    if expected_enabled is not None and not isinstance(expected_enabled, bool):
+        raise PluginLifecycleError("expected plugin state must be boolean")
+
+    repository = Path(repository)
+    with operation_lock(repository):
+        paths = _validate_repository_layout(repository, version)
+        matches = _find_plugin_states(paths, filename)
+        if not matches:
+            raise PluginNotFoundError(f"plugin package not found: {filename}")
+        if len(matches) > 1:
+            raise PluginDestinationConflictError(f"plugin package has duplicate repository state: {filename}")
+
+        source_state, source = matches[0]
+        current_enabled = source_state == "enabled"
+        if expected_enabled is not None and current_enabled != expected_enabled:
+            raise PluginStateConflictError(f"plugin package state is stale: {filename}")
+
+        metadata = _plugin_metadata(source, current_enabled, pending=True)
+        temporary = source.parent / f".{source.name}.delete-{os.getpid()}-{uuid.uuid4().hex}"
+        try:
+            os.replace(source, temporary)
+            try:
+                _mark_pending_restart_locked(repository, f"plugin package deleted: {source.name}")
+            except Exception:
+                os.replace(temporary, source)
+                raise
+            try:
+                temporary.unlink()
+            except OSError as error:
+                # Keep the repository coherent if cleanup cannot complete.
+                os.replace(temporary, source)
+                raise PluginLifecycleError("cannot finalize plugin package deletion") from error
+        except PluginLifecycleError:
+            raise
+        except OSError as error:
+            if _lexists(temporary) and not _lexists(source):
+                try:
+                    os.replace(temporary, source)
+                except OSError:
+                    pass
+            raise PluginLifecycleError(f"cannot delete plugin package: {error.strerror or error}") from error
+
+        metadata["data_retained"] = True
+        return metadata
+
+
 def pending_restart(repository):
     paths = repository_paths(repository)
     marker = paths["pending_restart"]

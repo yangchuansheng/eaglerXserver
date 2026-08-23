@@ -511,6 +511,49 @@ async function transitionPlugin(button) {
   }
 }
 
+async function deletePlugin(button) {
+  if (!button || PLUGIN_TRANSITION_IN_FLIGHT || !TOKEN) return;
+  var filename = button.getAttribute('data-plugin-filename') || '';
+  var expectedEnabled = button.getAttribute('data-plugin-enabled') === 'true';
+  if (!filename) return;
+
+  PLUGIN_TRANSITION_IN_FLIGHT = true;
+  try {
+    var confirmed = await showActionDialog({
+      kicker: presentation('status.plugin.deleteKicker'),
+      title: presentation('status.plugin.deleteTitle', { filename: filename }),
+      description: presentation('status.plugin.deleteDescription', { filename: filename }),
+      confirmText: presentation('status.plugin.deleteConfirm'),
+      danger: true,
+      fields: [],
+      previewText: function () { return t('status.plugin.deletePreview', { filename: filename }); }
+    });
+    if (!confirmed) return;
+    button.disabled = true;
+    setPluginUploadStatus(t('status.plugin.transitioning'), '');
+    var d = await pluginRequest({
+      action: 'delete',
+      filename: filename,
+      expected_enabled: expectedEnabled
+    });
+    if (d.success) {
+      setPluginUploadStatus(t('status.plugin.deleteSuccess', { filename: filename }), 'success');
+      await refreshPlugins();
+      return;
+    }
+    if (!isAuthError(d.error)) {
+      setPluginUploadStatus(pluginTransitionError(d), 'error');
+      await refreshPlugins();
+    }
+  } catch (e) {
+    setPluginUploadStatus(t('status.plugin.transitionFailed'), 'error');
+    await refreshPlugins();
+  } finally {
+    PLUGIN_TRANSITION_IN_FLIGHT = false;
+    renderPluginInventory();
+  }
+}
+
 function renderPluginInventory() {
   var title = document.getElementById('plugin-title');
   var note = document.getElementById('plugin-note');
@@ -554,12 +597,15 @@ function renderPluginInventory() {
     var enabled = !!entry.enabled;
     var action = enabled ? 'disable' : 'enable';
     var actionLabel = enabled ? t('status.plugin.disableAction') : t('status.plugin.enableAction');
-    rows.push('<div class="plugin-row"><span class="plugin-name" title="' + escapeHtml(entry.filename || '') + '">' + escapeHtml(entry.filename || '') + '</span><span class="plugin-state' + (enabled ? '' : ' disabled') + '">' + escapeHtml(enabled ? t('status.plugin.enabled') : t('status.plugin.disabled')) + '</span><span class="plugin-meta">' + escapeHtml(formatPluginBytes(entry.size)) + '</span><span class="plugin-meta">' + escapeHtml(formatPluginModified(entry.modified_at || entry.modified_time || entry.mtime)) + '</span><button class="pill-btn plugin-action" type="button" data-plugin-action="' + action + '" data-plugin-filename="' + escapeHtml(entry.filename || '') + '">' + escapeHtml(actionLabel) + '</button></div>');
+    rows.push('<div class="plugin-row"><span class="plugin-name" title="' + escapeHtml(entry.filename || '') + '">' + escapeHtml(entry.filename || '') + '</span><span class="plugin-state' + (enabled ? '' : ' disabled') + '">' + escapeHtml(enabled ? t('status.plugin.enabled') : t('status.plugin.disabled')) + '</span><span class="plugin-meta">' + escapeHtml(formatPluginBytes(entry.size)) + '</span><span class="plugin-meta">' + escapeHtml(formatPluginModified(entry.modified_at || entry.modified_time || entry.mtime)) + '</span><span class="plugin-actions"><button class="pill-btn plugin-action" type="button" data-plugin-action="' + action + '" data-plugin-filename="' + escapeHtml(entry.filename || '') + '">' + escapeHtml(actionLabel) + '</button><button class="pill-btn plugin-delete-action danger-btn" type="button" data-plugin-filename="' + escapeHtml(entry.filename || '') + '" data-plugin-enabled="' + String(enabled) + '">' + escapeHtml(t('status.plugin.deleteAction')) + '</button></span></div>');
   });
   rows.push('</div>');
   list.innerHTML = rows.join('');
   list.querySelectorAll('.plugin-action').forEach(function (button) {
     button.addEventListener('click', function () { transitionPlugin(button); });
+  });
+  list.querySelectorAll('.plugin-delete-action').forEach(function (button) {
+    button.addEventListener('click', function () { deletePlugin(button); });
   });
 }
 
