@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import sys
 import threading
 import re
@@ -234,6 +235,10 @@ def _validate_repository_layout(repository, version=None):
     for key in ("enabled", "disabled"):
         _ensure_real_directory(paths[key], f"plugin repository {key} state")
         _validate_tree(paths[key], f"plugin repository {key} state")
+    for key in ("pending_restart", "lock"):
+        entry = paths[key]
+        if _lexists(entry) and (entry.is_symlink() or not entry.is_file()):
+            raise RepositoryError(f"plugin repository {key} state is not a regular file")
     return paths
 
 
@@ -253,15 +258,25 @@ def operation_lock(repository):
     with lock:
         _ensure_real_directory(repository, "plugin repository")
         lock_path = repository / LOCK_FILENAME
+        lock_fd = None
         try:
-            with lock_path.open("a+", encoding="utf-8") as handle:
+            lock_fd = os.open(os.fspath(lock_path), os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+            if not stat.S_ISREG(os.fstat(lock_fd).st_mode):
+                raise RepositoryError("plugin repository lock is not a regular file")
+            with os.fdopen(lock_fd, "a+", encoding="utf-8") as handle:
+                lock_fd = None
                 fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
                 try:
                     yield
                 finally:
                     fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        except RepositoryError:
+            raise
         except OSError as error:
             raise RepositoryError(f"cannot lock plugin repository: {error.strerror or error}") from error
+        finally:
+            if lock_fd is not None:
+                os.close(lock_fd)
 
 
 def _copy_entry(source, destination):
@@ -335,15 +350,6 @@ def _remove_file(path):
         pass
 
 
-def _find_existing_plugin(repository_paths_data, filename):
-    target_name = filename.casefold()
-    for state in ("enabled", "disabled"):
-        for entry in repository_paths_data[state].iterdir():
-            if entry.name.casefold() == target_name:
-                return entry
-    return None
-
-
 def _find_plugin_states(repository_paths_data, filename):
     """Return matching package entries while preserving their repository state."""
 
@@ -366,22 +372,15 @@ def _plugin_metadata(path, enabled, pending=None):
         "filename": Path(path).name,
         "enabled": bool(enabled),
         "size": stat.st_size,
-        "bytes": stat.st_size,
         "modified_at": modified_at,
-        "modified_time": modified_at,
-        "mtime": stat.st_mtime,
     }
     if pending is not None:
         metadata["pending_restart"] = bool(pending)
     return metadata
 
 
-def _mark_pending_restart_locked(repository, reason):
-    _write_json_atomic(repository_paths(repository)["pending_restart"], {
-        "schema": 1,
-        "reason": str(reason),
-        "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-    })
+def _mark_pending_restart_locked(repository):
+    _write_json_atomic(repository_paths(repository)["pending_restart"], {})
 
 
 def publish_uploaded_plugin(repository, filename, temporary, version):
@@ -401,7 +400,7 @@ def publish_uploaded_plugin(repository, filename, temporary, version):
 
         with operation_lock(repository):
             paths = _validate_repository_layout(repository, version)
-            if _find_existing_plugin(paths, filename) is not None:
+            if _find_plugin_states(paths, filename):
                 raise PluginConflictError("plugin filename already exists")
             target = paths["enabled"] / filename
             if _lexists(target):
@@ -410,7 +409,7 @@ def publish_uploaded_plugin(repository, filename, temporary, version):
                 os.replace(temporary, target)
                 published = True
                 try:
-                    _mark_pending_restart_locked(repository, "plugin package uploaded")
+                    _mark_pending_restart_locked(repository)
                 except Exception:
                     _remove_file(target)
                     published = False
@@ -536,13 +535,10 @@ def list_repository(repository, version):
     return sorted(entries.values(), key=lambda entry: entry["filename"].casefold())
 
 
-def transition_plugin(repository, filename, enabled, version, expected_enabled=None):
-    """Atomically move one package between the enabled and disabled states."""
-
+@contextmanager
+def _locked_plugin(repository, filename, version, expected_enabled=None):
     version = validate_version(version)
     filename = validate_plugin_filename(filename)
-    if not isinstance(enabled, bool):
-        raise PluginLifecycleError("target plugin state must be boolean")
     if expected_enabled is not None and not isinstance(expected_enabled, bool):
         raise PluginLifecycleError("expected plugin state must be boolean")
 
@@ -559,6 +555,16 @@ def transition_plugin(repository, filename, enabled, version, expected_enabled=N
         current_enabled = source_state == "enabled"
         if expected_enabled is not None and current_enabled != expected_enabled:
             raise PluginStateConflictError(f"plugin package state is stale: {filename}")
+        yield paths, source, current_enabled
+
+
+def transition_plugin(repository, filename, enabled, version, expected_enabled=None):
+    """Atomically move one package between the enabled and disabled states."""
+
+    if not isinstance(enabled, bool):
+        raise PluginLifecycleError("target plugin state must be boolean")
+
+    with _locked_plugin(repository, filename, version, expected_enabled) as (paths, source, current_enabled):
         if current_enabled == enabled:
             target_state = "enabled" if enabled else "disabled"
             raise PluginStateConflictError(f"plugin package is already {target_state}: {filename}")
@@ -573,7 +579,7 @@ def transition_plugin(repository, filename, enabled, version, expected_enabled=N
         try:
             os.replace(source, destination)
             try:
-                _mark_pending_restart_locked(repository, f"plugin package {source.name} {'enabled' if enabled else 'disabled'}")
+                _mark_pending_restart_locked(repository)
             except Exception:
                 os.replace(destination, source)
                 raise
@@ -588,31 +594,14 @@ def transition_plugin(repository, filename, enabled, version, expected_enabled=N
 def delete_plugin(repository, filename, version, expected_enabled=None):
     """Remove one package artifact while retaining every sibling data entry."""
 
-    version = validate_version(version)
-    filename = validate_plugin_filename(filename)
-    if expected_enabled is not None and not isinstance(expected_enabled, bool):
-        raise PluginLifecycleError("expected plugin state must be boolean")
-
-    repository = Path(repository)
-    with operation_lock(repository):
-        paths = _validate_repository_layout(repository, version)
-        matches = _find_plugin_states(paths, filename)
-        if not matches:
-            raise PluginNotFoundError(f"plugin package not found: {filename}")
-        if len(matches) > 1:
-            raise PluginDestinationConflictError(f"plugin package has duplicate repository state: {filename}")
-
-        source_state, source = matches[0]
-        current_enabled = source_state == "enabled"
-        if expected_enabled is not None and current_enabled != expected_enabled:
-            raise PluginStateConflictError(f"plugin package state is stale: {filename}")
+    with _locked_plugin(repository, filename, version, expected_enabled) as (_, source, current_enabled):
 
         metadata = _plugin_metadata(source, current_enabled, pending=True)
         temporary = source.parent / f".{source.name}.delete-{os.getpid()}-{uuid.uuid4().hex}"
         try:
             os.replace(source, temporary)
             try:
-                _mark_pending_restart_locked(repository, f"plugin package deleted: {source.name}")
+                _mark_pending_restart_locked(repository)
             except Exception:
                 os.replace(temporary, source)
                 raise
@@ -644,13 +633,6 @@ def pending_restart(repository):
     return marker.is_file()
 
 
-def mark_pending_restart(repository, reason="plugin repository changed"):
-    repository = Path(repository)
-    _validate_repository_layout(repository)
-    with operation_lock(repository):
-        _mark_pending_restart_locked(repository, reason)
-
-
 def clear_pending_restart(repository):
     repository = Path(repository)
     _validate_repository_layout(repository)
@@ -666,26 +648,14 @@ def clear_pending_restart(repository):
 
 def _cli():
     parser = argparse.ArgumentParser(description=__doc__)
-    subparsers = parser.add_subparsers(dest="command", required=True)
-
-    init_parser = subparsers.add_parser("init")
-    init_parser.add_argument("--source", required=True)
-    init_parser.add_argument("--repository", required=True)
-    init_parser.add_argument("--version", required=True)
-
-    activate_parser = subparsers.add_parser("activate")
-    activate_parser.add_argument("--source", required=True)
-    activate_parser.add_argument("--repository", required=True)
-    activate_parser.add_argument("--version", required=True)
-
+    parser.add_argument("--source", required=True)
+    parser.add_argument("--repository", required=True)
+    parser.add_argument("--version", required=True)
     args = parser.parse_args()
     try:
-        if args.command == "init":
-            init_repository(args.source, args.repository, args.version)
-            print(f"[plugins] repository initialized for Minecraft {validate_version(args.version)}")
-        else:
-            activate_repository(args.source, args.repository, args.version)
-            print(f"[plugins] persistent repository active for Minecraft {validate_version(args.version)}")
+        init_repository(args.source, args.repository, args.version)
+        activate_repository(args.source, args.repository, args.version)
+        print(f"[plugins] repository initialized and active for Minecraft {validate_version(args.version)}")
         return 0
     except RepositoryError as error:
         print(f"[plugins] ERROR: {error}", file=sys.stderr)

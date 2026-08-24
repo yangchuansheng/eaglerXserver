@@ -57,13 +57,8 @@ class ReleaseGateTests(unittest.TestCase):
             self.assertFalse(summary["credentials_recorded"])
             self.assertFalse(summary["plugin_data_recorded"])
 
-    def test_package_inventory_state_match_is_explicit(self):
-        data = {"entries": [{"filename": "Fixture.jar", "enabled": True}]}
-        self.assertTrue(release_gate.has_package(data, "Fixture.jar", True))
-        self.assertFalse(release_gate.has_package(data, "Fixture.jar", False))
-
-    def test_docker_boundary_is_explicit_and_require_live_blocks(self):
-        options = SimpleNamespace(live=False, build=False, require_live=False, image=None)
+    def test_docker_boundary_is_explicit_and_live_blocks(self):
+        options = SimpleNamespace(live=False, build=False, image=None)
         with tempfile.TemporaryDirectory() as temp, mock.patch.object(
             release_gate, "docker_available", return_value=False
         ):
@@ -72,7 +67,6 @@ class ReleaseGateTests(unittest.TestCase):
             self.assertEqual("skipped", evidence.rows[-1]["status"])
 
             options.live = True
-            options.require_live = True
             with self.assertRaises(release_gate.GateFailure):
                 release_gate.run_docker_gate(options, evidence)
             self.assertEqual("blocked", evidence.rows[-1]["status"])

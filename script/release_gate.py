@@ -10,6 +10,7 @@ Evidence is intentionally limited to statuses, hashes, sizes, and boundaries.
 from __future__ import annotations
 
 import argparse
+import base64
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -18,14 +19,12 @@ from pathlib import Path
 import re
 import secrets
 import shutil
-import struct
 import subprocess
 import sys
 import tempfile
 import time
 import urllib.error
 import urllib.request
-import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +41,7 @@ PLUGIN_NAME = "EaglerXReleaseGate"
 PLUGIN_FILENAME = "EaglerXReleaseGate-{version}.jar"
 DOCKER_IMAGE_DEFAULT = "eaglerx-release-gate"
 BROWSER_EVIDENCE_PREFIX = "browser-matrix-evidence "
+FIXTURE_JAR_BASE64 = ROOT / "tests" / "fixtures" / "EaglerXReleaseGate.jar.b64"
 FORBIDDEN_EVIDENCE_KEYS = frozenset({
     "password",
     "token",
@@ -183,22 +183,13 @@ def check_static_release(evidence):
     })
 
 
-def parse_test_count(output):
-    match = re.search(rb"Ran (\d+) tests?", output)
-    return int(match.group(1)) if match else None
-
-
 def run_server_regression(evidence):
-    result = run_command(
+    run_command(
         [sys.executable, "-m", "unittest", "tests.test_regressions", "tests.test_plugin_inventory"],
         "server-regression",
         timeout=300,
     )
-    row = {"kind": "server-regression", "status": "pass", "server_result": "pass"}
-    count = parse_test_count(result.stdout + result.stderr)
-    if count is not None:
-        row["test_count"] = count
-    evidence.emit(row)
+    evidence.emit({"kind": "server-regression", "status": "pass"})
 
 
 def parse_browser_evidence(output):
@@ -235,7 +226,6 @@ def run_browser_matrix(evidence):
     evidence.emit({
         "kind": "browser-matrix",
         "status": "pass",
-        "browser_result": "pass",
         "web_roots": sorted(roots),
         "locales": sorted(locales),
         "evidence_rows": len(rows),
@@ -300,72 +290,8 @@ def check_image_layout(image, evidence):
     })
 
 
-def _constant_pool_classfile():
-    constants = [None]
-
-    def add(kind, value):
-        constants.append((kind, value))
-        return len(constants) - 1
-
-    def utf8(value):
-        return add(1, value.encode("utf-8"))
-
-    def class_ref(name):
-        return add(7, utf8(name))
-
-    code_name = utf8("Code")
-    void_descriptor = utf8("()V")
-    init_name = utf8("<init>")
-    enable_name = utf8("onEnable")
-    disable_name = utf8("onDisable")
-    this_class = class_ref("gate/release/EaglerXReleaseGate")
-    super_class = class_ref("org/bukkit/plugin/java/JavaPlugin")
-    super_init = add(10, (super_class, add(12, (init_name, void_descriptor))))
-
-    output = bytearray(b"\xca\xfe\xba\xbe")
-    output.extend(struct.pack(">HHH", 0, 52, len(constants)))
-    for entry in constants[1:]:
-        kind, value = entry
-        output.append(kind)
-        if kind == 1:
-            output.extend(struct.pack(">H", len(value)))
-            output.extend(value)
-        elif kind == 7:
-            output.extend(struct.pack(">H", value))
-        elif kind == 10:
-            output.extend(struct.pack(">HH", *value))
-        elif kind == 12:
-            output.extend(struct.pack(">HH", *value))
-        else:
-            raise AssertionError(f"unsupported classfile constant: {kind}")
-
-    output.extend(struct.pack(">HHHHH", 0x0021, this_class, super_class, 0, 0))
-    output.extend(struct.pack(">H", 3))
-    for name, code, max_stack in (
-        (init_name, b"\x2a\xb7" + struct.pack(">H", super_init) + b"\xb1", 1),
-        (enable_name, b"\xb1", 0),
-        (disable_name, b"\xb1", 0),
-    ):
-        output.extend(struct.pack(">HHHH", 0x0001, name, void_descriptor, 1))
-        attribute = struct.pack(">HHI", max_stack, 1, len(code)) + code + struct.pack(">HH", 0, 0)
-        output.extend(struct.pack(">HI", code_name, len(attribute)))
-        output.extend(attribute)
-    output.extend(struct.pack(">H", 0))
-    return bytes(output)
-
-
 def fixture_jar_bytes():
-    stream = tempfile.SpooledTemporaryFile(max_size=1024 * 1024)
-    with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(
-            "plugin.yml",
-            "name: EaglerXReleaseGate\nversion: 1.0.0\nmain: gate.release.EaglerXReleaseGate\n",
-        )
-        archive.writestr("gate/release/EaglerXReleaseGate.class", _constant_pool_classfile())
-    stream.seek(0)
-    data = stream.read()
-    stream.close()
-    return data
+    return base64.b64decode(FIXTURE_JAR_BASE64.read_text(encoding="ascii").strip(), validate=True)
 
 
 def json_request(base_url, path, method="GET", payload=None, headers=None, timeout=10):
@@ -399,6 +325,28 @@ def post_json(base_url, path, token, payload):
     data = dict(payload)
     data["token"] = token
     return json_request(base_url, path, "POST", data)
+
+
+def upload_package(container, token, filename, package, stage):
+    request = urllib.request.Request(
+        container.base_url + "/api/plugins/upload",
+        data=package,
+        headers={
+            "Authorization": "Bearer " + token,
+            "Content-Type": "application/java-archive",
+            "X-Plugin-Filename": filename,
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            status = response.status
+            body = json.loads(response.read().decode("utf-8"))
+    except (OSError, urllib.error.URLError, json.JSONDecodeError) as error:
+        raise GateFailure(stage, str(error)) from error
+    if status != 201 or not isinstance(body, dict) or body.get("success") is not True:
+        raise GateFailure(stage)
+    return body
 
 
 def poll_until(stage, callback, predicate, timeout):
@@ -497,13 +445,6 @@ def inventory(container, token):
     return body
 
 
-def has_package(data, filename, enabled=None):
-    for item in data.get("entries", data.get("plugins", [])):
-        if item.get("filename") == filename and (enabled is None or item.get("enabled") is enabled):
-            return True
-    return False
-
-
 def restart_and_wait(container, token, present):
     status, body = post_json(container.base_url, "/api/system", token, {"action": "restart_server"})
     if status != 200 or body.get("success") is not True:
@@ -566,24 +507,7 @@ def run_live_version(image, image_info, version, evidence):
             if list_body.get("upload_limit") != 64 * 1024 * 1024:
                 raise GateFailure(f"live-upload-limit-{version}")
 
-            upload_request = urllib.request.Request(
-                first.base_url + "/api/plugins/upload",
-                data=fixture,
-                headers={
-                    "Authorization": "Bearer " + token,
-                    "Content-Type": "application/java-archive",
-                    "X-Plugin-Filename": filename,
-                },
-                method="POST",
-            )
-            try:
-                with urllib.request.urlopen(upload_request, timeout=30) as response:
-                    upload_status = response.status
-                    upload_body = json.loads(response.read().decode("utf-8"))
-            except (OSError, urllib.error.URLError, json.JSONDecodeError) as error:
-                raise GateFailure(f"live-upload-{version}", str(error)) from error
-            if upload_status != 201 or upload_body.get("success") is not True:
-                raise GateFailure(f"live-upload-{version}")
+            upload_package(first, token, filename, fixture, f"live-upload-{version}")
             if not inventory(first, token).get("pending_restart"):
                 raise GateFailure(f"live-upload-marker-{version}")
             restart_and_wait(first, token, True)
@@ -615,7 +539,7 @@ def run_live_version(image, image_info, version, evidence):
             status, body = post_json(first.base_url, "/api/plugins", token, {
                 "action": "delete", "filename": filename, "expected_enabled": True,
             })
-            if status != 200 or body.get("success") is not True or body.get("data_retained") is not True:
+            if status != 200 or body.get("success") is not True or body.get("plugin", {}).get("data_retained") is not True:
                 raise GateFailure(f"live-delete-{version}")
             runtime_plugins = try_runtime_command(first, token, "plugins") or ""
             if not sentinel.is_file() or PLUGIN_NAME.casefold() not in runtime_plugins.casefold():
@@ -624,23 +548,7 @@ def run_live_version(image, image_info, version, evidence):
             if not sentinel.is_file():
                 raise GateFailure(f"live-delete-data-retention-{version}")
 
-            upload_request = urllib.request.Request(
-                first.base_url + "/api/plugins/upload",
-                data=fixture,
-                headers={
-                    "Authorization": "Bearer " + token,
-                    "Content-Type": "application/java-archive",
-                    "X-Plugin-Filename": filename,
-                },
-                method="POST",
-            )
-            try:
-                with urllib.request.urlopen(upload_request, timeout=30) as response:
-                    if response.status != 201:
-                        raise GateFailure(f"live-reinstall-{version}")
-                    response.read()
-            except (OSError, urllib.error.URLError) as error:
-                raise GateFailure(f"live-reinstall-{version}", str(error)) from error
+            upload_package(first, token, filename, fixture, f"live-reinstall-{version}")
             restart_and_wait(first, token, True)
             if not sentinel.is_file():
                 raise GateFailure(f"live-reinstall-data-retention-{version}")
@@ -658,12 +566,18 @@ def run_live_version(image, image_info, version, evidence):
             status, replacement_status = json_request(replacement.base_url, "/api/status")
             if status != 200 or replacement_status.get("minecraft_version") != version:
                 raise GateFailure(f"live-replacement-version-{version}")
-            replacement_inventory = inventory(replacement, replacement_token)
-            if not has_package(replacement_inventory, filename, True) or replacement_inventory.get("pending_restart"):
-                raise GateFailure(f"live-replacement-repository-{version}")
-            replacement_plugins = try_runtime_command(replacement, replacement_token, "plugins") or ""
-            if PLUGIN_NAME.casefold() not in replacement_plugins.casefold():
-                raise GateFailure(f"live-replacement-paper-{version}")
+            poll_until(
+                f"live-replacement-repository-{version}",
+                lambda: try_inventory(replacement, replacement_token),
+                lambda data: any(item.get("filename") == filename and item.get("enabled") is True for item in data.get("entries", [])) and data.get("pending_restart") is False,
+                120,
+            )
+            poll_until(
+                f"live-replacement-paper-{version}",
+                lambda: try_runtime_command(replacement, replacement_token, "plugins"),
+                lambda output: output is not None and PLUGIN_NAME.casefold() in output.casefold(),
+                120,
+            )
             if not sentinel.is_file():
                 raise GateFailure(f"live-replacement-data-{version}")
 
@@ -671,24 +585,8 @@ def run_live_version(image, image_info, version, evidence):
                 "kind": "live-paper-smoke",
                 "status": "pass",
                 "image_id": image_info["image_id"],
-                "image_identifier": image_info["image_id"],
                 "version": version,
-                "selected_minecraft_version": version,
                 "mount_boundary": MOUNT_BOUNDARY,
-                "api_status": "pass",
-                "api_login": "pass",
-                "api_inventory": "pass",
-                "api_result": "pass",
-                "paper_runtime": "pass",
-                "paper_result": "pass",
-                "api_upload": "pass",
-                "controlled_restart": "pass",
-                "disable_enable_restart_boundary": "pass",
-                "delete_restart_data_retention": "pass",
-                "container_replacement": "pass",
-                "replacement_result": "pass",
-                "credentials_recorded": False,
-                "plugin_data_recorded": False,
             })
         finally:
             if replacement is not None:
@@ -705,7 +603,7 @@ def run_docker_gate(args, evidence):
             "reason": "Docker daemon unavailable",
             "live_exercised": False,
         })
-        if args.live or args.build or args.require_live:
+        if args.live or args.build:
             raise GateFailure("docker-unavailable")
         return False
 
@@ -732,12 +630,10 @@ def run_docker_gate(args, evidence):
             **info,
         })
 
-    if args.build:
+    if args.build or args.live:
         check_image_layout(image, evidence)
     if not args.live:
         return False
-    if not args.build:
-        check_image_layout(image, evidence)
     failures = []
     for version in VERSIONS:
         try:
@@ -748,13 +644,10 @@ def run_docker_gate(args, evidence):
                 "kind": "live-paper-smoke",
                 "status": "fail",
                 "image_id": info["image_id"],
-                "image_identifier": info["image_id"],
                 "version": version,
                 "mount_boundary": MOUNT_BOUNDARY,
                 "error_sha256": digest(error.output),
                 "error_bytes": len(error.output),
-                "credentials_recorded": False,
-                "plugin_data_recorded": False,
             })
     if failures:
         raise GateFailure("live-paper-smoke")
@@ -767,19 +660,16 @@ def parser():
     result.add_argument("--image", help="Docker image to inspect/run")
     result.add_argument("--build", action="store_true", help="Build and inspect an image before the live gate")
     result.add_argument("--live", action="store_true", help="Run mounted Docker/Paper smoke for both versions")
-    result.add_argument("--require-live", action="store_true", help="Fail unless both live version smokes pass")
     result.add_argument("--timeout", type=int, default=900, help="Docker build timeout in seconds")
     return result
 
 
 def main(argv=None):
     args = parser().parse_args(argv)
-    if args.require_live:
-        args.live = True
     if args.live and not args.image and not args.build:
         parser().error("--live requires --image IMAGE or --build")
 
-    evidence = Evidence(args.evidence_dir, args.live or args.require_live)
+    evidence = Evidence(args.evidence_dir, args.live)
     live_exercised = False
     try:
         run_command([sys.executable, "-m", "compileall", "-q", "script", "tests"], "syntax")

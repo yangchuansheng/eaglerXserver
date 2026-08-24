@@ -9,7 +9,6 @@ import threading
 import unittest
 from unittest import mock
 import zipfile
-from urllib.parse import urlparse
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -92,6 +91,26 @@ class PluginRepositoryTests(unittest.TestCase):
             self.assertTrue((source / 'Bundled.jar').is_file())
             self.assertFalse((repository / 'enabled' / 'Bundled.jar').is_symlink())
 
+    def test_internal_repository_entries_require_safe_file_types(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = self.make_source(root)
+            repository = root / 'data' / 'plugins-1.8'
+            plugin_repository.init_repository(source, repository, '1.8')
+
+            lock_target = root / 'outside.lock'
+            (repository / plugin_repository.LOCK_FILENAME).unlink()
+            (repository / plugin_repository.LOCK_FILENAME).symlink_to(lock_target)
+            with self.assertRaises(plugin_repository.RepositoryError):
+                with plugin_repository.operation_lock(repository):
+                    pass
+            self.assertFalse(lock_target.exists())
+
+            (repository / plugin_repository.LOCK_FILENAME).unlink()
+            (repository / plugin_repository.PENDING_RESTART_FILENAME).mkdir()
+            with self.assertRaises(plugin_repository.RepositoryError):
+                plugin_repository.list_repository(repository, '1.8')
+
     def test_inventory_is_sorted_and_restart_marker_transitions(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -104,7 +123,7 @@ class PluginRepositoryTests(unittest.TestCase):
             entries = plugin_repository.list_repository(repository, '1.12')
             self.assertEqual(['alpha.jar', 'Bundled.jar', 'zeta.jar'], [entry['filename'] for entry in entries])
             self.assertFalse(plugin_repository.pending_restart(repository))
-            plugin_repository.mark_pending_restart(repository)
+            plugin_repository.transition_plugin(repository, 'Bundled.jar', False, '1.12', True)
             self.assertTrue(plugin_repository.pending_restart(repository))
             plugin_repository.clear_pending_restart(repository)
             self.assertFalse(plugin_repository.pending_restart(repository))
@@ -362,6 +381,11 @@ class PluginApiTests(unittest.TestCase):
             self.assertEqual('1.8', body['minecraft_version'])
             self.assertEqual(64 * 1024 * 1024, body['upload_limit'])
             self.assertEqual(['A.jar'], [entry['filename'] for entry in body['entries']])
+            self.assertNotIn('plugins', body)
+            self.assertNotIn('upload_limit_bytes', body)
+            self.assertNotIn('bytes', body['entries'][0])
+            self.assertNotIn('modified_time', body['entries'][0])
+            self.assertNotIn('mtime', body['entries'][0])
             self.assertFalse(body['pending_restart'])
 
     def test_lifecycle_api_auth_and_conflict_contract(self):
@@ -436,9 +460,8 @@ class PluginApiTests(unittest.TestCase):
             enabled._handle_plugins()
             status, body, _ = enabled.responses[0]
             self.assertEqual(200, status)
-            self.assertEqual('delete', body['action'])
-            self.assertTrue(body['data_retained'])
-            self.assertTrue(body['restart_required'])
+            self.assertTrue(body['plugin']['data_retained'])
+            self.assertTrue(body['plugin']['pending_restart'])
             self.assertFalse((repository / 'enabled' / 'Enabled.jar').exists())
             self.assertEqual(b'operator config', (repository / 'enabled' / 'PluginData' / 'config.yml').read_bytes())
             self.assertTrue(plugin_repository.pending_restart(repository))
@@ -507,12 +530,12 @@ class PluginUploadTests(unittest.TestCase):
             token, _ = self.server.create_auth_token()
             body = self.jar_bytes()
             handler = self.make_handler(body, token=token)
-            handler._handle_plugin_upload(urlparse('/api/plugins/upload'))
+            handler._handle_plugin_upload()
 
             status, response, _ = handler.responses[0]
             self.assertEqual(201, status)
             self.assertTrue(response['success'])
-            self.assertEqual('Upload.jar', response['filename'])
+            self.assertEqual('Upload.jar', response['plugin']['filename'])
             self.assertTrue((repository / 'enabled' / 'Upload.jar').is_file())
             self.assertTrue(plugin_repository.pending_restart(repository))
             self.assert_no_upload_temp(repository)
@@ -525,39 +548,44 @@ class PluginUploadTests(unittest.TestCase):
             body = self.jar_bytes()
             missing_auth = self.make_handler(body)
             missing_auth.headers.pop('Authorization')
-            missing_auth._handle_plugin_upload(urlparse('/api/plugins/upload'))
+            missing_auth._handle_plugin_upload()
             self.assertEqual((403, 'token required'), (missing_auth.responses[0][0], missing_auth.responses[0][1]['error']))
 
             for filename in ('../bad.jar', 'nested/bad.jar', 'bad.jar\x00', '.hidden.jar', 'BAD.JAR', 'bad.zip', 'enabled'):
                 handler = self.make_handler(body, filename=filename)
-                handler._handle_plugin_upload(urlparse('/api/plugins/upload'))
+                handler._handle_plugin_upload()
                 self.assertEqual(400, handler.responses[0][0], filename)
                 self.assertEqual('invalid_filename', handler.responses[0][1]['code'], filename)
 
             empty = self.make_handler(b'', filename='Empty.jar')
-            empty._handle_plugin_upload(urlparse('/api/plugins/upload'))
+            empty._handle_plugin_upload()
             self.assertEqual('empty_upload', empty.responses[0][1]['code'])
 
             incomplete = self.make_handler(body[:-1], filename='Incomplete.jar', content_length=len(body))
-            incomplete._handle_plugin_upload(urlparse('/api/plugins/upload'))
+            incomplete._handle_plugin_upload()
             self.assertEqual('incomplete_upload', incomplete.responses[0][1]['code'])
 
             oversized = self.make_handler(b'', filename='Large.jar', content_length=plugin_repository.UPLOAD_LIMIT + 1)
-            oversized._handle_plugin_upload(urlparse('/api/plugins/upload'))
+            oversized._handle_plugin_upload()
             self.assertEqual((413, 'upload_too_large'), (oversized.responses[0][0], oversized.responses[0][1]['code']))
 
             timed_out = self.make_handler(body, filename='Timeout.jar')
             timed_out.rfile = type('TimeoutStream', (), {
                 'read': lambda self, size: (_ for _ in ()).throw(socket.timeout('timed out')),
             })()
-            timed_out._handle_plugin_upload(urlparse('/api/plugins/upload'))
+            timed_out._handle_plugin_upload()
             self.assertEqual((408, 'upload_timeout'), (timed_out.responses[0][0], timed_out.responses[0][1]['code']))
+
+            expired = self.make_handler(body, filename='Expired.jar')
+            with mock.patch.object(self.server.time, 'monotonic', side_effect=[0, 31]):
+                expired._handle_plugin_upload()
+            self.assertEqual((408, 'upload_timeout'), (expired.responses[0][0], expired.responses[0][1]['code']))
 
             disconnected = self.make_handler(body, filename='Disconnected.jar')
             disconnected.rfile = type('DisconnectedStream', (), {
                 'read': lambda self, size: (_ for _ in ()).throw(ConnectionResetError('reset')),
             })()
-            disconnected._handle_plugin_upload(urlparse('/api/plugins/upload'))
+            disconnected._handle_plugin_upload()
             self.assertEqual((400, 'upload_connection_failed'), (disconnected.responses[0][0], disconnected.responses[0][1]['code']))
             self.assert_no_upload_temp(repository)
 
@@ -566,7 +594,7 @@ class PluginUploadTests(unittest.TestCase):
             repository = self.make_repository(Path(temp))
             before = (repository / 'enabled' / 'A.jar').read_bytes()
             invalid = self.make_handler(self.jar_bytes(include_plugin_yml=False), filename='Invalid.jar')
-            invalid._handle_plugin_upload(urlparse('/api/plugins/upload'))
+            invalid._handle_plugin_upload()
             self.assertEqual((400, 'invalid_archive'), (invalid.responses[0][0], invalid.responses[0][1]['code']))
             self.assertEqual(before, (repository / 'enabled' / 'A.jar').read_bytes())
             self.assertFalse((repository / 'enabled' / 'Invalid.jar').exists())
@@ -574,7 +602,7 @@ class PluginUploadTests(unittest.TestCase):
 
             (repository / 'disabled' / 'Existing.jar').write_bytes(b'disabled')
             duplicate = self.make_handler(self.jar_bytes(), filename='existing.jar')
-            duplicate._handle_plugin_upload(urlparse('/api/plugins/upload'))
+            duplicate._handle_plugin_upload()
             self.assertEqual((409, 'duplicate_filename'), (duplicate.responses[0][0], duplicate.responses[0][1]['code']))
             self.assertEqual(b'disabled', (repository / 'disabled' / 'Existing.jar').read_bytes())
             self.assert_no_upload_temp(repository)
@@ -587,7 +615,7 @@ class PluginUploadTests(unittest.TestCase):
             handlers = [self.make_handler(body, token=token) for _ in range(2)]
 
             def run(handler):
-                handler._handle_plugin_upload(urlparse('/api/plugins/upload'))
+                handler._handle_plugin_upload()
                 return handler.responses[0][0]
 
             threads = [threading.Thread(target=run, args=(handler,)) for handler in handlers]
@@ -613,7 +641,7 @@ class PluginRestartTests(unittest.TestCase):
         (source / 'A.jar').write_bytes(b'a')
         repository = root / 'plugins-1.8'
         plugin_repository.init_repository(source, repository, '1.8')
-        plugin_repository.mark_pending_restart(repository)
+        plugin_repository.transition_plugin(repository, 'A.jar', False, '1.8', True)
         return repository
 
     def test_successful_controlled_restart_clears_pending_marker(self):
@@ -628,9 +656,11 @@ class PluginRestartTests(unittest.TestCase):
                 with mock.patch.object(server, 'server_pane_dead', return_value=False), \
                         mock.patch.object(server, 'server_pane_command', return_value='java'), \
                         mock.patch.object(server, 'wait_for_server_stop', return_value='dead'), \
-                        mock.patch.object(server, 'rcon_send', return_value=''), \
+                        mock.patch.object(server, 'rcon_send', side_effect=['', RuntimeError('not ready'), '']) as rcon_mock, \
+                        mock.patch.object(server.time, 'sleep'), \
                         mock.patch.object(server, 'tmux_run', return_value=''):
                     self.assertTrue(server.restart_server_process())
+                rcon_mock.assert_any_call('version', retries=1)
                 self.assertFalse(plugin_repository.pending_restart(repository))
             finally:
                 server.PLUGIN_REPOSITORY_ROOT = original_root

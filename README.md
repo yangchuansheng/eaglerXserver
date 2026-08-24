@@ -107,7 +107,7 @@ docker run -d \
 
 ## 管理 API
 
-请求体上限为 64 KiB，读取超时为 10 秒。
+JSON 管理 API 请求体上限为 64 KiB，读取超时为 10 秒；原始插件 JAR 上传单独使用 64 MiB 上限和 30 秒总读取截止时间。
 登录失败按来源地址累计；共享本机回环、SSH 隧道或反向代理来源时，管理员共享同一个 10 分钟锁定窗口。
 
 ```bash
@@ -160,7 +160,7 @@ docker build -t eaglerx1.8server .
 
 ```bash
 ./script/release_gate.sh \
-  --build --live --require-live \
+  --build --live \
   --image eaglerx-release-gate:local \
   --evidence-dir artifacts/release-gate
 ```

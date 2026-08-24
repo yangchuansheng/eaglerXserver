@@ -22,7 +22,7 @@ import threading
 import sys
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from http.client import HTTPConnection
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
@@ -1154,10 +1154,8 @@ def plugin_inventory():
     return {
         'minecraft_version': MINECRAFT_VERSION,
         'entries': entries,
-        'plugins': entries,
         'pending_restart': pending_restart(repository),
         'upload_limit': PLUGIN_UPLOAD_LIMIT,
-        'upload_limit_bytes': PLUGIN_UPLOAD_LIMIT,
     }
 
 
@@ -1184,6 +1182,11 @@ def restart_server_process():
             if server_pane_dead():
                 raise RuntimeError('server exited during restart')
             if server_pane_command().lower() in ('java', 'java.bin'):
+                try:
+                    rcon_send('version', retries=1)
+                except Exception:
+                    time.sleep(1)
+                    continue
                 clear_plugin_restart_marker()
                 return True
             time.sleep(1)
@@ -1313,7 +1316,7 @@ class Handler(SimpleHTTPRequestHandler):
         elif RCON_ENABLED and parsed.path == '/api/world-state':
             self._handle_world_state()
         elif RCON_ENABLED and parsed.path == '/api/plugins/upload':
-            self._handle_plugin_upload(parsed)
+            self._handle_plugin_upload()
         elif RCON_ENABLED and parsed.path == '/api/plugins':
             self._handle_plugins()
         elif RCON_ENABLED and parsed.path == '/api/system':
@@ -1543,22 +1546,14 @@ class Handler(SimpleHTTPRequestHandler):
 
         action = str(data.get('action', 'list')).strip().lower()
         if action in ('enable', 'disable', 'delete'):
-            filename = data.get('filename', data.get('plugin', ''))
+            filename = data.get('filename', '')
             if not isinstance(filename, str) or not filename.strip():
                 self._json(400, {'success': False, 'error': 'filename required', 'code': 'filename_required'})
                 return
 
             expected_enabled = data.get('expected_enabled')
-            if expected_enabled is None and 'expected_state' in data:
-                expected_state = str(data.get('expected_state', '')).strip().lower()
-                if expected_state not in ('enabled', 'disabled'):
-                    self._json(400, {'success': False, 'error': 'expected_state must be enabled or disabled', 'code': 'invalid_expected_state'})
-                    return
-                expected_enabled = expected_state == 'enabled'
-            if expected_enabled is None and 'enabled' in data and isinstance(data.get('enabled'), bool):
-                expected_enabled = data['enabled']
             if expected_enabled is not None and not isinstance(expected_enabled, bool):
-                self._json(400, {'success': False, 'error': 'expected_enabled must be boolean', 'code': 'invalid_expected_state'})
+                self._json(400, {'success': False, 'error': 'expected_enabled must be boolean', 'code': 'invalid_expected_enabled'})
                 return
 
             try:
@@ -1609,16 +1604,7 @@ class Handler(SimpleHTTPRequestHandler):
                 self._json(500, {'success': False, 'error': 'plugin repository unavailable', 'code': 'repository_unavailable'})
                 return
 
-            self._json(200, {
-                'success': True,
-                'action': action,
-                'filename': plugin['filename'],
-                'plugin': plugin,
-                'enabled': plugin['enabled'],
-                'pending_restart': True,
-                'restart_required': True,
-                'data_retained': bool(plugin.get('data_retained', False)),
-            })
+            self._json(200, {'success': True, 'plugin': plugin})
             return
 
         if action != 'list':
@@ -1631,23 +1617,20 @@ class Handler(SimpleHTTPRequestHandler):
         except OSError:
             self._json(500, {'success': False, 'error': 'plugin repository unavailable'})
 
-    def _plugin_upload_filename(self, parsed):
-        filename = self.headers.get('X-Plugin-Filename') or self.headers.get('X-Filename')
-        if not filename:
-            disposition = self.headers.get('Content-Disposition', '')
-            match = re.search(r'(?:^|;)\s*filename="?([^";]+)"?', disposition, re.IGNORECASE)
-            filename = match.group(1) if match else ''
-        if not filename:
-            filename = parse_qs(parsed.query, keep_blank_values=True).get('filename', [''])[0]
-        return validate_plugin_filename(filename)
+    def _plugin_upload_filename(self):
+        return validate_plugin_filename(self.headers.get('X-Plugin-Filename', ''))
 
     def _read_plugin_upload(self, temporary, length):
         previous_timeout = self.connection.gettimeout()
+        deadline = time.monotonic() + PLUGIN_UPLOAD_READ_TIMEOUT
         try:
-            self.connection.settimeout(PLUGIN_UPLOAD_READ_TIMEOUT)
             remaining = length
             with open(temporary, 'wb') as stream:
                 while remaining:
+                    timeout = deadline - time.monotonic()
+                    if timeout <= 0:
+                        raise RuntimeError('upload timed out')
+                    self.connection.settimeout(timeout)
                     try:
                         chunk = self.rfile.read(min(PLUGIN_UPLOAD_CHUNK_SIZE, remaining))
                     except socket.timeout as error:
@@ -1667,15 +1650,14 @@ class Handler(SimpleHTTPRequestHandler):
                 # A disconnected client cannot receive a response or reuse this connection.
                 pass
 
-    def _handle_plugin_upload(self, parsed=None):
-        parsed = parsed or urlparse(self.path)
+    def _handle_plugin_upload(self):
         authed, error, _ = authenticate_authorization_header(self.headers.get('Authorization'))
         if not authed:
             self._json(403, {'success': False, 'error': error})
             return
 
         try:
-            filename = self._plugin_upload_filename(parsed)
+            filename = self._plugin_upload_filename()
         except PluginFilenameError as upload_error:
             self._json(400, {
                 'success': False,
@@ -1733,12 +1715,7 @@ class Handler(SimpleHTTPRequestHandler):
                 temporary,
                 MINECRAFT_VERSION,
             )
-            self._json(201, {
-                'success': True,
-                'plugin': plugin,
-                'filename': filename,
-                'pending_restart': True,
-            })
+            self._json(201, {'success': True, 'plugin': plugin})
         except PluginConflictError as upload_error:
             self._json(409, {
                 'success': False,

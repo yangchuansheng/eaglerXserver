@@ -92,11 +92,7 @@ echo "[start] web/ -> web-${VERSION}, server/ -> server-${VERSION}"
 # repository beneath it.
 PERSISTENT_DATA_ROOT="${PERSISTENT_DATA_ROOT:-${SERVER_DATA_DIR:-${APP_DIR}/server-data}}"
 PLUGIN_REPOSITORY_DIR="${PERSISTENT_DATA_ROOT}/plugins-${VERSION}"
-python3 "${APP_DIR}/script/plugin_repository.py" init \
-    --source "${ACTIVE_SERVER_DIR}/plugins" \
-    --repository "${PLUGIN_REPOSITORY_DIR}" \
-    --version "${VERSION}"
-python3 "${APP_DIR}/script/plugin_repository.py" activate \
+python3 "${APP_DIR}/script/plugin_repository.py" \
     --source "${ACTIVE_SERVER_DIR}/plugins" \
     --repository "${PLUGIN_REPOSITORY_DIR}" \
     --version "${VERSION}"

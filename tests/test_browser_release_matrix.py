@@ -130,7 +130,7 @@ class MockAdminServer:
                     fixture.uploaded_plugin_names.add(filename)
                     fixture.plugin_entries.append({'filename': filename, 'enabled': True, 'size': length, 'modified_at': '2026-08-23T02:03:04Z'})
                     fixture.plugin_pending_restart = True
-                    self.json(201, {'success': True, 'filename': filename, 'pending_restart': True}, raw=raw)
+                    self.json(201, {'success': True, 'plugin': fixture.plugin_entries[-1]}, raw=raw)
                     return
                 payload = self.read_json()
                 if payload is None:
@@ -196,14 +196,7 @@ class MockAdminServer:
                         if action == 'delete':
                             fixture.plugin_entries.remove(entry)
                             fixture.plugin_pending_restart = True
-                            self.json(200, {
-                                'success': True,
-                                'action': action,
-                                'filename': filename,
-                                'plugin': entry,
-                                'data_retained': True,
-                                'pending_restart': True,
-                            })
+                            self.json(200, {'success': True, 'plugin': {**entry, 'data_retained': True, 'pending_restart': True}})
                             return
                         target = action == 'enable'
                         if entry['enabled'] == target:
@@ -211,7 +204,7 @@ class MockAdminServer:
                             return
                         entry['enabled'] = target
                         fixture.plugin_pending_restart = True
-                        self.json(200, {'success': True, 'action': action, 'filename': filename, 'plugin': entry, 'pending_restart': True})
+                        self.json(200, {'success': True, 'plugin': {**entry, 'pending_restart': True}})
                         return
                     self.json(200, {
                         'success': True,
@@ -496,16 +489,16 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 browser.check(stage, "document.querySelectorAll('.plugin-action').length === 3")
                 browser.run(stage, 'eval', "(() => { const button = Array.from(document.querySelectorAll('.plugin-action')).find((item) => item.dataset.pluginFilename === 'FixturePlugin.jar'); button.click(); return true; })()")
                 browser.run(stage, 'wait', 1000)
-                browser.check(stage, "document.querySelector('#plugin-status') === null || (document.querySelector('#plugin-list').textContent.includes('Disabled') && document.querySelector('.plugin-action[data-plugin-action=enable]'))")
+                browser.check(stage, "(() => { const action = Array.from(document.querySelectorAll('.plugin-action')).find((item) => item.dataset.pluginFilename === 'FixturePlugin.jar'); const row = action && action.closest('.plugin-row'); return !!row && row.querySelector('.plugin-state').textContent.includes('Disabled') && action.dataset.pluginAction === 'enable'; })()")
                 browser.check(stage, "!document.querySelector('#plugin-restart-banner').classList.contains('hidden')")
                 server.plugin_conflict_next = True
                 browser.run(stage, 'eval', "(() => { const button = Array.from(document.querySelectorAll('.plugin-action')).find((item) => item.dataset.pluginFilename === 'FixturePlugin.jar'); button.click(); return true; })()")
                 browser.run(stage, 'wait', 1000)
                 browser.check(stage, "document.querySelector('#plugin-upload-status').textContent.includes('Plugin state changed')")
-                browser.check(stage, "document.querySelectorAll('.plugin-action[data-plugin-action=enable]').length >= 1")
+                browser.check(stage, "(() => { const action = Array.from(document.querySelectorAll('.plugin-action')).find((item) => item.dataset.pluginFilename === 'FixturePlugin.jar'); return !!action && action.dataset.pluginAction === 'enable'; })()")
                 browser.run(stage, 'eval', "(() => { const button = Array.from(document.querySelectorAll('.plugin-action')).find((item) => item.dataset.pluginFilename === 'FixturePlugin.jar'); button.click(); return true; })()")
                 browser.run(stage, 'wait', 1000)
-                browser.check(stage, "document.querySelectorAll('.plugin-action').length === 3")
+                browser.check(stage, "(() => { const action = Array.from(document.querySelectorAll('.plugin-action')).find((item) => item.dataset.pluginFilename === 'FixturePlugin.jar'); const row = action && action.closest('.plugin-row'); return !!row && row.querySelector('.plugin-state').textContent.includes('Enabled') && action.dataset.pluginAction === 'disable'; })()")
                 browser.run(stage, 'eval', "(() => { const button = Array.from(document.querySelectorAll('.plugin-delete-action')).find((item) => item.dataset.pluginFilename === 'FixturePlugin.jar'); button.click(); return true; })()")
                 browser.run(stage, 'wait', 200)
                 browser.check(stage, "!document.querySelector('#action-overlay').classList.contains('hidden') && document.querySelector('#action-title').textContent.includes('FixturePlugin.jar') && document.querySelector('#action-desc').textContent.includes('Plugin data') && document.querySelector('#action-preview').textContent.includes('FixturePlugin.jar')")
@@ -525,11 +518,16 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 self.assert_recorded(server, '/api/plugins')
                 stage = 'plugin-restart-marker'
                 server.restart_failure_next = True
-                browser.run(stage, 'eval', "systemRequest({ action: 'restart_server' }).then(function () { return refreshPlugins(); }); true")
+                browser.run(stage, 'eval', "document.querySelector('#plugin-restart-btn').click(); true")
+                browser.run(stage, 'wait', 200)
+                browser.check(stage, "!document.querySelector('#action-overlay').classList.contains('hidden')")
+                browser.run(stage, 'click', '#action-confirm')
                 browser.run(stage, 'wait', 500)
                 browser.check(stage, "!document.querySelector('#plugin-restart-banner').classList.contains('hidden')")
                 server.restart_success_next = True
-                browser.run(stage, 'eval', "systemRequest({ action: 'restart_server' }).then(function () { return refreshPlugins(); }); true")
+                browser.run(stage, 'eval', "document.querySelector('#plugin-restart-btn').click(); true")
+                browser.run(stage, 'wait', 200)
+                browser.run(stage, 'click', '#action-confirm')
                 browser.run(stage, 'wait', 500)
                 browser.check(stage, "document.querySelector('#plugin-restart-banner').classList.contains('hidden')")
                 server.plugin_pending_restart = True

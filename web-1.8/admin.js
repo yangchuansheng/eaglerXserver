@@ -29,7 +29,6 @@ let SEED_STATE = { seed: '', hint: null, rawHint: null };
 let STRUCTURE_STATUS_STATE = { text: null, summary: null, rawSummary: null };
 let STRUCTURE_PLACEHOLDER_STATE = { text: null, rawPayload: null };
 let PLUGIN_INVENTORY = null;
-let PLUGIN_REFRESHING = false;
 let PLUGIN_UPLOAD_IN_FLIGHT = false;
 let PLUGIN_TRANSITION_IN_FLIGHT = false;
 const STRUCTURE_LABEL_KEYS = {
@@ -438,7 +437,7 @@ function uploadPlugin() {
       return;
     }
     if (xhr.status >= 200 && xhr.status < 300 && data.success) {
-      setPluginUploadStatus(t('status.plugin.uploadSuccess', { filename: data.filename || file.name }), 'success');
+      setPluginUploadStatus(t('status.plugin.uploadSuccess', { filename: file.name }), 'success');
       input.value = '';
       refreshPlugins();
       return;
@@ -585,9 +584,7 @@ function renderPluginInventory() {
   restartText.textContent = t('status.plugin.pending', { version: activeVersion });
   restartButton.textContent = t('status.plugin.restart');
   banner.classList.toggle('hidden', !PLUGIN_INVENTORY.pending_restart);
-  var entries = (PLUGIN_INVENTORY.entries || PLUGIN_INVENTORY.plugins || []).slice().sort(function (a, b) {
-    return String(a.filename || '').localeCompare(String(b.filename || ''), undefined, { sensitivity: 'base' });
-  });
+  var entries = PLUGIN_INVENTORY.entries || [];
   if (!entries.length) {
     list.innerHTML = '<div class="empty-state">' + escapeHtml(t('status.plugin.empty')) + '</div>';
     return;
@@ -597,7 +594,7 @@ function renderPluginInventory() {
     var enabled = !!entry.enabled;
     var action = enabled ? 'disable' : 'enable';
     var actionLabel = enabled ? t('status.plugin.disableAction') : t('status.plugin.enableAction');
-    rows.push('<div class="plugin-row"><span class="plugin-name" title="' + escapeHtml(entry.filename || '') + '">' + escapeHtml(entry.filename || '') + '</span><span class="plugin-state' + (enabled ? '' : ' disabled') + '">' + escapeHtml(enabled ? t('status.plugin.enabled') : t('status.plugin.disabled')) + '</span><span class="plugin-meta">' + escapeHtml(formatPluginBytes(entry.size)) + '</span><span class="plugin-meta">' + escapeHtml(formatPluginModified(entry.modified_at || entry.modified_time || entry.mtime)) + '</span><span class="plugin-actions"><button class="pill-btn plugin-action" type="button" data-plugin-action="' + action + '" data-plugin-filename="' + escapeHtml(entry.filename || '') + '">' + escapeHtml(actionLabel) + '</button><button class="pill-btn plugin-delete-action danger-btn" type="button" data-plugin-filename="' + escapeHtml(entry.filename || '') + '" data-plugin-enabled="' + String(enabled) + '">' + escapeHtml(t('status.plugin.deleteAction')) + '</button></span></div>');
+    rows.push('<div class="plugin-row"><span class="plugin-name" title="' + escapeHtml(entry.filename || '') + '">' + escapeHtml(entry.filename || '') + '</span><span class="plugin-state' + (enabled ? '' : ' disabled') + '">' + escapeHtml(enabled ? t('status.plugin.enabled') : t('status.plugin.disabled')) + '</span><span class="plugin-meta">' + escapeHtml(formatPluginBytes(entry.size)) + '</span><span class="plugin-meta">' + escapeHtml(formatPluginModified(entry.modified_at)) + '</span><span class="plugin-actions"><button class="pill-btn plugin-action" type="button" data-plugin-action="' + action + '" data-plugin-filename="' + escapeHtml(entry.filename || '') + '">' + escapeHtml(actionLabel) + '</button><button class="pill-btn plugin-delete-action danger-btn" type="button" data-plugin-filename="' + escapeHtml(entry.filename || '') + '" data-plugin-enabled="' + String(enabled) + '">' + escapeHtml(t('status.plugin.deleteAction')) + '</button></span></div>');
   });
   rows.push('</div>');
   list.innerHTML = rows.join('');
@@ -610,8 +607,7 @@ function renderPluginInventory() {
 }
 
 async function refreshPlugins() {
-  if (!TOKEN || PLUGIN_REFRESHING) return;
-  PLUGIN_REFRESHING = true;
+  if (!TOKEN || !beginRefresh('plugins')) return;
   try {
     var d = await pluginRequest({ action: 'list' });
     if (d.success) {
@@ -622,7 +618,7 @@ async function refreshPlugins() {
     logClient('console.requestFailed', { error: e.message }, 'warn');
   } finally {
     setCardLoading('card-plugins', false);
-    PLUGIN_REFRESHING = false;
+    endRefresh('plugins');
   }
 }
 
