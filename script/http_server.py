@@ -19,9 +19,35 @@ import re
 import math
 import ctypes
 import threading
+import sys
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from http.client import HTTPConnection
 from urllib.parse import urlparse
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+from plugin_repository import (  # noqa: E402
+    PluginArchiveError,
+    PluginConflictError,
+    PluginDestinationConflictError,
+    PluginFilenameError,
+    PluginLifecycleError,
+    PluginNotFoundError,
+    PluginStateConflictError,
+    PluginUploadError,
+    RepositoryError,
+    UPLOAD_LIMIT as PLUGIN_UPLOAD_LIMIT,
+    clear_pending_restart,
+    create_upload_temp,
+    delete_plugin,
+    list_repository,
+    pending_restart,
+    publish_uploaded_plugin,
+    repository_path,
+    transition_plugin,
+    validate_plugin_filename,
+)
 
 PORT = 5201
 WEB_ROOT = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'web')
@@ -32,6 +58,11 @@ RCON_PORT = 25575
 RCON_PASSWORD = os.environ.get('RCON_PASSWORD', '')
 RCON_ENABLED = bool(RCON_PASSWORD)
 MINECRAFT_VERSION = os.environ.get('MINECRAFT_VERSION', '')
+PERSISTENT_DATA_ROOT = os.environ.get('PERSISTENT_DATA_ROOT') or os.environ.get('SERVER_DATA_DIR') or os.path.join(os.path.dirname(os.path.dirname(__file__)), 'server-data')
+if MINECRAFT_VERSION in ('1.8', '1.12'):
+    PLUGIN_REPOSITORY_ROOT = os.environ.get('PLUGIN_REPOSITORY_ROOT') or os.fspath(repository_path(PERSISTENT_DATA_ROOT, MINECRAFT_VERSION))
+else:
+    PLUGIN_REPOSITORY_ROOT = os.environ.get('PLUGIN_REPOSITORY_ROOT', '')
 DYNMAP_HOST = os.environ.get('DYNMAP_HOST', '127.0.0.1')
 DYNMAP_PORT = int(os.environ.get('DYNMAP_PORT', '8123'))
 AUTH_TOKEN_TTL = int(os.environ.get('ADMIN_AUTH_TOKEN_TTL', str(8 * 3600)))
@@ -44,6 +75,8 @@ RCON_CONNECT_INTERVAL = float(os.environ.get('RCON_CONNECT_INTERVAL', '0.08'))
 RCON_SOCKET_TIMEOUT = float(os.environ.get('RCON_SOCKET_TIMEOUT', '5'))
 MAX_JSON_BODY = 64 * 1024
 REQUEST_READ_TIMEOUT = 10
+PLUGIN_UPLOAD_READ_TIMEOUT = 30
+PLUGIN_UPLOAD_CHUNK_SIZE = 1024 * 1024
 LOGIN_MAX_FAILURES = 5
 LOGIN_LOCKOUT_SECONDS = 10 * 60
 
@@ -1029,6 +1062,19 @@ def authenticate_request(data):
     return False, detail, None
 
 
+def authenticate_authorization_header(value):
+    """Verify the bearer token used by raw upload requests."""
+
+    header = str(value or '').strip()
+    scheme, separator, token = header.partition(' ')
+    if not separator or scheme.lower() != 'bearer' or not token.strip():
+        return False, 'token required', None
+    ok, detail = verify_auth_token(token.strip())
+    if ok:
+        return True, None, 'bearer'
+    return False, detail, None
+
+
 def login_retry_after(client_ip, now=None):
     now = time.time() if now is None else now
     with _login_attempts_lock:
@@ -1096,6 +1142,30 @@ def wait_for_server_stop(timeout=60):
     raise RuntimeError(f'server did not stop in time (pane command: {last_cmd or "unknown"})')
 
 
+def plugin_repository_root():
+    if not PLUGIN_REPOSITORY_ROOT:
+        raise RepositoryError('plugin repository is unavailable without a supported Minecraft version')
+    return PLUGIN_REPOSITORY_ROOT
+
+
+def plugin_inventory():
+    repository = plugin_repository_root()
+    entries = list_repository(repository, MINECRAFT_VERSION)
+    return {
+        'minecraft_version': MINECRAFT_VERSION,
+        'entries': entries,
+        'pending_restart': pending_restart(repository),
+        'upload_limit': PLUGIN_UPLOAD_LIMIT,
+    }
+
+
+def clear_plugin_restart_marker():
+    repository = plugin_repository_root()
+    if not os.path.isdir(repository):
+        return
+    clear_pending_restart(repository)
+
+
 def restart_server_process():
     if not _restart_lock.acquire(blocking=False):
         return False
@@ -1112,6 +1182,12 @@ def restart_server_process():
             if server_pane_dead():
                 raise RuntimeError('server exited during restart')
             if server_pane_command().lower() in ('java', 'java.bin'):
+                try:
+                    rcon_send('version', retries=1)
+                except Exception:
+                    time.sleep(1)
+                    continue
+                clear_plugin_restart_marker()
                 return True
             time.sleep(1)
         raise RuntimeError('server did not start in time')
@@ -1239,6 +1315,10 @@ class Handler(SimpleHTTPRequestHandler):
             self._handle_runtime_state()
         elif RCON_ENABLED and parsed.path == '/api/world-state':
             self._handle_world_state()
+        elif RCON_ENABLED and parsed.path == '/api/plugins/upload':
+            self._handle_plugin_upload()
+        elif RCON_ENABLED and parsed.path == '/api/plugins':
+            self._handle_plugins()
         elif RCON_ENABLED and parsed.path == '/api/system':
             self._handle_system()
         else:
@@ -1453,6 +1533,219 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(200, {'success': True, **state})
         except Exception as e:
             self._json(500, {'success': False, 'error': str(e)})
+
+    def _handle_plugins(self):
+        data = self._read_json_body()
+        if data is None:
+            return
+
+        authed, error, _ = authenticate_request(data)
+        if not authed:
+            self._json(403, {'success': False, 'error': error})
+            return
+
+        action = str(data.get('action', 'list')).strip().lower()
+        if action in ('enable', 'disable', 'delete'):
+            filename = data.get('filename', '')
+            if not isinstance(filename, str) or not filename.strip():
+                self._json(400, {'success': False, 'error': 'filename required', 'code': 'filename_required'})
+                return
+
+            expected_enabled = data.get('expected_enabled')
+            if expected_enabled is not None and not isinstance(expected_enabled, bool):
+                self._json(400, {'success': False, 'error': 'expected_enabled must be boolean', 'code': 'invalid_expected_enabled'})
+                return
+
+            try:
+                if action == 'delete':
+                    plugin = delete_plugin(
+                        plugin_repository_root(),
+                        filename,
+                        MINECRAFT_VERSION,
+                        expected_enabled=expected_enabled,
+                    )
+                else:
+                    plugin = transition_plugin(
+                        plugin_repository_root(),
+                        filename,
+                        action == 'enable',
+                        MINECRAFT_VERSION,
+                        expected_enabled=expected_enabled,
+                    )
+            except PluginFilenameError as lifecycle_error:
+                self._json(400, {
+                    'success': False,
+                    'error': str(lifecycle_error),
+                    'code': lifecycle_error.code,
+                })
+                return
+            except PluginNotFoundError as lifecycle_error:
+                self._json(404, {
+                    'success': False,
+                    'error': str(lifecycle_error),
+                    'code': lifecycle_error.code,
+                })
+                return
+            except (PluginStateConflictError, PluginDestinationConflictError) as lifecycle_error:
+                self._json(409, {
+                    'success': False,
+                    'error': str(lifecycle_error),
+                    'code': lifecycle_error.code,
+                })
+                return
+            except PluginLifecycleError as lifecycle_error:
+                self._json(500, {
+                    'success': False,
+                    'error': str(lifecycle_error),
+                    'code': lifecycle_error.code,
+                })
+                return
+            except RepositoryError:
+                self._json(500, {'success': False, 'error': 'plugin repository unavailable', 'code': 'repository_unavailable'})
+                return
+
+            self._json(200, {'success': True, 'plugin': plugin})
+            return
+
+        if action != 'list':
+            self._json(400, {'success': False, 'error': 'invalid action', 'code': 'invalid_action'})
+            return
+        try:
+            self._json(200, {'success': True, **plugin_inventory()})
+        except RepositoryError as error:
+            self._json(500, {'success': False, 'error': str(error)})
+        except OSError:
+            self._json(500, {'success': False, 'error': 'plugin repository unavailable'})
+
+    def _plugin_upload_filename(self):
+        return validate_plugin_filename(self.headers.get('X-Plugin-Filename', ''))
+
+    def _read_plugin_upload(self, temporary, length):
+        previous_timeout = self.connection.gettimeout()
+        deadline = time.monotonic() + PLUGIN_UPLOAD_READ_TIMEOUT
+        try:
+            remaining = length
+            with open(temporary, 'wb') as stream:
+                while remaining:
+                    timeout = deadline - time.monotonic()
+                    if timeout <= 0:
+                        raise RuntimeError('upload timed out')
+                    self.connection.settimeout(timeout)
+                    try:
+                        chunk = self.rfile.read(min(PLUGIN_UPLOAD_CHUNK_SIZE, remaining))
+                    except socket.timeout as error:
+                        raise RuntimeError('upload timed out') from error
+                    except (ConnectionError, OSError) as error:
+                        raise RuntimeError('upload connection failed') from error
+                    if not chunk:
+                        raise RuntimeError('incomplete upload body')
+                    stream.write(chunk)
+                    remaining -= len(chunk)
+                stream.flush()
+                os.fsync(stream.fileno())
+        finally:
+            try:
+                self.connection.settimeout(previous_timeout)
+            except OSError:
+                # A disconnected client cannot receive a response or reuse this connection.
+                pass
+
+    def _handle_plugin_upload(self):
+        authed, error, _ = authenticate_authorization_header(self.headers.get('Authorization'))
+        if not authed:
+            self._json(403, {'success': False, 'error': error})
+            return
+
+        try:
+            filename = self._plugin_upload_filename()
+        except PluginFilenameError as upload_error:
+            self._json(400, {
+                'success': False,
+                'error': str(upload_error),
+                'code': upload_error.code,
+            })
+            return
+
+        raw_length = self.headers.get('Content-Length')
+        if raw_length is None:
+            self._json(411, {'success': False, 'error': 'content length required', 'code': 'length_required'})
+            return
+        try:
+            length = int(raw_length)
+        except (TypeError, ValueError):
+            self._json(400, {'success': False, 'error': 'invalid content length', 'code': 'invalid_length'})
+            return
+        if length < 0:
+            self._json(400, {'success': False, 'error': 'invalid content length', 'code': 'invalid_length'})
+            return
+        if length == 0:
+            self._json(400, {'success': False, 'error': 'upload body is empty', 'code': 'empty_upload'})
+            return
+        if length > PLUGIN_UPLOAD_LIMIT:
+            self._json(413, {
+                'success': False,
+                'error': 'upload exceeds 64 MiB limit',
+                'code': 'upload_too_large',
+                'upload_limit': PLUGIN_UPLOAD_LIMIT,
+            })
+            return
+
+        temporary = None
+        try:
+            temporary = create_upload_temp(plugin_repository_root())
+            try:
+                self._read_plugin_upload(temporary, length)
+            except RuntimeError as upload_error:
+                message = str(upload_error)
+                code = {
+                    'upload timed out': 'upload_timeout',
+                    'upload connection failed': 'upload_connection_failed',
+                    'incomplete upload body': 'incomplete_upload',
+                }.get(message, 'upload_failed')
+                self._json(408 if code == 'upload_timeout' else 400, {
+                    'success': False,
+                    'error': message,
+                    'code': code,
+                })
+                return
+
+            plugin = publish_uploaded_plugin(
+                plugin_repository_root(),
+                filename,
+                temporary,
+                MINECRAFT_VERSION,
+            )
+            self._json(201, {'success': True, 'plugin': plugin})
+        except PluginConflictError as upload_error:
+            self._json(409, {
+                'success': False,
+                'error': str(upload_error),
+                'code': upload_error.code,
+            })
+        except PluginArchiveError as upload_error:
+            self._json(400, {
+                'success': False,
+                'error': str(upload_error),
+                'code': upload_error.code,
+            })
+        except PluginUploadError as upload_error:
+            self._json(500, {
+                'success': False,
+                'error': str(upload_error),
+                'code': upload_error.code,
+            })
+        except RepositoryError:
+            self._json(500, {
+                'success': False,
+                'error': 'plugin repository unavailable',
+                'code': 'repository_unavailable',
+            })
+        finally:
+            if temporary and os.path.lexists(os.fspath(temporary)):
+                try:
+                    os.unlink(os.fspath(temporary))
+                except OSError:
+                    pass
 
     def _handle_runtime_state(self):
         data = self._read_json_body(allow_empty=True)

@@ -28,6 +28,9 @@ let SOURCE_MESSAGE_KEYS = Object.create(null);
 let SEED_STATE = { seed: '', hint: null, rawHint: null };
 let STRUCTURE_STATUS_STATE = { text: null, summary: null, rawSummary: null };
 let STRUCTURE_PLACEHOLDER_STATE = { text: null, rawPayload: null };
+let PLUGIN_INVENTORY = null;
+let PLUGIN_UPLOAD_IN_FLIGHT = false;
+let PLUGIN_TRANSITION_IN_FLIGHT = false;
 const STRUCTURE_LABEL_KEYS = {
   village: 'structure.type.village',
   stronghold: 'structure.type.stronghold',
@@ -163,7 +166,7 @@ function setupLocalePreference() {
   });
 }
 
-var LOADING_CARD_IDS = ['card-world','card-players','card-tps','card-rules','card-config','card-whitelist','card-seedmap'];
+var LOADING_CARD_IDS = ['card-world','card-players','card-tps','card-rules','card-config','card-whitelist','card-seedmap','card-plugins'];
 function setCardLoading(id,on){var el=document.getElementById(id);if(!el)return;if(on){el.classList.add('card-loading');el.style.position='relative'}else{el.classList.remove('card-loading')}}
 function setAllCardsLoading(on){for(var i=0;i<LOADING_CARD_IDS.length;i++)setCardLoading(LOADING_CARD_IDS[i],on)}
 function beginRefresh(name){if(REFRESH_IN_FLIGHT[name])return false;REFRESH_IN_FLIGHT[name]=true;return true}
@@ -367,6 +370,258 @@ async function init() {
   }
 }
 
+async function pluginRequest(payload) {
+  var r = await fetch(BASE + '/api/plugins', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(buildAuthPayload(payload))
+  });
+  var d = await r.json();
+  if (!d.success && isAuthError(d.error)) handleAuthFailure(d.error);
+  return d;
+}
+
+function updatePluginUploadSelection(showSelection) {
+  var input = document.getElementById('plugin-upload-input');
+  var button = document.getElementById('plugin-upload-btn');
+  var status = document.getElementById('plugin-upload-status');
+  var file = input && input.files && input.files[0];
+  if (button) button.disabled = PLUGIN_UPLOAD_IN_FLIGHT || !TOKEN || !file;
+  if (showSelection !== false && status && !PLUGIN_UPLOAD_IN_FLIGHT && !PLUGIN_TRANSITION_IN_FLIGHT && file) status.textContent = file.name;
+}
+
+function setPluginUploadStatus(value, cls) {
+  var status = document.getElementById('plugin-upload-status');
+  if (!status) return;
+  status.className = 'plugin-upload-status' + (cls ? ' ' + cls : '');
+  status.textContent = String(value || '');
+}
+
+function uploadPlugin() {
+  var input = document.getElementById('plugin-upload-input');
+  var file = input && input.files && input.files[0];
+  if (!TOKEN) {
+    handleAuthFailure('token required');
+    return;
+  }
+  if (!file) {
+    setPluginUploadStatus(t('status.plugin.uploadNoFile'), 'error');
+    return;
+  }
+  if (PLUGIN_UPLOAD_IN_FLIGHT) return;
+
+  var progress = document.getElementById('plugin-upload-progress');
+  var button = document.getElementById('plugin-upload-btn');
+  var xhr = new XMLHttpRequest();
+  PLUGIN_UPLOAD_IN_FLIGHT = true;
+  if (button) button.disabled = true;
+  if (progress) {
+    progress.value = 0;
+    progress.classList.remove('hidden');
+  }
+  setPluginUploadStatus(t('status.plugin.uploading'), '');
+  xhr.open('POST', BASE + '/api/plugins/upload', true);
+  xhr.timeout = 35000;
+  xhr.setRequestHeader('Authorization', 'Bearer ' + TOKEN);
+  xhr.setRequestHeader('X-Plugin-Filename', file.name);
+  xhr.setRequestHeader('Content-Type', 'application/java-archive');
+  xhr.upload.onprogress = function (event) {
+    if (!progress || !event.lengthComputable) return;
+    progress.value = Math.round(event.loaded / event.total * 100);
+  };
+  xhr.onload = function () {
+    var data = null;
+    try { data = JSON.parse(xhr.responseText || '{}'); } catch (e) { data = {}; }
+    if (xhr.status === 401 || xhr.status === 403 || isAuthError(data.error)) {
+      handleAuthFailure(data.error || 'token expired');
+      return;
+    }
+    if (xhr.status >= 200 && xhr.status < 300 && data.success) {
+      setPluginUploadStatus(t('status.plugin.uploadSuccess', { filename: file.name }), 'success');
+      input.value = '';
+      refreshPlugins();
+      return;
+    }
+    setPluginUploadStatus(data.error || t('status.plugin.uploadFailed'), 'error');
+  };
+  xhr.onerror = function () { setPluginUploadStatus(t('status.plugin.uploadConnectionFailed'), 'error'); };
+  xhr.ontimeout = function () { setPluginUploadStatus(t('status.plugin.uploadTimeout'), 'error'); };
+  xhr.onloadend = function () {
+    PLUGIN_UPLOAD_IN_FLIGHT = false;
+    if (progress) {
+      if (xhr.status >= 200 && xhr.status < 300) progress.value = 100;
+      setTimeout(function () { progress.classList.add('hidden'); }, 800);
+    }
+    updatePluginUploadSelection(false);
+  };
+  xhr.send(file);
+}
+
+function formatPluginBytes(value) {
+  var bytes = Math.max(0, Number(value || 0));
+  if (bytes < 1024) return formatNumber(bytes) + ' B';
+  if (bytes < 1024 * 1024) return formatNumber(bytes / 1024, { maximumFractionDigits: 1 }) + ' KB';
+  return formatNumber(bytes / (1024 * 1024), { maximumFractionDigits: 1 }) + ' MB';
+}
+
+function formatPluginModified(value) {
+  var date = new Date(value);
+  return isNaN(date.getTime()) ? String(value || '--') : new Intl.DateTimeFormat(EaglerXI18n.getLocale(), { dateStyle: 'short', timeStyle: 'short' }).format(date);
+}
+
+function pluginTransitionError(data) {
+  var code = String(data && data.code || '');
+  if (code === 'missing_resource') return t('status.plugin.missing');
+  if (code === 'state_conflict') return t('status.plugin.stale');
+  if (code === 'destination_conflict') return t('status.plugin.destinationConflict');
+  return String(data && data.error || t('status.plugin.transitionFailed'));
+}
+
+async function transitionPlugin(button) {
+  if (!button || PLUGIN_TRANSITION_IN_FLIGHT || !TOKEN) return;
+  var filename = button.getAttribute('data-plugin-filename') || '';
+  var action = button.getAttribute('data-plugin-action') || '';
+  if (!filename || (action !== 'enable' && action !== 'disable')) return;
+
+  PLUGIN_TRANSITION_IN_FLIGHT = true;
+  button.disabled = true;
+  setPluginUploadStatus(t('status.plugin.transitioning'), '');
+  try {
+    var d = await pluginRequest({
+      action: action,
+      filename: filename,
+      expected_enabled: action === 'disable'
+    });
+    if (d.success) {
+      setPluginUploadStatus(t('status.plugin.transitionSuccess', { filename: filename }), 'success');
+      await refreshPlugins();
+      return;
+    }
+    if (!isAuthError(d.error)) {
+      setPluginUploadStatus(pluginTransitionError(d), 'error');
+      await refreshPlugins();
+    }
+  } catch (e) {
+    setPluginUploadStatus(t('status.plugin.transitionFailed'), 'error');
+    await refreshPlugins();
+  } finally {
+    PLUGIN_TRANSITION_IN_FLIGHT = false;
+    renderPluginInventory();
+  }
+}
+
+async function deletePlugin(button) {
+  if (!button || PLUGIN_TRANSITION_IN_FLIGHT || !TOKEN) return;
+  var filename = button.getAttribute('data-plugin-filename') || '';
+  var expectedEnabled = button.getAttribute('data-plugin-enabled') === 'true';
+  if (!filename) return;
+
+  PLUGIN_TRANSITION_IN_FLIGHT = true;
+  try {
+    var confirmed = await showActionDialog({
+      kicker: presentation('status.plugin.deleteKicker'),
+      title: presentation('status.plugin.deleteTitle', { filename: filename }),
+      description: presentation('status.plugin.deleteDescription', { filename: filename }),
+      confirmText: presentation('status.plugin.deleteConfirm'),
+      danger: true,
+      fields: [],
+      previewText: function () { return t('status.plugin.deletePreview', { filename: filename }); }
+    });
+    if (!confirmed) return;
+    button.disabled = true;
+    setPluginUploadStatus(t('status.plugin.transitioning'), '');
+    var d = await pluginRequest({
+      action: 'delete',
+      filename: filename,
+      expected_enabled: expectedEnabled
+    });
+    if (d.success) {
+      setPluginUploadStatus(t('status.plugin.deleteSuccess', { filename: filename }), 'success');
+      await refreshPlugins();
+      return;
+    }
+    if (!isAuthError(d.error)) {
+      setPluginUploadStatus(pluginTransitionError(d), 'error');
+      await refreshPlugins();
+    }
+  } catch (e) {
+    setPluginUploadStatus(t('status.plugin.transitionFailed'), 'error');
+    await refreshPlugins();
+  } finally {
+    PLUGIN_TRANSITION_IN_FLIGHT = false;
+    renderPluginInventory();
+  }
+}
+
+function renderPluginInventory() {
+  var title = document.getElementById('plugin-title');
+  var note = document.getElementById('plugin-note');
+  var version = document.getElementById('plugin-version');
+  var list = document.getElementById('plugin-list');
+  var banner = document.getElementById('plugin-restart-banner');
+  var restartText = document.getElementById('plugin-restart-text');
+  var restartButton = document.getElementById('plugin-restart-btn');
+  var warningTitle = document.getElementById('plugin-upload-warning-title');
+  var warningText = document.getElementById('plugin-upload-warning-text');
+  var fileLabel = document.getElementById('plugin-upload-file-label');
+  var uploadButton = document.getElementById('plugin-upload-btn');
+  if (!title || !note || !version || !list || !banner || !restartText || !restartButton) return;
+  title.textContent = t('status.plugin.title');
+  note.textContent = t('status.plugin.note');
+  if (warningTitle) warningTitle.textContent = t('status.plugin.warningTitle');
+  if (warningText) warningText.textContent = t('status.plugin.warningText');
+  if (fileLabel) fileLabel.firstChild.textContent = t('status.plugin.chooseFile');
+  if (uploadButton) uploadButton.textContent = t('status.plugin.upload');
+  updatePluginUploadSelection(false);
+  if (!PLUGIN_INVENTORY) {
+    version.textContent = 'MC --';
+    banner.classList.add('hidden');
+    list.innerHTML = '<div class="empty-state">' + escapeHtml(t('status.plugin.login')) + '</div>';
+    return;
+  }
+  var activeVersion = String(PLUGIN_INVENTORY.minecraft_version || SERVER_INFO.minecraftVersion || '--');
+  version.textContent = t('status.plugin.version', { version: activeVersion });
+  restartText.textContent = t('status.plugin.pending', { version: activeVersion });
+  restartButton.textContent = t('status.plugin.restart');
+  banner.classList.toggle('hidden', !PLUGIN_INVENTORY.pending_restart);
+  var entries = PLUGIN_INVENTORY.entries || [];
+  if (!entries.length) {
+    list.innerHTML = '<div class="empty-state">' + escapeHtml(t('status.plugin.empty')) + '</div>';
+    return;
+  }
+  var rows = ['<div class="plugin-table">', '<div class="plugin-row plugin-header"><span>' + escapeHtml(t('status.plugin.package')) + '</span><span>' + escapeHtml(t('status.plugin.state')) + '</span><span>' + escapeHtml(t('status.plugin.size')) + '</span><span>' + escapeHtml(t('status.plugin.modified')) + '</span><span>' + escapeHtml(t('status.plugin.action')) + '</span></div>'];
+  entries.forEach(function (entry) {
+    var enabled = !!entry.enabled;
+    var action = enabled ? 'disable' : 'enable';
+    var actionLabel = enabled ? t('status.plugin.disableAction') : t('status.plugin.enableAction');
+    rows.push('<div class="plugin-row"><span class="plugin-name" title="' + escapeHtml(entry.filename || '') + '">' + escapeHtml(entry.filename || '') + '</span><span class="plugin-state' + (enabled ? '' : ' disabled') + '">' + escapeHtml(enabled ? t('status.plugin.enabled') : t('status.plugin.disabled')) + '</span><span class="plugin-meta">' + escapeHtml(formatPluginBytes(entry.size)) + '</span><span class="plugin-meta">' + escapeHtml(formatPluginModified(entry.modified_at)) + '</span><span class="plugin-actions"><button class="pill-btn plugin-action" type="button" data-plugin-action="' + action + '" data-plugin-filename="' + escapeHtml(entry.filename || '') + '">' + escapeHtml(actionLabel) + '</button><button class="pill-btn plugin-delete-action danger-btn" type="button" data-plugin-filename="' + escapeHtml(entry.filename || '') + '" data-plugin-enabled="' + String(enabled) + '">' + escapeHtml(t('status.plugin.deleteAction')) + '</button></span></div>');
+  });
+  rows.push('</div>');
+  list.innerHTML = rows.join('');
+  list.querySelectorAll('.plugin-action').forEach(function (button) {
+    button.addEventListener('click', function () { transitionPlugin(button); });
+  });
+  list.querySelectorAll('.plugin-delete-action').forEach(function (button) {
+    button.addEventListener('click', function () { deletePlugin(button); });
+  });
+}
+
+async function refreshPlugins() {
+  if (!TOKEN || !beginRefresh('plugins')) return;
+  try {
+    var d = await pluginRequest({ action: 'list' });
+    if (d.success) {
+      PLUGIN_INVENTORY = d;
+      renderPluginInventory();
+    }
+  } catch (e) {
+    logClient('console.requestFailed', { error: e.message }, 'warn');
+  } finally {
+    setCardLoading('card-plugins', false);
+    endRefresh('plugins');
+  }
+}
+
 async function configRequest(payload) {
   var r = await fetch(BASE + '/api/config', {
     method: 'POST',
@@ -484,6 +739,8 @@ function clearAuthState() {
 
 function resetAuthUi() {
   setStatus('auth', '请输入密码');
+  PLUGIN_INVENTORY = null;
+  renderPluginInventory();
   ONLINE_PLAYERS = [];
   WORLD_INFO_CACHE = null;
   document.getElementById('player-count').textContent = '0';
@@ -808,6 +1065,7 @@ function rerenderLocalizedState() {
   if (WORLD_INFO_CACHE) renderWorldInfo(WORLD_INFO_CACHE);
   if (ONLINE_PLAYERS || TOKEN) renderPlayers();
   if (TPS_VALUES.length) renderTPS();
+  renderPluginInventory();
   renderSeedState();
   renderStructureStatus();
   renderStructureSource();
@@ -1191,6 +1449,8 @@ async function runInitialDashboardRefreshes() {
     await refreshServerVersion();
     await sleep(120);
     await refreshConfig();
+    await sleep(120);
+    await refreshPlugins();
     await sleep(120);
     await refreshSeedMap();
   } finally {
@@ -2380,9 +2640,11 @@ async function restartServer() {
       logClient('console.serverRestarting', {}, 'warn');
       if (d.message) logRaw(d.message, 'out');
       setStatus('auth', '重启中');
+      refreshPlugins();
       setTimeout(refreshPlayers, 12000);
       setTimeout(refreshTPS, 16000);
       setTimeout(refreshSeedMap, 16000);
+      setTimeout(refreshPlugins, 12000);
       setTimeout(function () {
         if (TOKEN) setStatus('on', '已连接');
       }, 18000);

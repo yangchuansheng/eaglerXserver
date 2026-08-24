@@ -86,7 +86,7 @@ bungee 插件的 `listeners.yml` 中 `root: '../../../web'` 和 server 的 `run.
 | `/admin` | GET | 302 重定向到 `/admin.html` |
 | `/dynmap/` | GET | 反向代理到 `localhost:8123`，无需额外暴露端口 |
 
-`RCON_PASSWORD` 环境变量留空时，管理 API 保持关闭。管理 API 请求体上限为 64 KiB，读取超时为 10 秒。同一来源连续 5 次登录失败后锁定 10 分钟。
+`RCON_PASSWORD` 环境变量留空时，管理 API 保持关闭。JSON 管理 API 请求体上限为 64 KiB，读取超时为 10 秒；原始插件 JAR 上传单独使用 64 MiB 上限和 30 秒总读取截止时间。同一来源连续 5 次登录失败后锁定 10 分钟。
 
 ### admin.html 管理面板
 
@@ -160,3 +160,17 @@ Dockerfile 用 `COPY .` 打包全部文件（含两个版本），运行时通�
 
 ## 当前镜像
 `registry.cn-hangzhou.aliyuncs.com/chenxuan/eaglerx1.8server:2.1`
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in this repository's GitHub Issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The repository uses the default five-role triage label vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+The repository uses a single-context domain layout. See `docs/agents/domain.md`.
