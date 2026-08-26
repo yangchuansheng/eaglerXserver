@@ -71,6 +71,26 @@ class ReleaseGateTests(unittest.TestCase):
                 release_gate.run_docker_gate(options, evidence)
             self.assertEqual("blocked", evidence.rows[-1]["status"])
 
+    def test_live_container_parses_the_random_host_port(self):
+        container = release_gate.LiveContainer("fixture", "fixture", "/tmp", "1.8", "fixture")
+        result = SimpleNamespace(stdout=b"127.0.0.1:49153\n")
+        with mock.patch.object(release_gate, "run_command", return_value=result):
+            self.assertEqual(49153, container.mapped_port())
+
+    def test_restart_uses_the_long_running_api_timeout(self):
+        container = SimpleNamespace(base_url="http://127.0.0.1:5201", version="1.8")
+        with mock.patch.object(
+            release_gate, "post_json", return_value=(200, {"success": True})
+        ) as request, mock.patch.object(release_gate, "poll_until"):
+            release_gate.restart_and_wait(container, "fixture-token", True)
+        request.assert_called_once_with(
+            container.base_url,
+            "/api/system",
+            "fixture-token",
+            {"action": "restart_server"},
+            timeout=130,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

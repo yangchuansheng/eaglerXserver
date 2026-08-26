@@ -321,10 +321,10 @@ def json_request(base_url, path, method="GET", payload=None, headers=None, timeo
     return status, payload_data if isinstance(payload_data, dict) else {}
 
 
-def post_json(base_url, path, token, payload):
+def post_json(base_url, path, token, payload, timeout=10):
     data = dict(payload)
     data["token"] = token
-    return json_request(base_url, path, "POST", data)
+    return json_request(base_url, path, "POST", data, timeout=timeout)
 
 
 def upload_package(container, token, filename, package, stage):
@@ -446,7 +446,13 @@ def inventory(container, token):
 
 
 def restart_and_wait(container, token, present):
-    status, body = post_json(container.base_url, "/api/system", token, {"action": "restart_server"})
+    status, body = post_json(
+        container.base_url,
+        "/api/system",
+        token,
+        {"action": "restart_server"},
+        timeout=130,
+    )
     if status != 200 or body.get("success") is not True:
         raise GateFailure(f"live-restart-{container.version}")
     poll_until(
@@ -643,6 +649,7 @@ def run_docker_gate(args, evidence):
             evidence.emit({
                 "kind": "live-paper-smoke",
                 "status": "fail",
+                "stage": error.stage,
                 "image_id": info["image_id"],
                 "version": version,
                 "mount_boundary": MOUNT_BOUNDARY,

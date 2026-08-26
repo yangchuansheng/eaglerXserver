@@ -30,7 +30,7 @@ image:
 
 ./script/release_gate.sh \
   --live \
-  --image ghcr.io/yangchuansheng/eaglerx1.8server:2.2
+  --image ghcr.io/yangchuansheng/eaglerx1.8server:2.2.1
 ```
 
 `--live` makes an unavailable Docker daemon or any failed version a release
@@ -42,7 +42,13 @@ version are recorded as release evidence.
 The live gate creates a fresh temporary full-runtime mount for each version
 and uses a checked-in minimal JavaPlugin package. The package contains a
 root-level `plugin.yml` and a no-op Paper plugin class, so the test does not
-download a third-party artifact. For each selected version it performs:
+download a third-party artifact.
+
+On Linux, the live gate needs permission to manage root-owned files created in
+the temporary bind mount. The release workflow supplies that boundary through
+passwordless `sudo` on the disposable GitHub-hosted runner.
+
+For each selected version it performs:
 
 1. Start a mounted container with `MINECRAFT_VERSION` and a throwaway RCON
    password, then verify `/api/status` and the Paper `version` command.

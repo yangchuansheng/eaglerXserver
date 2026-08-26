@@ -14,17 +14,17 @@
 ## 快速启动
 
 ```bash
-docker pull ghcr.io/yangchuansheng/eaglerx1.8server:2.2
+docker pull ghcr.io/yangchuansheng/eaglerx1.8server:2.2.1
 
 # Paper 1.12.2
 docker run -d -p 5200:5200 \
   -e MINECRAFT_VERSION=1.12 \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.1
 
 # Paper 1.8.8
 docker run -d -p 5200:5200 \
   -e MINECRAFT_VERSION=1.8 \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.1
 ```
 
 游戏入口为 `http://<host>:5200`。启动必须显式提供 `MINECRAFT_VERSION=1.8` 或 `MINECRAFT_VERSION=1.12`。
@@ -39,7 +39,7 @@ docker run -d \
   -p 127.0.0.1:5201:5201 \
   -e MINECRAFT_VERSION=1.12 \
   -e RCON_PASSWORD=你的密码 \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.1
 ```
 
 管理面板地址为 `http://127.0.0.1:5201/admin`。管理员密码仅发送到 `/api/login`；登录成功后，浏览器把令牌保存在 `sessionStorage`，管理请求统一使用令牌。令牌默认有效 8 小时，关闭浏览器会话会清理本地登录态。
@@ -62,7 +62,7 @@ docker run -d \
   -v /data/eagler-1.12:/eaglerX-1.8-server \
   -e MINECRAFT_VERSION=1.12 \
   -e RCON_PASSWORD=你的密码 \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.1
 
 # 1.8
 docker run -d \
@@ -71,7 +71,7 @@ docker run -d \
   -v /data/eagler-1.8:/eaglerX-1.8-server \
   -e MINECRAFT_VERSION=1.8 \
   -e RCON_PASSWORD=你的密码 \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.1
 ```
 
 并行运行两个版本时，为每个容器配置独立挂载目录和宿主机端口，例如第二个容器使用 `-p 5300:5200 -p 127.0.0.1:5301:5201`。
@@ -88,7 +88,7 @@ docker run -d \
 docker run -d \
   -v /data/eagler-1.12:/eaglerX-1.8-server \
   -e MINECRAFT_VERSION=1.12 \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.1
 ```
 
 需要单独挂载数据目录时，设置 `PERSISTENT_DATA_ROOT`。该目录同时保存旧版兼容世界目录和版本隔离插件仓库：
@@ -98,7 +98,7 @@ docker run -d \
   -v /data/eagler-1.12-data:/eaglerx-data \
   -e PERSISTENT_DATA_ROOT=/eaglerx-data \
   -e MINECRAFT_VERSION=1.12 \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.1
 ```
 
 管理面板的插件仓库卡片展示当前版本、启用/停用状态、文件大小、修改时间和待重启标记。启用/停用状态在下一次 Paper 启动时生效。
@@ -142,14 +142,14 @@ curl -s http://127.0.0.1:5201/api/rcon \
 
 ```bash
 docker build -t eaglerx1.8server .
-./build.sh 2.2
-./build.sh 2.2 push
+./build.sh 2.2.1
+./build.sh 2.2.1 push
 ```
 
 推送 `vMAJOR.MINOR` 或 `vMAJOR.MINOR.PATCH` Git 标签会执行完整发布闸门，并把同一份已验证镜像发布到 GHCR。历史版本重跑使用：
 
 ```bash
-gh workflow run release.yml -f release_tag=v2.2
+gh workflow run release.yml -f release_tag=v2.2.1
 ```
 
 ## 发布闸门
