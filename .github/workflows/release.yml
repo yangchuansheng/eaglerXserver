@@ -50,7 +50,15 @@ jobs:
 
       - name: Run complete release gate
         run: |
-          ./script/release_gate.sh \
+          # The image initializes Linux bind mounts as root during the live gate.
+          sudo env \
+            "HOME=${HOME}" \
+            "PATH=${PATH}" \
+            "AGENT_BROWSER_ARGS=--no-sandbox" \
+            "GIT_CONFIG_COUNT=1" \
+            "GIT_CONFIG_KEY_0=safe.directory" \
+            "GIT_CONFIG_VALUE_0=${GITHUB_WORKSPACE}" \
+            ./script/release_gate.sh \
             --build --live \
             --timeout 1800 \
             --image "eaglerx-release:${{ steps.release.outputs.short_sha }}" \
