@@ -58,7 +58,22 @@ jobs:
             "GIT_CONFIG_COUNT=1" \
             "GIT_CONFIG_KEY_0=safe.directory" \
             "GIT_CONFIG_VALUE_0=${GITHUB_WORKSPACE}" \
-            ./script/release_gate.sh \
+            python3 -c '
+          import sys
+          from script import release_gate
+
+          run_live_version = release_gate.run_live_version
+
+          def diagnose_live_version(*args):
+              try:
+                  return run_live_version(*args)
+              except release_gate.GateFailure as error:
+                  print(f"release-gate-live-stage: {error.stage}", file=sys.stderr)
+                  raise
+
+          release_gate.run_live_version = diagnose_live_version
+          raise SystemExit(release_gate.main())
+          ' \
             --build --live \
             --timeout 1800 \
             --image "eaglerx-release:${{ steps.release.outputs.short_sha }}" \
