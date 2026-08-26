@@ -423,12 +423,20 @@ class LiveContainer:
         return int(match.group(1)) if match else None
 
     def stop(self):
-        subprocess.run(
-            ["docker", "rm", "-f", self.name],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
+        for command, timeout in (
+            (["docker", "stop", "--time", "45", self.name], 60),
+            (["docker", "rm", "-f", self.name], 30),
+        ):
+            try:
+                subprocess.run(
+                    command,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=timeout,
+                    check=False,
+                )
+            except (OSError, subprocess.SubprocessError):
+                pass
 
 
 def login(container):

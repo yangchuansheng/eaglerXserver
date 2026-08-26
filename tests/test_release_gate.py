@@ -85,6 +85,18 @@ class ReleaseGateTests(unittest.TestCase):
         with mock.patch.object(release_gate, "run_command", return_value=result):
             self.assertEqual(49153, container.mapped_port())
 
+    def test_live_container_stops_gracefully_before_removal(self):
+        container = release_gate.LiveContainer("fixture", "fixture", "/tmp", "1.12", "fixture")
+        with mock.patch.object(release_gate.subprocess, "run") as run:
+            container.stop()
+        self.assertEqual(
+            [
+                ["docker", "stop", "--time", "45", "fixture"],
+                ["docker", "rm", "-f", "fixture"],
+            ],
+            [call.args[0] for call in run.call_args_list],
+        )
+
     def test_restart_uses_the_long_running_api_timeout(self):
         container = SimpleNamespace(base_url="http://127.0.0.1:5201", version="1.8")
         with mock.patch.object(
