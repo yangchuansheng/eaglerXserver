@@ -84,7 +84,13 @@ jobs:
               return status, body
 
           release_gate.post_json = diagnose_post_json
-          raise SystemExit(release_gate.main())
+          release_gate.run_browser_matrix = lambda evidence: evidence.emit({
+              "kind": "browser-matrix",
+              "status": "diagnostic-skip",
+              "boundary": "restart classification only",
+          })
+          result = release_gate.main()
+          raise SystemExit(result or 1)
           ' \
             --build --live \
             --timeout 1800 \
