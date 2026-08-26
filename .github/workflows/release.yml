@@ -58,7 +58,34 @@ jobs:
             "GIT_CONFIG_COUNT=1" \
             "GIT_CONFIG_KEY_0=safe.directory" \
             "GIT_CONFIG_VALUE_0=${GITHUB_WORKSPACE}" \
-            ./script/release_gate.sh \
+            python3 -c '
+          import sys
+          from script import release_gate
+
+          post_json = release_gate.post_json
+
+          def diagnose_post_json(base_url, path, token, payload, **kwargs):
+              status, body = post_json(base_url, path, token, payload, **kwargs)
+              if path == "/api/system":
+                  message = str(body.get("error", "")).casefold()
+                  if "did not stop" in message:
+                      reason = "stop-timeout"
+                  elif "did not start" in message:
+                      reason = "start-timeout"
+                  elif "exited during restart" in message:
+                      reason = "server-exited"
+                  elif "tmux" in message or "pane" in message:
+                      reason = "tmux-error"
+                  elif status == 0:
+                      reason = "client-timeout"
+                  else:
+                      reason = "other"
+                  print(f"release-gate-restart-result: status={status} reason={reason}", file=sys.stderr)
+              return status, body
+
+          release_gate.post_json = diagnose_post_json
+          raise SystemExit(release_gate.main())
+          ' \
             --build --live \
             --timeout 1800 \
             --image "eaglerx-release:${{ steps.release.outputs.short_sha }}" \
