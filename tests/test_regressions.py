@@ -22,12 +22,17 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[1]
 START_SCRIPT = ROOT / 'script' / 'start_server.sh'
 HTTP_SERVER_PATH = ROOT / 'script' / 'http_server.py'
+RELEASE_METADATA_PATH = ROOT / 'script' / 'prepare_release.py'
 
 os.environ['RCON_PASSWORD'] = 'test-password'
 os.environ['ADMIN_AUTH_SECRET'] = 'test-auth-secret'
 spec = importlib.util.spec_from_file_location('eaglerx_http_server', HTTP_SERVER_PATH)
 http_server = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(http_server)
+
+release_spec = importlib.util.spec_from_file_location('eaglerx_release_metadata', RELEASE_METADATA_PATH)
+release_metadata = importlib.util.module_from_spec(release_spec)
+release_spec.loader.exec_module(release_metadata)
 
 
 class FakeConnection:
@@ -890,6 +895,40 @@ console.log(JSON.stringify({
                     if message['classification'] == 'operational':
                         self.assertNotIn(key, catalogs['en'], f'{root.name}: operational key {key} in en catalog')
                         self.assertNotIn(key, catalogs['zh-CN'], f'{root.name}: operational key {key} in zh-CN catalog')
+
+    def test_release_tag_and_channel_contract(self):
+        tags = ['v1.12.2', 'v2.2', 'v2.2.1', 'v2.3-beta', 'release-3.0']
+        commit = 'a' * 40
+        self.assertEqual('v2.2.1', release_metadata.highest_release_tag(tags))
+        self.assertEqual(
+            {
+                'release_tag': 'v2.2.1',
+                'version': '2.2.1',
+                'commit': commit,
+                'short_sha': commit[:12],
+                'sha_tag': f'sha-{commit[:12]}',
+                'promote_latest': 'true',
+            },
+            release_metadata.release_outputs('v2.2.1', tags, 'push', commit),
+        )
+        self.assertEqual(
+            'false',
+            release_metadata.release_outputs('v2.2', tags, 'workflow_dispatch', commit)['promote_latest'],
+        )
+        with self.assertRaises(ValueError):
+            release_metadata.parse_release_tag('v2.3-beta')
+
+    def test_release_workflow_contract(self):
+        workflow = (ROOT / '.github' / 'workflows' / 'release.yml').read_text(encoding='utf-8')
+        action_refs = re.findall(r'^\s*uses:\s+[^@\s]+@([0-9a-f]+)', workflow, re.MULTILINE)
+        self.assertTrue(action_refs)
+        self.assertTrue(all(len(reference) == 40 for reference in action_refs))
+        self.assertIn('ghcr.io/yangchuansheng/eaglerx1.8server', workflow)
+        self.assertIn('--build --live', workflow)
+        self.assertIn('actions/attest@', workflow)
+        self.assertIn('retention-days: 30', workflow)
+        self.assertNotIn('setup-qemu', workflow)
+        self.assertNotIn('build-push-action', workflow)
 
 
 class DirectRootStaticServer:

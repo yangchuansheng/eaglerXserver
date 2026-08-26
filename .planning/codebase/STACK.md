@@ -72,7 +72,7 @@
 
 **Build:**
 - `Dockerfile` copies the complete repository into `/opt/eaglerX-1.8-server-image`, installs the startup entrypoint, and exposes runtime defaults through `ENV`.
-- `build.sh` builds `registry.cn-hangzhou.aliyuncs.com/chenxuan/eaglerx1.8server:<tag>` and optionally pushes it.
+- `build.sh` builds `ghcr.io/yangchuansheng/eaglerx1.8server:<tag>` and optionally pushes it.
 - `buildconf.json` and `buildconf_template.json` configure the legacy Eaglercraft client compiler.
 - `replit.nix` declares development tools including JRE 8, JDK 11, Git, tmux, wget, curl, jq, ffmpeg, and dialog.
 

@@ -1,4 +1,5 @@
 FROM registry.cn-hangzhou.aliyuncs.com/chenxuan/java:0.0.1
+LABEL org.opencontainers.image.source="https://github.com/yangchuansheng/eaglerXserver"
 COPY . /opt/eaglerX-1.8-server-image
 COPY script/libcubiomes_shim.so /usr/local/lib/libcubiomes_shim.so
 RUN rm -rf /eaglerX-1.8-server \

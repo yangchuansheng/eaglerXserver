@@ -30,7 +30,7 @@ image:
 
 ./script/release_gate.sh \
   --live \
-  --image registry.cn-hangzhou.aliyuncs.com/chenxuan/eaglerx1.8server:2.1
+  --image ghcr.io/yangchuansheng/eaglerx1.8server:2.2
 ```
 
 `--live` makes an unavailable Docker daemon or any failed version a release

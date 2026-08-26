@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-IMAGE="registry.cn-hangzhou.aliyuncs.com/chenxuan/eaglerx1.8server"
+IMAGE="ghcr.io/yangchuansheng/eaglerx1.8server"
 TAG="${1:-latest}"
 FULL="${IMAGE}:${TAG}"
 

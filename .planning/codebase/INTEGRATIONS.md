@@ -64,11 +64,11 @@
 ## CI/CD & Deployment
 
 **Hosting:**
-- Docker image published as `registry.cn-hangzhou.aliyuncs.com/chenxuan/eaglerx1.8server:<tag>` by `build.sh`.
-- No hosted deployment manifest or CI workflow detected.
+- Docker images are published to `ghcr.io/yangchuansheng/eaglerx1.8server:<tag>` by the release workflow or `build.sh`.
+- `.github/workflows/release.yml` validates tagged releases and publishes the tested image to GHCR.
 
 **CI Pipeline:**
-- None detected. Local `build.sh` runs `docker build` and optionally `docker push`.
+- Tagged releases and manual historical reruns execute the complete release gate before GHCR publication.
 
 ## Environment Configuration
 
