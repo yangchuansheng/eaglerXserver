@@ -654,7 +654,6 @@ class PluginRestartTests(unittest.TestCase):
             server.MINECRAFT_VERSION = '1.8'
             try:
                 with mock.patch.object(server, 'server_pane_dead', return_value=False), \
-                        mock.patch.object(server, 'server_pane_command', return_value='java'), \
                         mock.patch.object(server, 'wait_for_server_stop', return_value='dead'), \
                         mock.patch.object(server, 'rcon_send', side_effect=['', RuntimeError('not ready'), '']) as rcon_mock, \
                         mock.patch.object(server.time, 'sleep'), \
@@ -676,7 +675,6 @@ class PluginRestartTests(unittest.TestCase):
             server.MINECRAFT_VERSION = '1.8'
             try:
                 with mock.patch.object(server, 'server_pane_dead', side_effect=[False, True]), \
-                        mock.patch.object(server, 'server_pane_command', return_value='java'), \
                         mock.patch.object(server, 'wait_for_server_stop', return_value='dead'), \
                         mock.patch.object(server, 'rcon_send', side_effect=RuntimeError('RCON unavailable')), \
                         mock.patch.object(server, 'tmux_run', return_value=''):

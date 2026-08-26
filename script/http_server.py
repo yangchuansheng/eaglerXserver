@@ -1121,25 +1121,17 @@ def tmux_run(args):
     return result.stdout.strip()
 
 
-def server_pane_command():
-    return tmux_run(['display-message', '-p', '-t', SERVER_PANE, '#{pane_current_command}'])
-
-
 def server_pane_dead():
     return tmux_run(['display-message', '-p', '-t', SERVER_PANE, '#{pane_dead}']) == '1'
 
 
 def wait_for_server_stop(timeout=60):
     deadline = time.time() + timeout
-    last_cmd = ''
     while time.time() < deadline:
         if server_pane_dead():
             return 'dead'
-        last_cmd = server_pane_command().lower()
-        if last_cmd not in ('java', 'java.bin'):
-            return last_cmd
         time.sleep(1)
-    raise RuntimeError(f'server did not stop in time (pane command: {last_cmd or "unknown"})')
+    raise RuntimeError('server did not stop in time')
 
 
 def plugin_repository_root():
@@ -1170,7 +1162,7 @@ def restart_server_process():
     if not _restart_lock.acquire(blocking=False):
         return False
     try:
-        if not server_pane_dead() and server_pane_command().lower() in ('java', 'java.bin'):
+        if not server_pane_dead():
             try:
                 rcon_send('stop', retries=1)
             except Exception:
@@ -1181,15 +1173,13 @@ def restart_server_process():
         while time.time() < deadline:
             if server_pane_dead():
                 raise RuntimeError('server exited during restart')
-            if server_pane_command().lower() in ('java', 'java.bin'):
-                try:
-                    rcon_send('version', retries=1)
-                except Exception:
-                    time.sleep(1)
-                    continue
-                clear_plugin_restart_marker()
-                return True
-            time.sleep(1)
+            try:
+                rcon_send('version', retries=1)
+            except Exception:
+                time.sleep(1)
+                continue
+            clear_plugin_restart_marker()
+            return True
         raise RuntimeError('server did not start in time')
     finally:
         _restart_lock.release()

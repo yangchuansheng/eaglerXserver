@@ -210,12 +210,25 @@ def parse_browser_evidence(output):
     return rows
 
 
-def run_browser_matrix(evidence):
-    result = run_command(
-        [sys.executable, "-m", "unittest", "tests.test_browser_release_matrix"],
-        "browser-matrix",
-        timeout=600,
+def browser_failure_stage(output):
+    match = re.search(
+        rb"AssertionError: (web-1\.(?:8|12):[a-z0-9-]+):",
+        output,
     )
+    if not match:
+        return "browser-matrix"
+    return "browser-matrix-" + match.group(1).decode("ascii").replace(":", "-")
+
+
+def run_browser_matrix(evidence):
+    try:
+        result = run_command(
+            [sys.executable, "-m", "unittest", "tests.test_browser_release_matrix"],
+            "browser-matrix",
+            timeout=600,
+        )
+    except GateFailure as error:
+        raise GateFailure(browser_failure_stage(error.output), error.output) from error
     rows = parse_browser_evidence(result.stdout + result.stderr)
     roots = {row.get("root") for row in rows if row.get("root")}
     locales = {row.get("locale") for row in rows if row.get("locale")}

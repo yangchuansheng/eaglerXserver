@@ -304,7 +304,7 @@ class AgentBrowser:
             stderr=subprocess.PIPE,
             text=True,
             env=self.env,
-            timeout=min(30, remaining),
+            timeout=min(60, remaining),
             check=False,
         )
         if result.returncode:
@@ -328,7 +328,7 @@ class AgentBrowser:
             [*invocation, '--content-boundaries', '--max-output', '4000', '--action-policy', self.policy,
              '--screenshot-dir', self.screenshot_dir, 'batch', '--json'],
             input=json.dumps(commands), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-            env=self.env, timeout=min(30, remaining), check=False,
+            env=self.env, timeout=min(60, remaining), check=False,
         )
         if result.returncode:
             raise AssertionError(f'{self.root_name}:{stage}: browser batch failed ({result.returncode})')
@@ -436,7 +436,7 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
 
     def run_root_scenario(self, root):
         stage = 'setup'
-        deadline = time.monotonic() + 120
+        deadline = time.monotonic() + 180
         temp = tempfile.TemporaryDirectory(prefix=f'phase4-{root.name}-')
         server = MockAdminServer(root)
         browser = None

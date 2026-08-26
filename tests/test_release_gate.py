@@ -39,6 +39,14 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertEqual("web-1.8", rows[0]["root"])
         self.assertNotIn("secret", repr(rows))
 
+    def test_browser_failure_stage_keeps_only_the_controlled_label(self):
+        output = b"AssertionError: web-1.8:open-admin: untrusted fixture-secret"
+        self.assertEqual(
+            "browser-matrix-web-1.8-open-admin",
+            release_gate.browser_failure_stage(output),
+        )
+        self.assertEqual("browser-matrix", release_gate.browser_failure_stage(b"fixture-secret"))
+
     def test_evidence_omits_credentials_and_plugin_data(self):
         with tempfile.TemporaryDirectory() as temp:
             evidence = release_gate.Evidence(temp, live_requested=False)

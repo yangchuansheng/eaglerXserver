@@ -17,6 +17,7 @@ import time
 import unittest
 import urllib.error
 import urllib.request
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -159,6 +160,27 @@ class AuthenticationTests(unittest.TestCase):
     def test_restart_is_rejected_while_locked(self):
         with http_server._restart_lock:
             self.assertFalse(http_server.restart_server_process())
+
+    def test_restart_uses_rcon_readiness_for_shell_panes(self):
+        with mock.patch.object(
+            http_server, 'server_pane_dead', side_effect=[False, True, False]
+        ), mock.patch.object(
+            http_server, 'rcon_send', side_effect=['stopping', 'ready']
+        ) as rcon, mock.patch.object(
+            http_server, 'tmux_run'
+        ) as tmux, mock.patch.object(
+            http_server, 'clear_plugin_restart_marker'
+        ) as clear_marker:
+            self.assertTrue(http_server.restart_server_process())
+        rcon.assert_has_calls([
+            mock.call('stop', retries=1),
+            mock.call('version', retries=1),
+        ])
+        tmux.assert_called_once_with([
+            'respawn-pane', '-k', '-t', http_server.SERVER_PANE,
+            f'cd "{http_server.SERVER_ROOT}"; exec ./run.sh',
+        ])
+        clear_marker.assert_called_once_with()
 
     def test_server_properties_write_uses_lock(self):
         original_path = http_server._server_properties_path
