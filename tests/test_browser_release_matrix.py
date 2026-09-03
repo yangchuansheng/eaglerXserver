@@ -287,7 +287,7 @@ class AgentBrowser:
             'AGENT_BROWSER_CONTENT_BOUNDARIES': '1',
             'AGENT_BROWSER_MAX_OUTPUT': '4000',
             'AGENT_BROWSER_DEFAULT_TIMEOUT': '10000',
-            'AGENT_BROWSER_ALLOWED_DOMAINS': '127.0.0.1,localhost,api.fontshare.com,cdn.fontshare.com,fonts.googleapis.com,fonts.gstatic.com,picsum.photos,fastly.picsum.photos',
+            'AGENT_BROWSER_ALLOWED_DOMAINS': '127.0.0.1,localhost',
             'AGENT_BROWSER_ACTION_POLICY': self.policy,
             'AGENT_BROWSER_SCREENSHOT_DIR': self.screenshot_dir,
         }
@@ -624,7 +624,7 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 network_records = network_payload if isinstance(network_payload, list) else network_data.get('requests', [])
                 network_urls = [record.get('url', '') for record in network_records if isinstance(record, dict)]
                 self.assertTrue(network_urls, f'{root.name}: missing browser network evidence')
-                allowed_origins = (server.base_url, 'https://api.fontshare.com/', 'https://cdn.fontshare.com/', 'https://fonts.googleapis.com/', 'https://fonts.gstatic.com/', 'https://picsum.photos/', 'https://fastly.picsum.photos/')
+                allowed_origins = (server.base_url,)
                 self.assertTrue(all(url.startswith(allowed_origins) for url in network_urls), f'{root.name}: browser left the allowed origins')
                 self.assertTrue(all(record['route'].startswith('/api/') or record['route'] in ('/admin', '/admin/') for record in server.records), f'{root.name}: unexpected mock route')
                 self.assertTrue(any(record.get('raw_sha256') for record in server.records), f'{root.name}: missing sanitized raw evidence')

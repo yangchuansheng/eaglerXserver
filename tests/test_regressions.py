@@ -415,12 +415,31 @@ console.log(JSON.stringify({ valid: run('zh-CN', false), invalid: run('stale', f
 
     def test_selector_responsive_dimensions_and_mirrors(self):
         css = self.CSS_PATH.read_text(encoding='utf-8')
+        html = self.HTML_PATH.read_text(encoding='utf-8')
         self.assertRegex(css, r'#locale-select\s*\{[^}]*height:\s*38px')
         mobile = re.search(r'@media \(max-width: 520px\) \{([\s\S]*)', css)
         self.assertIsNotNone(mobile)
         self.assertRegex(mobile.group(1), r'#locale-select\s*\{[^}]*height:\s*44px')
+        compact = css[css.index('@media (max-width: 440px)'):]
+        self.assertNotRegex(compact, r'#locale-select\s*\{[^}]*height:\s*28px')
+        self.assertNotRegex(compact, r'#logout-btn\s*\{[^}]*height:\s*28px')
+        self.assertIn('grid-template-columns: repeat(3, minmax(0, 1fr));', css)
+        self.assertEqual(3, html.count('class="overview-stat"'))
         for asset in self.ASSETS:
             self.assertEqual((ROOT / 'web-1.8' / asset).read_bytes(), (ROOT / 'web-1.12' / asset).read_bytes())
+
+    def test_changed_assets_are_cache_busted_and_bootstrap_is_local_only(self):
+        html = self.HTML_PATH.read_text(encoding='utf-8')
+        versions = re.findall(r'(?:admin\.css|admin-i18n\.js|admin\.js)\?v=([^" ]+)', html)
+        self.assertEqual(3, len(versions))
+        self.assertEqual(1, len(set(versions)))
+        self.assertNotEqual('cobalt-20260822', versions[0])
+
+        index = (ROOT / 'web-1.12' / 'index.html').read_text(encoding='utf-8')
+        self.assertRegex(index, r'src="bootstrap\.js\?v=[^" ]+"')
+        bootstrap = (ROOT / 'web-1.12' / 'bootstrap.js').read_text(encoding='utf-8')
+        self.assertNotIn('raw.githubusercontent.com', bootstrap)
+        self.assertIn('if(!b.ok)', bootstrap)
 
     def test_static_binding_contract_has_exact_sources_and_bilingual_keys(self):
         inventory = json.loads((ROOT / 'web-1.8' / 'admin-i18n-inventory.json').read_text(encoding='utf-8'))
