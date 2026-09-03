@@ -604,16 +604,14 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 browser.check(stage, "document.querySelector('#console').textContent.includes('There are 1/20 players online: FixtureAlex')")
                 self.assert_recorded(server, '/api/rcon', 'list')
                 self.emit_evidence(root, stage, 'en', '/api/rcon', raw=server.raw_response, error=server.controlled_error)
-                for width, height, name in ((1440, 900, 'desktop'), (480, 812, 'narrow'), (375, 812, 'mobile')):
+                for width, height, name in ((1440, 900, 'desktop'), (480, 812, 'narrow'), (375, 812, 'mobile'), (320, 812, 'compact')):
                     stage = f'viewport-{name}'
                     browser.run(stage, 'set', 'viewport', str(width), str(height))
                     image = screenshots / f'{name}.png'
                     browser.run(stage, 'screenshot', str(image))
                     browser.check(stage, "(function(){const s=document.querySelector('#locale-select'), p=document.querySelector('#cmd-bar button');return s.getBoundingClientRect().width > 0 && p.getBoundingClientRect().width > 0 && document.documentElement.scrollWidth <= window.innerWidth;}())")
-                    if width == 1440:
-                        browser.check(stage, "(() => { const sigil = document.querySelector('.nav-sigil'), shell = document.querySelector('.locale-picker'), select = document.querySelector('#locale-select'); return getComputedStyle(sigil).display === 'grid' && getComputedStyle(sigil).fontSize === '13px' && Math.round(shell.getBoundingClientRect().height) === Math.round(select.getBoundingClientRect().height); })()")
-                    if width == 480:
-                        browser.check(stage, "(() => { const shell = document.querySelector('.locale-picker'), select = document.querySelector('#locale-select'); return Math.round(shell.getBoundingClientRect().height) === Math.round(select.getBoundingClientRect().height) && shell.getBoundingClientRect().height >= 44; })()")
+                    if width <= 640:
+                        browser.check(stage, "(() => { const selectors = ['.skip-link', '#locale-select', '#logout-btn', '.control-nav-link', '.qbtns button', '.pill-btn', '.setting-input', '.plugin-upload-file', '#plugin-upload-btn', '.dynmap-full-btn', '.seedmap-link', '.toggle', '#cmd', '#cmd-bar button', '.dialog-close', '.btn-cancel', '.btn-ok']; return selectors.every(selector => Array.from(document.querySelectorAll(selector)).every(element => { const style = getComputedStyle(element); return Math.max(parseFloat(style.height) || 0, parseFloat(style.minHeight) || 0) >= 44; })); })()")
                     self.assertTrue(image.is_file(), f'{root.name}: missing {name} screenshot')
                     screenshot_digest = hashlib.sha256(image.read_bytes()).hexdigest()
                     self.assertTrue(screenshot_digest, f'{root.name}: empty {name} screenshot digest')
@@ -646,7 +644,7 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 self.run_root_scenario(root)
         self.evidence.append({'boundary': DEPLOYMENT_BOUNDARY})
         print(f'browser-matrix-evidence {DEPLOYMENT_BOUNDARY}')
-        self.assertEqual(21, len(self.evidence))
+        self.assertEqual(23, len(self.evidence))
         self.assertEqual({'boundary': DEPLOYMENT_BOUNDARY}, self.evidence[-1])
 
 

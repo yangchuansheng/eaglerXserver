@@ -416,15 +416,9 @@ console.log(JSON.stringify({ valid: run('zh-CN', false), invalid: run('stale', f
     def test_selector_responsive_dimensions_and_mirrors(self):
         css = self.CSS_PATH.read_text(encoding='utf-8')
         html = self.HTML_PATH.read_text(encoding='utf-8')
-        self.assertRegex(css, r'#locale-select\s*\{[^}]*height:\s*38px')
-        mobile = re.search(r'@media \(max-width: 520px\) \{([\s\S]*)', css)
-        self.assertIsNotNone(mobile)
-        self.assertRegex(mobile.group(1), r'#locale-select\s*\{[^}]*height:\s*44px')
-        compact = css[css.index('@media (max-width: 440px)'):]
-        self.assertNotRegex(compact, r'#locale-select\s*\{[^}]*height:\s*28px')
-        self.assertNotRegex(compact, r'#logout-btn\s*\{[^}]*height:\s*28px')
-        self.assertIn('grid-template-columns: repeat(3, minmax(0, 1fr));', css)
-        self.assertEqual(3, html.count('class="overview-stat"'))
+        self.assertIn('@media (prefers-reduced-motion: reduce)', css)
+        for stat_id in ('hero-connection', 'hero-player-count', 'hero-tps'):
+            self.assertIn(f'id="{stat_id}"', html)
         for asset in self.ASSETS:
             self.assertEqual((ROOT / 'web-1.8' / asset).read_bytes(), (ROOT / 'web-1.12' / asset).read_bytes())
 

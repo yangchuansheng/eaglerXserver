@@ -1913,10 +1913,10 @@ button {
     font-size: 11px;
   }
   .locale-picker {
-    height: 30px;
+    height: 44px;
   }
   #locale-select {
-    height: 30px;
+    height: 44px;
     font-size: 11px !important;
     padding: 0 18px 0 24px;
   }
@@ -1927,7 +1927,7 @@ button {
     right: 5px;
   }
   #logout-btn {
-    height: 30px;
+    height: 44px;
     padding: 0 8px;
     font-size: 11px;
     gap: 4px;
@@ -1942,7 +1942,7 @@ button {
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
   }
   .control-nav-link {
-    min-height: 36px;
+    min-height: 44px;
     padding: 6px 12px;
     font-size: 12px;
   }
@@ -2015,7 +2015,7 @@ button {
     box-sizing: border-box;
   }
   .qbtns button {
-    min-height: 38px;
+    min-height: 44px;
     padding: 6px 8px;
     font-size: 12px;
     flex: 1 1 calc(50% - 6px);
@@ -2034,7 +2034,7 @@ button {
     width: 100%;
   }
   .pill-btn {
-    min-height: 38px;
+    min-height: 44px;
     padding: 0 12px;
     box-sizing: border-box;
   }
@@ -2068,13 +2068,13 @@ button {
     box-sizing: border-box;
   }
   .setting-input {
-    height: 38px;
+    height: 44px;
     flex: 1 1 0;
     min-width: 0;
     box-sizing: border-box;
   }
   .setting-actions .pill-btn {
-    height: 38px;
+    height: 44px;
     min-width: 50px;
     flex-shrink: 0;
     box-sizing: border-box;
@@ -2096,14 +2096,14 @@ button {
     box-sizing: border-box;
   }
   .plugin-upload-file {
-    height: 40px;
+    height: 44px;
     justify-content: center;
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
   }
   #plugin-upload-btn {
-    height: 40px;
+    height: 44px;
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
@@ -2128,6 +2128,10 @@ button {
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
+  }
+  .dynmap-full-btn {
+    height: 44px;
+    min-width: 44px;
   }
   .seedmap-panel {
     min-width: 0;
@@ -2195,11 +2199,11 @@ button {
   #cmd {
     flex: 1 1 0;
     min-width: 0;
-    height: 38px;
+    height: 44px;
     box-sizing: border-box;
   }
   #cmd-bar button {
-    height: 38px;
+    height: 44px;
     padding: 0 12px;
     min-width: 48px;
     flex-shrink: 0;
@@ -2240,8 +2244,12 @@ button {
     width: 100%;
     box-sizing: border-box;
   }
+  .dialog-close {
+    width: 44px;
+    height: 44px;
+  }
   .btn-cancel, .btn-ok {
-    height: 42px;
+    height: 44px;
     width: 100%;
     display: flex;
     align-items: center;
@@ -2250,8 +2258,30 @@ button {
     box-sizing: border-box;
   }
   #modal-pw, .dialog-input {
-    height: 40px;
+    height: 44px;
     box-sizing: border-box;
+  }
+  .dialog-suggestion-btn {
+    min-height: 44px;
+  }
+  .toggle {
+    width: 44px;
+    height: 44px;
+  }
+  .toggle .slider {
+    inset: 12px auto auto 0;
+    width: 36px;
+    height: 20px;
+  }
+  .seedmap-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .skip-link {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
   }
 
   /* Floating toast */
@@ -2341,5 +2371,14 @@ button {
   }
   .qbtns button {
     flex: 1 1 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
   }
 }
