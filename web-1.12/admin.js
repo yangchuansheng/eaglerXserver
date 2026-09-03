@@ -306,7 +306,29 @@ function initRevealMotion() {
     }
   };
   links.forEach(function (link) {
-    link.addEventListener('click', function () { setActiveLink(link); });
+    link.addEventListener('click', function (e) {
+      setActiveLink(link);
+      var href = link.getAttribute('href');
+      if (href && href.charAt(0) === '#') {
+        var targetEl = document.getElementById(href.slice(1));
+        if (targetEl) {
+          e.preventDefault();
+          var headerEl = document.getElementById('header');
+          var navEl = document.querySelector('.control-nav');
+          var headerHeight = headerEl ? headerEl.offsetHeight : (window.innerWidth <= 640 ? 52 : 56);
+          var navHeight = (window.innerWidth <= 860 && navEl) ? navEl.offsetHeight : 0;
+          var gap = (window.innerWidth <= 640) ? 14 : (window.innerWidth <= 860 ? 16 : 20);
+          var targetTop = targetEl.getBoundingClientRect().top + window.pageYOffset - headerHeight - navHeight - gap;
+          window.scrollTo({
+            top: Math.max(0, targetTop),
+            behavior: 'smooth'
+          });
+          if (history.pushState) {
+            history.pushState(null, '', href);
+          }
+        }
+      }
+    });
   });
   if ('IntersectionObserver' in window) {
     var sectionObserver = new IntersectionObserver(function (entries) {
@@ -1739,7 +1761,10 @@ function showActionDialog(config) {
 function renderActionDialog(snapshot) {
   if (!ACTION_DIALOG) return;
   var config = ACTION_DIALOG.config;
-  document.getElementById('action-kicker').textContent = config.kickerKey ? t(config.kickerKey) : (config.kicker ? renderPresentation(config.kicker) : t('dialog.action.defaultKicker'));
+  var kickerEl = document.getElementById('action-kicker');
+  if (kickerEl) {
+    kickerEl.textContent = config.kickerKey ? t(config.kickerKey) : (config.kicker ? renderPresentation(config.kicker) : t('dialog.action.defaultKicker'));
+  }
   document.getElementById('action-title').textContent = config.titleKey ? t(config.titleKey) : (config.title ? renderPresentation(config.title) : t('dialog.action.defaultTitle'));
   document.getElementById('action-desc').textContent = config.descriptionKey ? t(config.descriptionKey) : (config.description ? renderPresentation(config.description) : t('dialog.action.defaultDescription'));
   document.getElementById('action-confirm').textContent = config.confirmKey ? t(config.confirmKey) : (config.confirmText ? renderPresentation(config.confirmText) : t('dialog.action.confirm'));
