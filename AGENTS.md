@@ -16,7 +16,6 @@
 | `web-1.12/` | EaglercraftX 1.12 客户端（assets.epw, classes.js, bootstrap.js, admin.html） |
 | `bungee/` | Waterfall 代理 |
 | `bungee/plugins/EaglercraftXBungee/` | WebSocket 入口 + HTTP 文件服务 |
-| `misc/` | Carbon/ProtocolLib/npaper（selsrv.sh 用） |
 | `script/` | start_server.sh + http_server.py |
 
 运行时 `start_server.sh` 创建软链接 `web/ → web-${VERSION}/` 和 `server/ → server-${VERSION}/`。
