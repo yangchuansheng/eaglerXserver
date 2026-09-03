@@ -261,7 +261,7 @@ button {
   position: relative;
   display: inline-flex;
   align-items: center;
-  height: 32px;
+  height: 38px;
   border-radius: var(--radius-sm);
   background: var(--surface-1);
   border: 1px solid var(--border);
@@ -429,12 +429,6 @@ button {
   color: var(--text);
   line-height: 1.2;
 }
-.control-nav-brand span {
-  display: block;
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
 .control-nav-links {
   display: flex;
   flex-direction: column;
@@ -2274,6 +2268,7 @@ button {
 }
 
 @media (max-width: 520px) {
+  .locale-picker,
   #locale-select { height: 44px; }
 }
 
