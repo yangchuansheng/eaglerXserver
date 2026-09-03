@@ -34,7 +34,6 @@ WEB_ASSETS = (
     "admin.js",
     "admin.css",
     "admin-i18n.js",
-    "admin-i18n-inventory.json",
 )
 MOUNT_BOUNDARY = "/eaglerX-1.8-server"
 PLUGIN_NAME = "EaglerXReleaseGate"
