@@ -6,4 +6,5 @@ web/
 server/
 data/
 .codegraph/
+.codex/
 artifacts/

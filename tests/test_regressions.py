@@ -11,6 +11,7 @@ import http.server
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -88,6 +89,54 @@ class HttpBoundaryTests(unittest.TestCase):
         self.assertIsNone(handler._read_json_body())
         self.assertEqual(30, handler.connection.timeout)
         self.assertEqual(408, handler.responses[0][0])
+
+
+class ConnectionInfoTests(unittest.TestCase):
+    def test_public_game_url_contract(self):
+        self.assertEqual(
+            {
+                'success': True,
+                'source': 'configured',
+                'game_url': 'https://play.example.com/eagler/?region=us',
+            },
+            http_server.connection_info_payload('https://play.example.com/eagler/?region=us'),
+        )
+        self.assertEqual(
+            {'success': True, 'source': 'inferred', 'game_url': ''},
+            http_server.connection_info_payload(''),
+        )
+        for value in (
+            'ws://play.example.com',
+            '/relative',
+            'https://user:secret@play.example.com',
+            'https://play.example.com/#fragment',
+            'https://play.example.com/ bad',
+            'https://play.example.com:0',
+            'https://%zz/',
+            'https://play.example.com\\evil',
+        ):
+            with self.subTest(value=value):
+                payload = http_server.connection_info_payload(value)
+                self.assertEqual((False, 'invalid_public_game_url'), (payload['success'], payload['code']))
+
+    def test_connection_info_route_is_public(self):
+        handler = http_server.Handler.__new__(http_server.Handler)
+        handler.path = '/api/connection-info'
+        handler.responses = []
+        handler._json = lambda code, data, headers=None: handler.responses.append((code, data))
+        cases = (
+            ('https://play.example.com/', 200, {'success': True, 'source': 'configured', 'game_url': 'https://play.example.com/'}),
+            ('', 200, {'success': True, 'source': 'inferred', 'game_url': ''}),
+            ('https://%zz/', 422, {'success': False, 'code': 'invalid_public_game_url'}),
+        )
+        for value, status, expected in cases:
+            with self.subTest(value=value), mock.patch.object(http_server, 'RCON_ENABLED', False), mock.patch.object(
+                http_server, 'PUBLIC_GAME_URL', value
+            ):
+                handler.responses.clear()
+                handler.do_GET()
+                self.assertEqual(status, handler.responses[0][0])
+                self.assertEqual(expected, {key: handler.responses[0][1][key] for key in expected})
 
 
 class AuthenticationTests(unittest.TestCase):
@@ -879,6 +928,10 @@ console.log(JSON.stringify({
         return json.loads(result.stdout)
 
     def test_release_assets_are_exact_mirrors_with_sha256_evidence(self):
+        subprocess.run(
+            [sys.executable, str(ROOT / 'script' / 'sync_admin_assets.py'), '--check'],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
         canonical, mirror = self.ROOTS
         for asset in self.RELEASE_ASSETS:
             with self.subTest(asset=asset):
