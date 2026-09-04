@@ -16,7 +16,6 @@
 | `web-1.12/` | EaglercraftX 1.12 客户端（assets.epw, classes.js, bootstrap.js, admin.html） |
 | `bungee/` | Waterfall 代理 |
 | `bungee/plugins/EaglercraftXBungee/` | WebSocket 入口 + HTTP 文件服务 |
-| `misc/` | Carbon/ProtocolLib/npaper（selsrv.sh 用） |
 | `script/` | start_server.sh + http_server.py |
 
 运行时 `start_server.sh` 创建软链接 `web/ → web-${VERSION}/` 和 `server/ → server-${VERSION}/`。
@@ -80,20 +79,22 @@ bungee 插件的 `listeners.yml` 中 `root: '../../../web'` 和 server 的 `run.
 | 路径 | 方法 | 说明 |
 |------|------|------|
 | `/` | GET | 静态文件服务（`web/` 目录） |
+| `/api/connection-info` | GET | 公开游戏入口信息，无需 RCON 管理会话 |
 | `/api/status` | GET | RCON 连接状态，`RCON_PASSWORD` 未设时 404 |
 | `/api/login` | POST | 用 RCON 密码换取管理令牌 |
 | `/api/rcon` | POST | RCON 命令桥接，body: `{"command":"list","token":"xxx"}` |
 | `/admin` | GET | 302 重定向到 `/admin.html` |
 | `/dynmap/` | GET | 反向代理到 `localhost:8123`，无需额外暴露端口 |
 
-`RCON_PASSWORD` 环境变量留空时，管理 API 保持关闭。JSON 管理 API 请求体上限为 64 KiB，读取超时为 10 秒；原始插件 JAR 上传单独使用 64 MiB 上限和 30 秒总读取截止时间。同一来源连续 5 次登录失败后锁定 10 分钟。
+`RCON_PASSWORD` 环境变量留空时，需要管理权限的 API 保持关闭；`/api/connection-info` 始终公开。JSON 管理 API 请求体上限为 64 KiB，读取超时为 10 秒；原始插件 JAR 上传单独使用 64 MiB 上限和 30 秒总读取截止时间。同一来源连续 5 次登录失败后锁定 10 分钟。
 
 ### admin.html 管理面板
 
-位于 `web-1.12/admin.html` 和 `web-1.8/admin.html`（内容相同）。由 `admin.css` + `admin.js` 组成。
+`web-1.8/` 是管理面资产的权威作者源，`script/sync_admin_assets.py` 将其物化到 `web-1.12/`。由 `admin.css` + `admin.js` 组成。
 
 功能：
 - 页面加载时探测 `/api/status`，RCON 启用则弹出自定义密码输入框
+- 连接信息卡片展示快速加入链接和 WebSocket 游戏地址
 - 密码仅用于 `/api/login`，管理请求统一使用默认有效期 8 小时的令牌
 - 令牌保存在 `sessionStorage`，浏览器会话结束时清理本地登录态
 - 命令控制台（底部输入栏，回车发送）
@@ -115,6 +116,7 @@ bungee 插件的 `listeners.yml` 中 `root: '../../../web'` 和 server 的 `run.
 |------|--------|------|
 | `MINECRAFT_VERSION` | (必填) | 选择服务端版本：`1.8` 或 `1.12` |
 | `RCON_PASSWORD` | (空) | 设置后启用 RCON，管理面板弹窗需输入此密码 |
+| `PUBLIC_GAME_URL` | (空) | 公开 HTTP(S) 游戏入口；空值时按当前管理面主机推导明文 5200 游戏入口 |
 | `ADMIN_AUTH_TOKEN_TTL` | `28800` | 管理令牌有效期，单位为秒 |
 | `ADMIN_AUTH_SECRET` | 从 RCON 密码派生 | 可选的令牌签名密钥 |
 

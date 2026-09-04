@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title data-i18n="document.surface.adminhtml.l6.c21">EaglercraftX Admin Console</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='8' fill='%231a1a2e'/%3E%3Crect x='6' y='6' width='52' height='52' rx='6' fill='%2316213e'/%3E%3Ctext x='32' y='46' text-anchor='middle' font-size='36' font-weight='bold' font-family='monospace' fill='%23e94560'%3EE%3C/text%3E%3Ccircle cx='48' cy='20' r='8' fill='%2339ff14'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="admin.css?v=cobalt-20260904">
+<link rel="icon" type="image/svg+xml" href="eaglercraft-server.svg">
+<link rel="stylesheet" href="admin.css?v=connection-20260904">
 <!-- System fonts keep the management surface self-contained. -->
 
 
@@ -16,7 +16,7 @@
 <header id="header">
   <div class="header-left">
     <div class="header-brand">
-      <div class="header-logo" aria-hidden="true"><span>E</span></div>
+      <div class="header-logo" aria-hidden="true"><img src="eaglercraft-server.svg" alt=""></div>
       <div class="header-title-wrap">
         <h1 class="header-title" data-i18n="header.title">EaglercraftX Admin Console</h1>
       </div>
@@ -85,6 +85,22 @@
         <section class="workspace-section has-pin" id="status-section">
           <div class="section-heading"><h2><span data-i18n="document.surface.adminhtml.l78.c44">Server status</span></h2></div>
           <div class="section-body overview-grid">
+            <div class="card connection-card full-span" id="card-connection" aria-labelledby="connection-title">
+              <div class="connection-heading">
+                <div class="card-title" id="connection-title" data-i18n="status.connection.title">Connection details</div>
+                <span class="connection-source loading" id="connection-source" role="status" aria-live="polite" data-i18n="status.connection.sourceLoading">Loading</span>
+              </div>
+              <div class="connection-main">
+                <div class="connection-address">
+                  <span id="connection-address-label" data-i18n="status.connection.websocketLabel">WebSocket game address</span>
+                  <code id="connection-address" tabindex="0">--</code>
+                </div>
+                <div class="connection-actions">
+                  <a id="connection-open" class="connection-open disabled" target="_blank" rel="noopener noreferrer" aria-disabled="true" data-i18n="status.connection.open">Open and join game</a>
+                  <button id="connection-copy" class="pill-btn" type="button" onclick="copyConnectionAddress()" disabled data-i18n="status.connection.copy">Copy WebSocket address</button>
+                </div>
+              </div>
+            </div>
             <div class="card" id="card-world">
               <div class="card-head"><span class="card-title"><span data-i18n="accessibility.surface.adminhtml.l81.c113">state of the world</span></span></div>
               <div id="world-info"><div class="empty-state"><span data-i18n="document.surface.adminhtml.l83.c61">Display basic world information after logging in</span></div></div>
@@ -241,7 +257,7 @@
   </div>
 </div>
 
-<script src="admin-i18n.js?v=cobalt-20260904"></script>
-<script src="admin.js?v=cobalt-20260904"></script>
+<script src="admin-i18n.js?v=connection-20260904"></script>
+<script src="admin.js?v=connection-20260904"></script>
 </body>
 </html>

@@ -89,6 +89,13 @@ class MockAdminServer:
                 return payload is not None and secrets.compare_digest(str(payload.get('token', '')), fixture.token)
 
             def do_GET(self):
+                if self.path == '/api/connection-info':
+                    self.json(200, {
+                        'success': True,
+                        'source': 'configured',
+                        'game_url': 'https://play.fixture.example/eagler/',
+                    })
+                    return
                 if self.path == '/api/status':
                     self.json(200, {
                         'success': True,
@@ -453,10 +460,36 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 stage = 'open-admin'
                 browser.batch(stage, [['open', server.base_url + '/admin'], ['snapshot', '-i']])
                 browser.check(stage, "document.documentElement.lang === 'en' && document.title === 'EaglercraftX Admin Console' && document.querySelector('#locale-select').value === 'en' && Array.from(document.querySelector('#locale-select').options).map(x => x.textContent).join('|') === 'English|简体中文'")
+                browser.check(stage, "document.querySelector('#connection-source').textContent === 'Configured' && document.querySelector('#connection-address').textContent === 'wss://play.fixture.example/eagler/' && new URL(document.querySelector('#connection-open').href).searchParams.get('server') === 'wss://play.fixture.example/eagler/' && document.querySelector('#connection-copy').disabled === false")
+                self.assert_recorded(server, '/api/connection-info')
                 self.emit_evidence(root, stage, 'en', '/admin')
                 stage = 'authenticate'
                 browser.batch(stage, [['fill', '#modal-pw', server.fixture_password], ['click', '#modal-btns .btn-ok'], ['wait', '1200'], ['snapshot', '-i']])
                 browser.check(stage, "document.querySelector('#players').innerText.includes('FixtureAlex') && document.querySelector('#world-info').innerText.includes('1.8.8') && document.querySelector('#cfg-motd').value === 'Fixture MOTD' && document.querySelector('#plugin-version').textContent === 'MC 1.8' && document.querySelector('#plugin-list').textContent.includes('FixturePlugin.jar') && document.querySelector('#plugin-list').textContent.includes('DisabledPlugin.jar') && !document.querySelector('#plugin-restart-banner').classList.contains('hidden')")
+                browser.run(stage, 'eval', "(() => { const writeText = async (value) => { window.__connectionCopied = value; }; Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } }); return true; })()")
+                browser.run(stage, 'eval', "document.querySelector('#connection-copy').click(); true")
+                browser.run(stage, 'wait', 300)
+                browser.check(stage, "window.__connectionCopied === 'wss://play.fixture.example/eagler/' && document.querySelector('#toast').textContent === 'WebSocket address copied.'")
+                browser.run(stage, 'eval', "(() => { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async function() { throw new Error('blocked'); } } }); document.execCommand = function(command) { window.__connectionFallback = command === 'copy' ? document.querySelector('textarea').value : ''; return command === 'copy'; }; document.querySelector('#connection-copy').click(); return true; })()")
+                browser.run(stage, 'wait', 300)
+                browser.check(stage, "window.__connectionFallback === 'wss://play.fixture.example/eagler/' && document.querySelector('#toast').textContent === 'WebSocket address copied.' && !document.querySelector('textarea')")
+                stage = 'connection-states'
+                browser.run(stage, 'eval', "(() => { window.__originalFetch = window.fetch; window.fetch = function(url, options) { if (!String(url).endsWith('/api/connection-info')) return window.__originalFetch.call(window, url, options); return new Promise(function(resolve) { window.__resolveConnectionInfo = resolve; }); }; loadConnectionInfo(); return true; })()")
+                browser.check(stage, "document.querySelector('#connection-source').textContent === 'Loading' && document.querySelector('#connection-address').textContent === '--' && !document.querySelector('#connection-open').hasAttribute('href') && document.querySelector('#connection-copy').disabled")
+                browser.run(stage, 'eval', "window.__resolveConnectionInfo(new Response(JSON.stringify({ success: true, source: 'inferred', game_url: '' }), { status: 200, headers: { 'Content-Type': 'application/json' } })); true")
+                browser.run(stage, 'wait', 300)
+                browser.check(stage, "document.querySelector('#connection-source').textContent === 'Inferred from current host' && document.querySelector('#connection-address').textContent.startsWith('ws://') && document.querySelector('#connection-address').textContent.includes(':5200/') && document.querySelector('#connection-copy').disabled === false")
+                browser.run(stage, 'eval', "window.fetch = async function(url, options) { if (!String(url).endsWith('/api/connection-info')) return window.__originalFetch.call(window, url, options); return new Response(JSON.stringify({ success: false, code: 'invalid_public_game_url' }), { status: 422, headers: { 'Content-Type': 'application/json' } }); }; loadConnectionInfo(); true")
+                browser.run(stage, 'wait', 300)
+                browser.check(stage, "document.querySelector('#connection-source').textContent === 'Configuration error' && document.querySelector('#connection-address').textContent === '--' && !document.querySelector('#connection-open').hasAttribute('href') && document.querySelector('#connection-copy').disabled")
+                browser.run(stage, 'eval', "window.fetch = async function(url, options) { if (!String(url).endsWith('/api/connection-info')) return window.__originalFetch.call(window, url, options); return new Response('', { status: 404 }); }; loadConnectionInfo(); true")
+                browser.run(stage, 'wait', 300)
+                browser.check(stage, "document.querySelector('#connection-source').textContent === 'Unavailable' && document.querySelector('#connection-copy').disabled")
+                browser.run(stage, 'eval', "window.fetch = window.__originalFetch; loadConnectionInfo(); true")
+                browser.run(stage, 'wait', 300)
+                browser.check(stage, "document.querySelector('#connection-source').textContent === 'Configured' && document.querySelector('#connection-address').textContent === 'wss://play.fixture.example/eagler/'")
+                self.emit_evidence(root, stage, 'en', '/api/connection-info')
+                stage = 'authenticate'
                 for route in ('/api/login', '/api/rcon', '/api/world-state', '/api/runtime-state', '/api/config', '/api/seed', '/api/plugins'):
                     self.assert_recorded(server, route)
                 self.emit_evidence(root, stage, 'en', '/api/login')
@@ -611,7 +644,7 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                     browser.run(stage, 'screenshot', str(image))
                     browser.check(stage, "(function(){const s=document.querySelector('#locale-select'), p=document.querySelector('#cmd-bar button');return s.getBoundingClientRect().width > 0 && p.getBoundingClientRect().width > 0 && document.documentElement.scrollWidth <= window.innerWidth;}())")
                     if width <= 640:
-                        browser.check(stage, "(() => { const selectors = ['.skip-link', '#locale-select', '#logout-btn', '.control-nav-link', '.qbtns button', '.pill-btn', '.setting-input', '.plugin-upload-file', '#plugin-upload-btn', '.dynmap-full-btn', '.seedmap-link', '.toggle', '#cmd', '#cmd-bar button', '.dialog-close', '.btn-cancel', '.btn-ok']; return selectors.every(selector => Array.from(document.querySelectorAll(selector)).every(element => { const style = getComputedStyle(element); return Math.max(parseFloat(style.height) || 0, parseFloat(style.minHeight) || 0) >= 44; })); })()")
+                        browser.check(stage, "(() => { const selectors = ['.skip-link', '#locale-select', '#logout-btn', '.control-nav-link', '.qbtns button', '.pill-btn', '.connection-open', '.setting-input', '.plugin-upload-file', '#plugin-upload-btn', '.dynmap-full-btn', '.seedmap-link', '.toggle', '#cmd', '#cmd-bar button', '.dialog-close', '.btn-cancel', '.btn-ok']; return selectors.every(selector => Array.from(document.querySelectorAll(selector)).every(element => { const style = getComputedStyle(element); return Math.max(parseFloat(style.height) || 0, parseFloat(style.minHeight) || 0) >= 44; })); })()")
                     self.assertTrue(image.is_file(), f'{root.name}: missing {name} screenshot')
                     screenshot_digest = hashlib.sha256(image.read_bytes()).hexdigest()
                     self.assertTrue(screenshot_digest, f'{root.name}: empty {name} screenshot digest')
@@ -644,7 +677,7 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 self.run_root_scenario(root)
         self.evidence.append({'boundary': DEPLOYMENT_BOUNDARY})
         print(f'browser-matrix-evidence {DEPLOYMENT_BOUNDARY}')
-        self.assertEqual(23, len(self.evidence))
+        self.assertEqual(25, len(self.evidence))
         self.assertEqual({'boundary': DEPLOYMENT_BOUNDARY}, self.evidence[-1])
 
 

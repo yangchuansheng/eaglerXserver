@@ -105,10 +105,13 @@ docker run -d \
 
 插件上传接受包含根目录 `plugin.yml` 的 JAR，单次上传上限为 64 MiB。上传、启用、停用和删除都会写入待重启标记；控制台的重启按钮或 `/api/system` 的 `restart_server` 操作完成受控重启后，Paper 才会读取新的插件集合。删除只移除插件 JAR，保留该插件目录中的配置和数据库文件，之后重新安装同名包可以继续使用这些数据。上传的 JAR 会在 Paper JVM 中执行任意代码，只接受可信来源并在部署前审查、扫描和备份。
 
+Overview 的连接信息卡片提供快速加入链接和 WebSocket 游戏地址复制。设置 `PUBLIC_GAME_URL=https://play.example.com` 后使用该游戏入口；空值时按当前管理面主机名推导明文 5200 游戏入口，并在卡片中标记地址来源。
+
 ## 管理 API
 
 JSON 管理 API 请求体上限为 64 KiB，读取超时为 10 秒；原始插件 JAR 上传单独使用 64 MiB 上限和 30 秒总读取截止时间。
 登录失败按来源地址累计；共享本机回环、SSH 隧道或反向代理来源时，管理员共享同一个 10 分钟锁定窗口。
+`GET /api/connection-info` 始终开放，用于读取公开游戏入口；其余管理 API 继续由 RCON 管理会话保护。
 
 ```bash
 # 1. 登录并取得令牌
@@ -134,13 +137,17 @@ curl -s http://127.0.0.1:5201/api/rcon \
 |------|--------|------|
 | `MINECRAFT_VERSION` | 必填 | `1.8` 或 `1.12` |
 | `RCON_PASSWORD` | 空 | 设置后启用 RCON 与管理 API |
+| `PUBLIC_GAME_URL` | 空 | 公开的 HTTP(S) 游戏入口；连接信息卡片据此生成快速加入链接与 WebSocket 游戏地址 |
 | `PERSISTENT_DATA_ROOT` | `${APP_DIR}/server-data` | 独立持久化世界与版本隔离插件仓库的目录；`SERVER_DATA_DIR` 作为兼容别名 |
 | `ADMIN_AUTH_TOKEN_TTL` | `28800` | 管理令牌有效期，单位为秒 |
 | `ADMIN_AUTH_SECRET` | 从 RCON 密码派生 | 可选的令牌签名密钥 |
 
 ## 构建
 
+`web-1.8/` 是管理面资产的权威作者源；`build.sh` 会先运行 `script/sync_admin_assets.py`，再将相同资产物化到 `web-1.12/`。
+
 ```bash
+python3 script/sync_admin_assets.py --check
 docker build -t eaglerx1.8server .
 ./build.sh 2.2.3
 ./build.sh 2.2.3 push

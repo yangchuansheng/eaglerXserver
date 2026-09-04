@@ -6,11 +6,11 @@ import json
 import os
 from pathlib import Path
 import re
-import copy
 import http.server
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -62,6 +62,29 @@ def make_handler(content_length, body=b''):
     return handler
 
 
+def load_locale_catalogs():
+    script = """
+const fs = require('fs'); const vm = require('vm'); const window = { console: { warn: function() {} } };
+vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), { window: window });
+console.log(JSON.stringify(window.EaglerXI18n.locales));
+"""
+    result = subprocess.run(
+        ['node', '-e', script, str(ROOT / 'web-1.8' / 'admin-i18n.js')],
+        check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    return json.loads(result.stdout)
+
+
+def referenced_message_keys():
+    """Message keys referenced by the admin shell and its script."""
+    html = (ROOT / 'web-1.8' / 'admin.html').read_text(encoding='utf-8')
+    source = (ROOT / 'web-1.8' / 'admin.js').read_text(encoding='utf-8')
+    keys = set(re.findall(r'data-i18n(?:-(?:title|placeholder|aria-label))?="([^"]+)"', html))
+    keys |= set(re.findall(r"\b(?:t|presentation|logClient|toastClient)\(\s*'([^']+)'", source))
+    keys |= set(re.findall(r"'((?:hero|status|console|dialog|validation|toast|seed|structure)\.[A-Za-z0-9_.-]+)'", source))
+    return keys
+
+
 class HttpBoundaryTests(unittest.TestCase):
     def test_json_body_validation(self):
         cases = [
@@ -88,6 +111,55 @@ class HttpBoundaryTests(unittest.TestCase):
         self.assertIsNone(handler._read_json_body())
         self.assertEqual(30, handler.connection.timeout)
         self.assertEqual(408, handler.responses[0][0])
+
+
+class ConnectionInfoTests(unittest.TestCase):
+    def test_public_game_url_contract(self):
+        self.assertEqual(
+            {
+                'success': True,
+                'source': 'configured',
+                'game_url': 'https://play.example.com/eagler/?region=us',
+            },
+            http_server.connection_info_payload('https://play.example.com/eagler/?region=us'),
+        )
+        self.assertEqual(
+            {'success': True, 'source': 'inferred', 'game_url': ''},
+            http_server.connection_info_payload(''),
+        )
+        for value in (
+            'ws://play.example.com',
+            '/relative',
+            'https://user:secret@play.example.com',
+            'https://play.example.com/#fragment',
+            'https://play.example.com/ bad',
+            'https://play.example.com:0',
+            'https://%zz/',
+            'https://foo<bar.example/',
+            'https://play.example.com\\evil',
+        ):
+            with self.subTest(value=value):
+                payload = http_server.connection_info_payload(value)
+                self.assertEqual((False, 'invalid_public_game_url'), (payload['success'], payload['code']))
+
+    def test_connection_info_route_is_public(self):
+        handler = http_server.Handler.__new__(http_server.Handler)
+        handler.path = '/api/connection-info'
+        handler.responses = []
+        handler._json = lambda code, data, headers=None: handler.responses.append((code, data))
+        cases = (
+            ('https://play.example.com/', 200, {'success': True, 'source': 'configured', 'game_url': 'https://play.example.com/'}),
+            ('', 200, {'success': True, 'source': 'inferred', 'game_url': ''}),
+            ('https://%zz/', 422, {'success': False, 'code': 'invalid_public_game_url'}),
+        )
+        for value, status, expected in cases:
+            with self.subTest(value=value), mock.patch.object(http_server, 'RCON_ENABLED', False), mock.patch.object(
+                http_server, 'PUBLIC_GAME_URL', value
+            ):
+                handler.responses.clear()
+                handler.do_GET()
+                self.assertEqual(status, handler.responses[0][0])
+                self.assertEqual(expected, {key: handler.responses[0][1][key] for key in expected})
 
 
 class AuthenticationTests(unittest.TestCase):
@@ -359,7 +431,8 @@ class StaticShellLocaleTests(unittest.TestCase):
     HTML_PATH = ROOT / 'web-1.8' / 'admin.html'
     JS_PATH = ROOT / 'web-1.8' / 'admin.js'
     CSS_PATH = ROOT / 'web-1.8' / 'admin.css'
-    ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'admin-i18n-inventory.json')
+    ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg')
+    STATIC_BINDING_CONTRACT_SHA256 = 'fcfad562abbf02985ebd40a900897b56bcdd122b8099eeb948aabacdfa4dcd00'
 
     def test_english_first_paint_and_script_order(self):
         html = self.HTML_PATH.read_text(encoding='utf-8')
@@ -435,166 +508,24 @@ console.log(JSON.stringify({ valid: run('zh-CN', false), invalid: run('stale', f
         self.assertNotIn('raw.githubusercontent.com', bootstrap)
         self.assertIn('if(!b.ok)', bootstrap)
 
-    def test_static_binding_contract_has_exact_sources_and_bilingual_keys(self):
-        inventory = json.loads((ROOT / 'web-1.8' / 'admin-i18n-inventory.json').read_text(encoding='utf-8'))
-        contract = inventory['staticBindingContract']
-        html_lines = self.HTML_PATH.read_text(encoding='utf-8').splitlines()
-        script = """
-const fs = require('fs'); const vm = require('vm'); const window = { console: { warn: function() {} } };
-vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), { window: window });
-console.log(JSON.stringify({ en: window.EaglerXI18n.locales.en.messages, zh: window.EaglerXI18n.locales['zh-CN'].messages }));
-"""
-        result = subprocess.run(['node', '-e', script, str(ROOT / 'web-1.8' / 'admin-i18n.js')], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        catalogs = json.loads(result.stdout)
-        self.assertEqual({'data-i18n', 'data-i18n-title', 'data-i18n-placeholder', 'data-i18n-aria-label'}, {binding[1] for binding in contract['bindings']})
-        binding_count = len(re.findall(r'data-i18n(?:-(?:title|placeholder|aria-label))?="[^"]+"', self.HTML_PATH.read_text(encoding='utf-8')))
-        self.assertEqual(len(contract['bindings']), binding_count)
-        for key, attribute, line, column, literal in contract['bindings']:
-            with self.subTest(key=key, line=line):
-                line_text = html_lines[line - 1]
-                self.assertEqual(contract['bindingLines'][str(line)], line_text)
-                self.assertTrue(literal)
-                self.assertEqual(literal, line_text[column - 1:column - 1 + len(literal)])
-                self.assertIn(f'{attribute}="{key}"', line_text)
-                self.assertIn(key, catalogs['en'])
-                self.assertIn(key, catalogs['zh'])
-
-
-class I18nInventoryTests(unittest.TestCase):
-    INVENTORY_PATHS = [
-        ROOT / 'web-1.8' / 'admin-i18n-inventory.json',
-        ROOT / 'web-1.12' / 'admin-i18n-inventory.json',
-    ]
-    ADMIN_ASSETS = ('admin.html', 'admin.js', 'admin.css')
-    SOURCE_FILES = ('admin.js',)
-    SURFACE_FIELDS = {'id', 'source', 'messageKey', 'kind', 'classification'}
-    SOURCE_FIELDS = {'file', 'line', 'column', 'literal', 'lineText'}
-    ALLOWED_KINDS = {'text', 'attribute', 'renderer', 'dialog', 'toast', 'log', 'state', 'client-prefix'}
-    ALLOWED_CLASSIFICATIONS = {'presentation', 'operational'}
-
-    def load_inventory(self):
-        return json.loads(self.INVENTORY_PATHS[0].read_text(encoding='utf-8'))
-
-    def extract_source_tuples(self):
-        return {
-            (filename, line_number, match.start() + 1, match.group(), line_text)
-            for filename in self.SOURCE_FILES
-            for line_number, line_text in enumerate(
-                (ROOT / 'web-1.8' / filename).read_text(encoding='utf-8').splitlines(),
-                1,
-            )
-            for match in re.finditer(r'[\u4e00-\u9fff]+', line_text)
-        }
-
-    @classmethod
-    def surface_tuple(cls, surface):
-        source = surface['source']
-        return (
-            source['file'],
-            source['line'],
-            source['column'],
-            source['literal'],
-            source['lineText'],
-        )
-
-    def assert_source_surface_contract(self, inventory):
-        self.assertNotIn('sourceCoverage', inventory)
-        self.assertEqual({'version', 'scope', 'dynamicBindingContract', 'staticBindingContract', 'surfaces', 'messages'}, set(inventory))
-        self.assertEqual(4, inventory['version'])
-        self.assertIsInstance(inventory['surfaces'], list)
-        self.assertIsInstance(inventory['messages'], dict)
-
-        surfaces = inventory['surfaces']
-        surface_tuples = set()
-        surface_ids = set()
-        presentation_keys = []
-        js_surface_count = 0
-        for surface in surfaces:
-            self.assertEqual(self.SURFACE_FIELDS, set(surface))
-            self.assertEqual(self.SOURCE_FIELDS, set(surface['source']))
-            self.assertIn(surface['kind'], self.ALLOWED_KINDS)
-            self.assertIn(surface['classification'], self.ALLOWED_CLASSIFICATIONS)
-            self.assertTrue(surface['id'])
-            self.assertTrue(surface['messageKey'])
-            self.assertNotIn(surface['id'], surface_ids)
-            surface_ids.add(surface['id'])
-
-            source = surface['source']
-            if source['file'] != 'admin.js':
-                continue
-            js_surface_count += 1
-            self.assertIn(source['literal'], source['lineText'])
-            source_tuple = self.surface_tuple(surface)
-            self.assertNotIn(source_tuple, surface_tuples)
-            surface_tuples.add(source_tuple)
-            message = inventory['messages'].get(surface['messageKey'])
-            self.assertIsNotNone(message)
-            self.assertEqual(surface['kind'], message['kind'])
-            self.assertEqual(surface['classification'], message['classification'])
-            if surface['classification'] == 'presentation':
-                presentation_keys.append(surface['messageKey'])
-
-        self.assertEqual(625, js_surface_count)
-
-        inventory_presentation_keys = {
-            key for key, message in inventory['messages'].items()
-            if message['classification'] == 'presentation'
-        }
-        self.assertTrue(set(presentation_keys).issubset(inventory_presentation_keys))
-
-    def test_inventory_is_mirrored_and_valid_json(self):
-        self.assertEqual(
-            self.INVENTORY_PATHS[0].read_bytes(),
-            self.INVENTORY_PATHS[1].read_bytes(),
-        )
-        self.assertIn('surfaces', self.load_inventory())
-
-    def test_message_schema_and_source_locators(self):
-        inventory = self.load_inventory()
-        for key, message in inventory['messages'].items():
+    def test_static_bindings_have_bilingual_catalog_keys(self):
+        catalogs = load_locale_catalogs()
+        bindings = sorted(re.findall(
+            r'\b(data-i18n(?:-(?:title|placeholder|aria-label))?)="([^"]+)"',
+            self.HTML_PATH.read_text(encoding='utf-8'),
+        ))
+        fingerprint = hashlib.sha256(json.dumps(bindings, separators=(',', ':')).encode('utf-8')).hexdigest()
+        self.assertEqual(self.STATIC_BINDING_CONTRACT_SHA256, fingerprint, f'{len(bindings)} static bindings')
+        html_keys = {key for _attribute, key in bindings}
+        self.assertTrue(html_keys)
+        for key in html_keys:
             with self.subTest(key=key):
-                self.assertRegex(key, r'^(document|accessibility|header|nav|hero|section|card|action|option|dialog|field|validation|status|toast|console|world|operational)\.')
-                self.assertIn(message['kind'], self.ALLOWED_KINDS)
-                self.assertIn(message['classification'], self.ALLOWED_CLASSIFICATIONS)
-                source = message['source']
-                self.assertIn(source['file'], {'admin.html', 'admin.js', 'admin.css'})
-                if message['classification'] == 'operational':
-                    self.assertEqual({'file', 'locator'}, set(source))
-                    content = (ROOT / 'web-1.8' / source['file']).read_text(encoding='utf-8')
-                    self.assertIn(source['locator'], content)
-                else:
-                    self.assertEqual(self.SOURCE_FIELDS, set(source))
+                self.assertIn(key, catalogs['en']['messages'])
+                self.assertIn(key, catalogs['zh-CN']['messages'])
 
-    def test_client_authored_source_coverage_is_regressible(self):
-        self.assert_source_surface_contract(self.load_inventory())
 
-    def test_source_surface_contract_rejects_missing_duplicate_and_corrupt_mappings(self):
-        inventory = self.load_inventory()
-        cases = []
-
-        js_index = next(index for index, surface in enumerate(inventory['surfaces']) if surface['source']['file'] == 'admin.js')
-        missing = copy.deepcopy(inventory)
-        missing['surfaces'].pop(js_index)
-        cases.append(('missing', missing))
-
-        duplicate = copy.deepcopy(inventory)
-        duplicate['surfaces'].append(copy.deepcopy(duplicate['surfaces'][0]))
-        cases.append(('duplicate', duplicate))
-
-        for field, value in (('literal', '损坏'),):
-            corrupt = copy.deepcopy(inventory)
-            corrupt['surfaces'][js_index]['source'][field] = value
-            cases.append((field, corrupt))
-
-        for field, value in (('messageKey', 'document.missing'), ('kind', 'log'), ('classification', 'operational')):
-            corrupt = copy.deepcopy(inventory)
-            corrupt['surfaces'][js_index][field] = value
-            cases.append((field, corrupt))
-
-        for name, corrupt in cases:
-            with self.subTest(name=name):
-                with self.assertRaises(AssertionError):
-                    self.assert_source_surface_contract(corrupt)
+class AdminAssetBoundaryTests(unittest.TestCase):
+    ADMIN_ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg')
 
     def test_admin_assets_remain_mirrored(self):
         for asset in self.ADMIN_ASSETS:
@@ -616,26 +547,14 @@ class I18nInventoryTests(unittest.TestCase):
 
 
 class DynamicLocaleRendererTests(unittest.TestCase):
-    ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'admin-i18n-inventory.json')
+    ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg')
 
-    def test_dynamic_contract_catalogs_and_mirrors(self):
-        inventory = json.loads((ROOT / 'web-1.8' / 'admin-i18n-inventory.json').read_text(encoding='utf-8'))
-        contract = inventory['dynamicBindingContract']
-        source = (ROOT / 'web-1.8' / 'admin.js').read_text(encoding='utf-8')
-        self.assertEqual(1, contract['version'])
-        for name in contract['renderers'] + contract['descriptors'] + contract['formatters'] + contract['rawSinks']:
-            with self.subTest(name=name):
-                self.assertIn(name, source)
-        script = """
-const fs = require('fs'); const vm = require('vm'); const window = { console: { warn: function() {} } };
-vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), { window: window });
-console.log(JSON.stringify(window.EaglerXI18n.locales));
-"""
-        result = subprocess.run(['node', '-e', script, str(ROOT / 'web-1.8' / 'admin-i18n.js')], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        catalogs = json.loads(result.stdout)
-        for key in contract['keys']:
-            self.assertTrue(catalogs['en']['messages'][key].strip())
-            self.assertTrue(catalogs['zh-CN']['messages'][key].strip())
+    def test_referenced_dynamic_keys_are_bilingual_and_mirrors(self):
+        catalogs = load_locale_catalogs()
+        for key in referenced_message_keys():
+            with self.subTest(key=key):
+                for locale_id in ('en', 'zh-CN'):
+                    self.assertTrue(catalogs[locale_id]['messages'].get(key, '').strip(), f'{locale_id} {key}')
         for asset in self.ASSETS:
             self.assertEqual((ROOT / 'web-1.8' / asset).read_bytes(), (ROOT / 'web-1.12' / asset).read_bytes())
 
@@ -692,7 +611,6 @@ class I18nRuntimeTests(unittest.TestCase):
         ROOT / 'web-1.8' / 'admin-i18n.js',
         ROOT / 'web-1.12' / 'admin-i18n.js',
     ]
-    INVENTORY_PATH = ROOT / 'web-1.8' / 'admin-i18n-inventory.json'
 
     def run_runtime(self, body):
         script = """
@@ -713,34 +631,26 @@ const i18n = window.EaglerXI18n;
         )
         return json.loads(result.stdout)
 
-    def assert_catalog_contract(self, inventory, catalogs):
-        presentation_keys = [
-            surface['messageKey'] for surface in inventory['surfaces']
-            if surface['classification'] == 'presentation'
-        ]
-        expected = (
-            set(presentation_keys)
-            | {binding[0] for binding in inventory['staticBindingContract']['bindings']}
-            | set(inventory['dynamicBindingContract']['keys'])
-        )
-        self.assertTrue(set(presentation_keys).issubset({
-            key for key, message in inventory['messages'].items()
-            if message['classification'] == 'presentation'
-        }))
+    def assert_catalog_contract(self, catalogs):
+        referenced = referenced_message_keys()
+        self.assertTrue(referenced)
         for locale_id in ('en', 'zh-CN'):
             catalog = catalogs[locale_id]
-            self.assertEqual(expected, set(catalog))
             for key, value in catalog.items():
                 self.assertIsInstance(value, str)
                 self.assertTrue(value.strip(), key)
+            for key in referenced:
+                self.assertIn(key, catalog)
         self.assertEqual(set(catalogs['en']), set(catalogs['zh-CN']))
-        for key, message in inventory['messages'].items():
-            if message['classification'] == 'operational':
-                self.assertNotIn(key, catalogs['en'])
-                self.assertNotIn(key, catalogs['zh-CN'])
+        self.assertFalse([
+            value for value in catalogs['en'].values()
+            if re.search(r'[\u4e00-\u9fff]', value)
+        ])
+        source = (ROOT / 'web-1.8' / 'admin.js').read_text(encoding='utf-8')
+        han_fragments = set(re.findall(r'[\u4e00-\u9fff]+', source))
+        self.assertEqual([], sorted(han_fragments - set(catalogs['zh-CN'].values())))
 
     def test_registry_metadata_catalog_coverage_and_parity(self):
-        inventory = json.loads(self.INVENTORY_PATH.read_text(encoding='utf-8'))
         result = self.run_runtime("""
 console.log(JSON.stringify({
   defaults: [i18n.DEFAULT_LOCALE, i18n.FALLBACK_LOCALE, i18n.PREFERENCE_KEY],
@@ -755,34 +665,8 @@ console.log(JSON.stringify({
         self.assertEqual(['en', 'en', 'eaglerx_admin_locale'], result['defaults'])
         self.assertEqual(['en', 'zh-CN'], result['locales'])
         self.assertEqual(['English', '简体中文'], result['labels'])
-        self.assert_catalog_contract(inventory, result['catalogs'])
+        self.assert_catalog_contract(result['catalogs'])
         self.assertEqual(self.RUNTIME_PATHS[0].read_bytes(), self.RUNTIME_PATHS[1].read_bytes())
-
-    def test_catalog_contract_rejects_missing_extra_and_operational_keys(self):
-        inventory = json.loads(self.INVENTORY_PATH.read_text(encoding='utf-8'))
-        catalogs = self.run_runtime("""
-console.log(JSON.stringify({
-  en: i18n.locales.en.messages,
-  'zh-CN': i18n.locales['zh-CN'].messages
-}));
-""")
-        presentation_key = inventory['surfaces'][0]['messageKey']
-        operational_key = next(
-            key for key, message in inventory['messages'].items()
-            if message['classification'] == 'operational'
-        )
-
-        missing = copy.deepcopy(catalogs)
-        missing['en'].pop(presentation_key)
-        extra = copy.deepcopy(catalogs)
-        extra['en']['document.unmapped'] = 'Unmapped'
-        operational = copy.deepcopy(catalogs)
-        operational['zh-CN'][operational_key] = '操作值'
-
-        for name, corrupt in (('missing', missing), ('extra', extra), ('operational', operational)):
-            with self.subTest(name=name):
-                with self.assertRaises(AssertionError):
-                    self.assert_catalog_contract(inventory, corrupt)
 
     def test_fallback_missing_diagnostic_and_plain_text_interpolation(self):
         result = self.run_runtime("""
@@ -830,7 +714,7 @@ console.log(JSON.stringify(samples));
 
 class ReleaseContractTests(unittest.TestCase):
     ROOTS = (ROOT / 'web-1.8', ROOT / 'web-1.12')
-    RELEASE_ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'admin-i18n-inventory.json')
+    RELEASE_ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg')
 
     @staticmethod
     def digest(path):
@@ -879,6 +763,10 @@ console.log(JSON.stringify({
         return json.loads(result.stdout)
 
     def test_release_assets_are_exact_mirrors_with_sha256_evidence(self):
+        subprocess.run(
+            [sys.executable, str(ROOT / 'script' / 'sync_admin_assets.py'), '--check'],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
         canonical, mirror = self.ROOTS
         for asset in self.RELEASE_ASSETS:
             with self.subTest(asset=asset):
@@ -891,28 +779,20 @@ console.log(JSON.stringify({
                     f'web-1.12 sha256={self.digest(mirror_path)}',
                 )
 
-    def test_full_bilingual_locale_catalog_inventory_and_runtime_contract(self):
+    def test_bilingual_catalog_and_runtime_contract(self):
         for root in self.ROOTS:
             with self.subTest(root=root.name):
-                inventory = json.loads((root / 'admin-i18n-inventory.json').read_text(encoding='utf-8'))
                 runtime = self.runtime(root)
                 catalogs = runtime['catalogs']
-                static_keys = {binding[0] for binding in inventory['staticBindingContract']['bindings']}
-                dynamic_keys = set(inventory['dynamicBindingContract']['keys'])
-                source = (root / 'admin.js').read_text(encoding='utf-8')
-                runtime_keys = set(re.findall(
-                    r"['\"]((?:hero|status|console|dialog|validation|toast|seed|structure)\.[A-Za-z0-9_.-]+)['\"]",
-                    source,
-                ))
-                inventory_keys = {
-                    key for key, message in inventory['messages'].items()
-                    if message['classification'] == 'presentation'
-                }
-                referenced_keys = static_keys | dynamic_keys | inventory_keys
-
-                self.assertEqual(runtime_keys, dynamic_keys, root.name)
-                self.assertEqual(referenced_keys, set(catalogs['en']), root.name)
-                self.assertEqual(referenced_keys, set(catalogs['zh-CN']), root.name)
+                self.assertEqual(set(catalogs['en']), set(catalogs['zh-CN']), root.name)
+                for key in referenced_message_keys():
+                    with self.subTest(root=root.name, key=key):
+                        for locale_id in ('en', 'zh-CN'):
+                            self.assertTrue(catalogs[locale_id].get(key, '').strip(), f'{root.name}: {locale_id} {key}')
+                self.assertFalse([
+                    value for value in catalogs['en'].values()
+                    if re.search(r'[\u4e00-\u9fff]', value)
+                ], root.name)
 
                 self.assertEqual(['en', 'en', 'eaglerx_admin_locale'], runtime['defaults'], root.name)
                 self.assertEqual(['en', 'zh-CN'], runtime['ids'], root.name)
@@ -922,15 +802,6 @@ console.log(JSON.stringify({
                 self.assertEqual('请填写“<strong>FixtureAlex</strong>”。', runtime['interpolation'], root.name)
                 self.assertEqual(('zh-CN', 'zh-CN'), (runtime['selected'], runtime['current']), root.name)
                 self.assertEqual(['[EaglerX i18n] missing key: release.contract.unknown'], runtime['warnings'], root.name)
-                for key in referenced_keys:
-                    with self.subTest(root=root.name, key=key):
-                        for locale_id in ('en', 'zh-CN'):
-                            self.assertTrue(catalogs[locale_id].get(key, '').strip(), f'{root.name}: {locale_id} {key}')
-                for key, message in inventory['messages'].items():
-                    if message['classification'] == 'operational':
-                        self.assertNotIn(key, catalogs['en'], f'{root.name}: operational key {key} in en catalog')
-                        self.assertNotIn(key, catalogs['zh-CN'], f'{root.name}: operational key {key} in zh-CN catalog')
-
     def test_release_tag_and_channel_contract(self):
         tags = ['v1.12.2', 'v2.2', 'v2.2.1', 'v2.3-beta', 'release-3.0']
         commit = 'a' * 40

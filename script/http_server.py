@@ -58,6 +58,7 @@ RCON_PORT = 25575
 RCON_PASSWORD = os.environ.get('RCON_PASSWORD', '')
 RCON_ENABLED = bool(RCON_PASSWORD)
 MINECRAFT_VERSION = os.environ.get('MINECRAFT_VERSION', '')
+PUBLIC_GAME_URL = os.environ.get('PUBLIC_GAME_URL', '').strip()
 PERSISTENT_DATA_ROOT = os.environ.get('PERSISTENT_DATA_ROOT') or os.environ.get('SERVER_DATA_DIR') or os.path.join(os.path.dirname(os.path.dirname(__file__)), 'server-data')
 if MINECRAFT_VERSION in ('1.8', '1.12'):
     PLUGIN_REPOSITORY_ROOT = os.environ.get('PLUGIN_REPOSITORY_ROOT') or os.fspath(repository_path(PERSISTENT_DATA_ROOT, MINECRAFT_VERSION))
@@ -82,6 +83,46 @@ LOGIN_LOCKOUT_SECONDS = 10 * 60
 
 MIN_LONG = -(1 << 63)
 MAX_LONG = (1 << 63) - 1
+
+
+def normalize_public_game_url(value):
+    raw = str(value or '').strip()
+    if not raw or '\\' in raw or any(char.isspace() or ord(char) < 32 for char in raw):
+        raise ValueError('PUBLIC_GAME_URL must be an absolute HTTP(S) URL')
+    try:
+        parsed = urlparse(raw)
+        port = parsed.port
+        hostname = parsed.hostname
+    except ValueError as error:
+        raise ValueError('PUBLIC_GAME_URL must be an absolute HTTP(S) URL') from error
+    if (
+        parsed.scheme not in ('http', 'https')
+        or not parsed.netloc
+        or not hostname
+        or any(char in hostname for char in '%^|<>')
+        or (parsed.netloc.startswith('[') and ':' not in hostname)
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+        or (port is not None and not 1 <= port <= 65535)
+    ):
+        raise ValueError('PUBLIC_GAME_URL must be an absolute HTTP(S) URL')
+    return parsed.geturl()
+
+
+def connection_info_payload(value=None):
+    configured = PUBLIC_GAME_URL if value is None else str(value or '').strip()
+    if not configured:
+        return {'success': True, 'source': 'inferred', 'game_url': ''}
+    try:
+        game_url = normalize_public_game_url(configured)
+    except ValueError as error:
+        return {
+            'success': False,
+            'code': 'invalid_public_game_url',
+            'error': str(error),
+        }
+    return {'success': True, 'source': 'configured', 'game_url': game_url}
 
 CUBIOMES_MC_VERSIONS = {
     '1.8': 11,
@@ -1316,7 +1357,10 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
-        if RCON_ENABLED and parsed.path == '/api/status':
+        if parsed.path == '/api/connection-info':
+            payload = connection_info_payload()
+            self._json(200 if payload['success'] else 422, payload)
+        elif RCON_ENABLED and parsed.path == '/api/status':
             self._json(200, {
                 'success': True,
                 'rcon_host': RCON_HOST,

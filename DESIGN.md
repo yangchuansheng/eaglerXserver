@@ -12,7 +12,7 @@ This document records the durable UI constraints for the EaglercraftX admin cons
 ## Compatibility
 
 - Preserve functional DOM IDs, inline handlers, and `data-i18n*` bindings.
-- Update JavaScript, both locale catalogs, and the inventory contract together when a binding changes.
+- Update JavaScript, both locale catalogs, and the compact source-coverage contract in `tests/test_regressions.py` together when a binding changes.
 - Preserve keyboard navigation, focus visibility, semantic labels, and 44px touch targets on narrow viewports.
 - Keep the console usable from 320px mobile layouts through desktop widths without horizontal page overflow.
 

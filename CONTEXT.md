@@ -21,8 +21,16 @@ _Avoid_: Minecraft 版本、Paper 版本、协议版本
 _Avoid_: 本地检查、单项冒烟测试
 
 **游戏入口**:
-玩家访问 EaglercraftX 客户端、WebSocket 游戏连接和公开静态资源的入口。
-_Avoid_: 管理端口、控制面
+玩家从外部网络访问 EaglercraftX 客户端、建立 WebSocket 游戏连接并读取公开静态资源的可达地址。
+_Avoid_: 容器监听地址、管理面地址、内部服务地址
+
+**快速加入链接**:
+打开 EaglercraftX 客户端并携带目标服务器信息的玩家链接。
+_Avoid_: 客户端首页、管理面链接
+
+**WebSocket 游戏地址**:
+EaglercraftX 客户端与游戏代理建立会话时使用的公开 `ws` 或 `wss` 地址。
+_Avoid_: 游戏入口、Paper 地址、RCON 地址
 
 **管理面**:
 拥有服务器配置、运行控制和玩家管理权限的受保护入口，仅面向受信任管理员。

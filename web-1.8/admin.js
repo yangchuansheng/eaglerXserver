@@ -11,6 +11,7 @@ let WORLD_INFO_REFRESH_FORCE = false;
 let RUNTIME_REFRESH_HANDLE = null;
 let INITIAL_REFRESHING = false;
 let SERVER_INFO = { minecraftVersion: '', rconPort: '', bridgePort: '', nativeSeedFinderReady: false, serverVersionText: '' };
+let CONNECTION_INFO = { state: 'loading' };
 let WORLD_INFO_CACHE = null;
 let WORLD_SEED = '';
 let STRUCTURE_QUERY = { x: 0, z: 0, radius: 5000, limitPerType: 8 };
@@ -30,6 +31,13 @@ let STRUCTURE_PLACEHOLDER_STATE = { text: null, rawPayload: null };
 let PLUGIN_INVENTORY = null;
 let PLUGIN_UPLOAD_IN_FLIGHT = false;
 let PLUGIN_TRANSITION_IN_FLIGHT = false;
+const CONNECTION_SOURCE_KEYS = {
+  loading: 'status.connection.sourceLoading',
+  configured: 'status.connection.sourceConfigured',
+  inferred: 'status.connection.sourceInferred',
+  invalid: 'status.connection.sourceError',
+  unavailable: 'status.connection.sourceUnavailable'
+};
 const STRUCTURE_LABEL_KEYS = {
   village: 'structure.type.village',
   stronghold: 'structure.type.stronghold',
@@ -246,6 +254,27 @@ function toastRaw(payload) {
   toastElement._t = setTimeout(function () { toastElement.classList.remove('show'); }, 2000);
 }
 
+async function copyText(value) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch (error) { }
+  }
+  var input = document.createElement('textarea');
+  input.value = value;
+  input.setAttribute('readonly', 'readonly');
+  input.style.position = 'fixed';
+  input.style.left = '-9999px';
+  document.body.appendChild(input);
+  try {
+    input.select();
+    return !!document.execCommand('copy');
+  } finally {
+    document.body.removeChild(input);
+  }
+}
+
 function setStatus(state, text) {
   STATUS_STATE = { state: state, text: text || '' };
   renderStatus();
@@ -301,6 +330,7 @@ function initNavigation() {
 
 async function init() {
   initNavigation();
+  loadConnectionInfo();
   try {
     var r = await fetch(BASE + '/api/status');
     if (!r.ok) throw new Error();
@@ -1022,6 +1052,7 @@ function rerenderLocalizedState() {
   if (ONLINE_PLAYERS || TOKEN) renderPlayers();
   if (TPS_VALUES.length) renderTPS();
   renderPluginInventory();
+  renderConnectionInfo();
   renderSeedState();
   renderStructureStatus();
   renderStructureSource();
@@ -2494,19 +2525,7 @@ async function copyWorldSeed() {
     return;
   }
   try {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(WORLD_SEED);
-    } else {
-      var input = document.createElement('textarea');
-      input.value = WORLD_SEED;
-      input.setAttribute('readonly', 'readonly');
-      input.style.position = 'fixed';
-      input.style.left = '-9999px';
-      document.body.appendChild(input);
-      input.select();
-      document.execCommand('copy');
-      document.body.removeChild(input);
-    }
+    if (!(await copyText(WORLD_SEED))) throw new Error('copy failed');
     toast('世界种子已复制');
   } catch (e) {
     toast('复制失败，请手动复制');
@@ -2713,6 +2732,93 @@ async function toggleWL(el) {
     await waitForRuntimeToggleValue('whitelist', '', target, el);
   } finally {
     setTogglePending(el, false);
+  }
+}
+
+function buildConnectionInfo(gameUrl, state) {
+  var game = new URL(String(gameUrl || ''));
+  if (!/^https?:$/.test(game.protocol) || game.username || game.password || game.hash) throw new Error('invalid public game URL');
+  var websocket = new URL(game.toString());
+  websocket.protocol = game.protocol === 'https:' ? 'wss:' : 'ws:';
+  var quickJoin = new URL(game.toString());
+  quickJoin.searchParams.set('server', websocket.toString());
+  return { state: state, websocketUrl: websocket.toString(), quickJoinUrl: quickJoin.toString() };
+}
+
+function inferredGameUrl() {
+  var game = new URL(window.location.origin);
+  game.protocol = 'http:';
+  game.port = '5200';
+  game.pathname = '/';
+  game.search = '';
+  game.hash = '';
+  return game.toString();
+}
+
+function renderConnectionInfo() {
+  var card = document.getElementById('card-connection');
+  if (!card) return;
+  var info = CONNECTION_INFO;
+  var state = CONNECTION_SOURCE_KEYS[info.state] ? info.state : 'unavailable';
+  var source = document.getElementById('connection-source');
+  var address = document.getElementById('connection-address');
+  var open = document.getElementById('connection-open');
+  var copy = document.getElementById('connection-copy');
+  source.textContent = t(CONNECTION_SOURCE_KEYS[state]);
+  source.className = 'connection-source ' + state;
+  address.textContent = info.websocketUrl || '--';
+  address.title = info.websocketUrl || '';
+  open.classList.toggle('disabled', !info.quickJoinUrl);
+  open.setAttribute('aria-disabled', String(!info.quickJoinUrl));
+  if (info.quickJoinUrl) open.href = info.quickJoinUrl; else open.removeAttribute('href');
+  copy.disabled = !info.websocketUrl;
+}
+
+function connectionInfoFromPayload(payload) {
+  if (!payload || !payload.success) {
+    return { state: payload && payload.code === 'invalid_public_game_url' ? 'invalid' : 'unavailable' };
+  }
+  if (payload.source === 'configured') {
+    try {
+      return buildConnectionInfo(payload.game_url, 'configured');
+    } catch (error) {
+      return { state: 'invalid' };
+    }
+  }
+  if (payload.source === 'inferred') {
+    try {
+      return buildConnectionInfo(inferredGameUrl(), 'inferred');
+    } catch (error) {
+      return { state: 'unavailable' };
+    }
+  }
+  return { state: 'unavailable' };
+}
+
+async function loadConnectionInfo() {
+  CONNECTION_INFO = { state: 'loading' };
+  renderConnectionInfo();
+  try {
+    var response = await fetch(BASE + '/api/connection-info');
+    var payload = await response.json();
+    CONNECTION_INFO = connectionInfoFromPayload(response.ok ? payload : {
+      success: false,
+      code: payload && payload.code
+    });
+  } catch (error) {
+    CONNECTION_INFO = { state: 'unavailable' };
+  }
+  renderConnectionInfo();
+}
+
+async function copyConnectionAddress() {
+  var value = CONNECTION_INFO.websocketUrl;
+  if (!value) return;
+  try {
+    if (!(await copyText(value))) throw new Error('copy failed');
+    toastClient('toast.connectionCopied');
+  } catch (error) {
+    toastClient('toast.connectionCopyFailed');
   }
 }
 
