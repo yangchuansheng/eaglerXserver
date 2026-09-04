@@ -18,7 +18,6 @@ let LAST_STRUCTURE_RESULT = null;
 let LAST_STRUCTURE_CONTEXT = null;
 let ONLINE_PLAYERS = [];
 let REFRESH_IN_FLIGHT = {};
-let HERO_PULSE_TIMER = null;
 let STATUS_STATE = { state: 'off', text: '' };
 let VERSION_STATE = '';
 let TPS_VALUES = [];
@@ -260,10 +259,6 @@ function renderStatus() {
   document.getElementById('status-text').textContent = text;
   var heroConnection = document.getElementById('hero-connection');
   if (heroConnection) heroConnection.textContent = text || localize(state === 'on' ? '已连接' : '未连接');
-  var heroSignal = document.getElementById('hero-signal');
-  var heroSignalNote = document.getElementById('hero-signal-note');
-  if (heroSignal) heroSignal.textContent = localize(state === 'on' ? '稳定' : (state === 'auth' ? '待认证' : '离线'));
-  if (heroSignalNote) heroSignalNote.textContent = localize(state === 'on' ? '管理通道运行正常' : (state === 'auth' ? '系统正在等待认证' : '管理通道当前不可用'));
 }
 
 function setVersion(value) {
@@ -275,45 +270,25 @@ function renderVersion() {
   document.getElementById('ver-tag').textContent = renderPresentation(VERSION_STATE) || '--';
 }
 
-function startHeroPulse() {
-  var pulse = document.getElementById('hero-pulse-text');
-  if (!pulse) return;
-  clearInterval(HERO_PULSE_TIMER);
-  var index = 0;
-  var render = function () {
-    var players = document.getElementById('hero-player-count');
-    var tps = document.getElementById('hero-tps');
-    var version = SERVER_INFO.minecraftVersion || '--';
-    var messages = [
-      t(TOKEN ? 'hero.rconReady' : 'hero.rconWaiting'),
-      t('hero.paperReady', { version: version }),
-      t('hero.playersOnline', { count: formatNumber(ONLINE_PLAYERS.length) }),
-      t('hero.currentTps', { value: tps ? tps.textContent : '--' })
-    ];
-    pulse.textContent = messages[index % messages.length];
-    index += 1;
-  };
-  render();
-  HERO_PULSE_TIMER = setInterval(render, 3800);
-}
-
-function initRevealMotion() {
+function initNavigation() {
   var links = Array.prototype.slice.call(document.querySelectorAll('.control-nav-link'));
-  var setActiveLink = function (link) {
+  var setActiveLink = function (link, center) {
     links.forEach(function (item) { item.classList.toggle('is-active', item === link); });
-    if (window.innerWidth <= 820 && link.parentElement) {
-      link.parentElement.scrollTo({ left: link.offsetLeft - (link.parentElement.clientWidth - link.clientWidth) / 2, behavior: 'smooth' });
+    if (center && window.innerWidth <= 860 && link.parentElement) {
+      link.parentElement.scrollTo({ left: link.offsetLeft - (link.parentElement.clientWidth - link.clientWidth) / 2 });
     }
   };
   links.forEach(function (link) {
-    link.addEventListener('click', function () { setActiveLink(link); });
+    link.addEventListener('click', function () {
+      setActiveLink(link, true);
+    });
   });
   if ('IntersectionObserver' in window) {
     var sectionObserver = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
         if (!entry.isIntersecting) return;
         var link = links.find(function (item) { return item.getAttribute('href') === '#' + entry.target.id; });
-        if (link) setActiveLink(link);
+        if (link) setActiveLink(link, false);
       });
     }, { rootMargin: '-24% 0px -70% 0px', threshold: 0 });
     links.forEach(function (link) {
@@ -322,29 +297,10 @@ function initRevealMotion() {
       if (target) sectionObserver.observe(target);
     });
   }
-
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  var targets = Array.prototype.slice.call(document.querySelectorAll('.reveal-item'));
-  if (!targets.length) return;
-  document.body.classList.add('motion-enabled');
-  if (!('IntersectionObserver' in window)) {
-    targets.forEach(function (el) { el.classList.add('is-visible'); });
-    return;
-  }
-  var observer = new IntersectionObserver(function (entries) {
-    entries.forEach(function (entry) {
-      if (entry.isIntersecting) {
-        entry.target.classList.add('is-visible');
-        observer.unobserve(entry.target);
-      }
-    });
-  }, { threshold: .12, rootMargin: '0px 0px -8% 0px' });
-  targets.forEach(function (el) { observer.observe(el); });
 }
 
 async function init() {
-  initRevealMotion();
-  startHeroPulse();
+  initNavigation();
   try {
     var r = await fetch(BASE + '/api/status');
     if (!r.ok) throw new Error();

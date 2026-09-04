@@ -287,7 +287,7 @@ class AgentBrowser:
             'AGENT_BROWSER_CONTENT_BOUNDARIES': '1',
             'AGENT_BROWSER_MAX_OUTPUT': '4000',
             'AGENT_BROWSER_DEFAULT_TIMEOUT': '10000',
-            'AGENT_BROWSER_ALLOWED_DOMAINS': '127.0.0.1,localhost,api.fontshare.com,cdn.fontshare.com,picsum.photos,fastly.picsum.photos',
+            'AGENT_BROWSER_ALLOWED_DOMAINS': '127.0.0.1,localhost',
             'AGENT_BROWSER_ACTION_POLICY': self.policy,
             'AGENT_BROWSER_SCREENSHOT_DIR': self.screenshot_dir,
         }
@@ -604,12 +604,14 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 browser.check(stage, "document.querySelector('#console').textContent.includes('There are 1/20 players online: FixtureAlex')")
                 self.assert_recorded(server, '/api/rcon', 'list')
                 self.emit_evidence(root, stage, 'en', '/api/rcon', raw=server.raw_response, error=server.controlled_error)
-                for width, height, name in ((1440, 900, 'desktop'), (375, 812, 'mobile')):
+                for width, height, name in ((1440, 900, 'desktop'), (480, 812, 'narrow'), (375, 812, 'mobile'), (320, 812, 'compact')):
                     stage = f'viewport-{name}'
                     browser.run(stage, 'set', 'viewport', str(width), str(height))
                     image = screenshots / f'{name}.png'
                     browser.run(stage, 'screenshot', str(image))
                     browser.check(stage, "(function(){const s=document.querySelector('#locale-select'), p=document.querySelector('#cmd-bar button');return s.getBoundingClientRect().width > 0 && p.getBoundingClientRect().width > 0 && document.documentElement.scrollWidth <= window.innerWidth;}())")
+                    if width <= 640:
+                        browser.check(stage, "(() => { const selectors = ['.skip-link', '#locale-select', '#logout-btn', '.control-nav-link', '.qbtns button', '.pill-btn', '.setting-input', '.plugin-upload-file', '#plugin-upload-btn', '.dynmap-full-btn', '.seedmap-link', '.toggle', '#cmd', '#cmd-bar button', '.dialog-close', '.btn-cancel', '.btn-ok']; return selectors.every(selector => Array.from(document.querySelectorAll(selector)).every(element => { const style = getComputedStyle(element); return Math.max(parseFloat(style.height) || 0, parseFloat(style.minHeight) || 0) >= 44; })); })()")
                     self.assertTrue(image.is_file(), f'{root.name}: missing {name} screenshot')
                     screenshot_digest = hashlib.sha256(image.read_bytes()).hexdigest()
                     self.assertTrue(screenshot_digest, f'{root.name}: empty {name} screenshot digest')
@@ -624,7 +626,7 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 network_records = network_payload if isinstance(network_payload, list) else network_data.get('requests', [])
                 network_urls = [record.get('url', '') for record in network_records if isinstance(record, dict)]
                 self.assertTrue(network_urls, f'{root.name}: missing browser network evidence')
-                allowed_origins = (server.base_url, 'https://api.fontshare.com/', 'https://cdn.fontshare.com/', 'https://picsum.photos/', 'https://fastly.picsum.photos/')
+                allowed_origins = (server.base_url,)
                 self.assertTrue(all(url.startswith(allowed_origins) for url in network_urls), f'{root.name}: browser left the allowed origins')
                 self.assertTrue(all(record['route'].startswith('/api/') or record['route'] in ('/admin', '/admin/') for record in server.records), f'{root.name}: unexpected mock route')
                 self.assertTrue(any(record.get('raw_sha256') for record in server.records), f'{root.name}: missing sanitized raw evidence')
@@ -642,7 +644,7 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 self.run_root_scenario(root)
         self.evidence.append({'boundary': DEPLOYMENT_BOUNDARY})
         print(f'browser-matrix-evidence {DEPLOYMENT_BOUNDARY}')
-        self.assertEqual(19, len(self.evidence))
+        self.assertEqual(23, len(self.evidence))
         self.assertEqual({'boundary': DEPLOYMENT_BOUNDARY}, self.evidence[-1])
 
 
