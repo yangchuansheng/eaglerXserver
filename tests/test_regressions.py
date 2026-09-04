@@ -432,6 +432,7 @@ class StaticShellLocaleTests(unittest.TestCase):
     JS_PATH = ROOT / 'web-1.8' / 'admin.js'
     CSS_PATH = ROOT / 'web-1.8' / 'admin.css'
     ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg')
+    STATIC_BINDING_CONTRACT_SHA256 = 'fcfad562abbf02985ebd40a900897b56bcdd122b8099eeb948aabacdfa4dcd00'
 
     def test_english_first_paint_and_script_order(self):
         html = self.HTML_PATH.read_text(encoding='utf-8')
@@ -509,10 +510,13 @@ console.log(JSON.stringify({ valid: run('zh-CN', false), invalid: run('stale', f
 
     def test_static_bindings_have_bilingual_catalog_keys(self):
         catalogs = load_locale_catalogs()
-        html_keys = set(re.findall(
-            r'data-i18n(?:-(?:title|placeholder|aria-label))?="([^"]+)"',
+        bindings = sorted(re.findall(
+            r'\b(data-i18n(?:-(?:title|placeholder|aria-label))?)="([^"]+)"',
             self.HTML_PATH.read_text(encoding='utf-8'),
         ))
+        fingerprint = hashlib.sha256(json.dumps(bindings, separators=(',', ':')).encode('utf-8')).hexdigest()
+        self.assertEqual(self.STATIC_BINDING_CONTRACT_SHA256, fingerprint, f'{len(bindings)} static bindings')
+        html_keys = {key for _attribute, key in bindings}
         self.assertTrue(html_keys)
         for key in html_keys:
             with self.subTest(key=key):
@@ -642,6 +646,9 @@ const i18n = window.EaglerXI18n;
             value for value in catalogs['en'].values()
             if re.search(r'[\u4e00-\u9fff]', value)
         ])
+        source = (ROOT / 'web-1.8' / 'admin.js').read_text(encoding='utf-8')
+        han_fragments = set(re.findall(r'[\u4e00-\u9fff]+', source))
+        self.assertEqual([], sorted(han_fragments - set(catalogs['zh-CN'].values())))
 
     def test_registry_metadata_catalog_coverage_and_parity(self):
         result = self.run_runtime("""
