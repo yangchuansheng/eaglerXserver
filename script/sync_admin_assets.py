@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'web-1.8'
 MIRROR = ROOT / 'web-1.12'
-ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js')
+ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg')
 
 
 def main():

@@ -94,7 +94,7 @@ bungee 插件的 `listeners.yml` 中 `root: '../../../web'` 和 server 的 `run.
 
 功能：
 - 页面加载时探测 `/api/status`，RCON 启用则弹出自定义密码输入框
-- 连接信息卡片展示快速加入链接、WebSocket 游戏地址和 5200/5201 端口边界
+- 连接信息卡片展示快速加入链接和 WebSocket 游戏地址
 - 密码仅用于 `/api/login`，管理请求统一使用默认有效期 8 小时的令牌
 - 令牌保存在 `sessionStorage`，浏览器会话结束时清理本地登录态
 - 命令控制台（底部输入栏，回车发送）
@@ -116,7 +116,7 @@ bungee 插件的 `listeners.yml` 中 `root: '../../../web'` 和 server 的 `run.
 |------|--------|------|
 | `MINECRAFT_VERSION` | (必填) | 选择服务端版本：`1.8` 或 `1.12` |
 | `RCON_PASSWORD` | (空) | 设置后启用 RCON，管理面板弹窗需输入此密码 |
-| `PUBLIC_GAME_URL` | (空) | 公开 HTTP(S) 游戏入口；空值时按当前管理面主机和 5200 端口推导 |
+| `PUBLIC_GAME_URL` | (空) | 公开 HTTP(S) 游戏入口；空值时按当前管理面主机推导明文 5200 游戏入口 |
 | `ADMIN_AUTH_TOKEN_TTL` | `28800` | 管理令牌有效期，单位为秒 |
 | `ADMIN_AUTH_SECRET` | 从 RCON 密码派生 | 可选的令牌签名密钥 |
 

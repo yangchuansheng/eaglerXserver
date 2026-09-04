@@ -105,7 +105,7 @@ docker run -d \
 
 插件上传接受包含根目录 `plugin.yml` 的 JAR，单次上传上限为 64 MiB。上传、启用、停用和删除都会写入待重启标记；控制台的重启按钮或 `/api/system` 的 `restart_server` 操作完成受控重启后，Paper 才会读取新的插件集合。删除只移除插件 JAR，保留该插件目录中的配置和数据库文件，之后重新安装同名包可以继续使用这些数据。上传的 JAR 会在 Paper JVM 中执行任意代码，只接受可信来源并在部署前审查、扫描和备份。
 
-Overview 的连接信息卡片提供快速加入链接、WebSocket 游戏地址复制以及 5200/5201 端口边界说明。设置 `PUBLIC_GAME_URL=https://play.example.com` 后使用该游戏入口；空值时按当前管理面主机名与 5200 端口推导，并在卡片中标记地址来源。
+Overview 的连接信息卡片提供快速加入链接和 WebSocket 游戏地址复制。设置 `PUBLIC_GAME_URL=https://play.example.com` 后使用该游戏入口；空值时按当前管理面主机名推导明文 5200 游戏入口，并在卡片中标记地址来源。
 
 ## 管理 API
 

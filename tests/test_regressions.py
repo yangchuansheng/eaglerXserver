@@ -135,6 +135,7 @@ class ConnectionInfoTests(unittest.TestCase):
             'https://play.example.com/ bad',
             'https://play.example.com:0',
             'https://%zz/',
+            'https://foo<bar.example/',
             'https://play.example.com\\evil',
         ):
             with self.subTest(value=value):
@@ -430,7 +431,7 @@ class StaticShellLocaleTests(unittest.TestCase):
     HTML_PATH = ROOT / 'web-1.8' / 'admin.html'
     JS_PATH = ROOT / 'web-1.8' / 'admin.js'
     CSS_PATH = ROOT / 'web-1.8' / 'admin.css'
-    ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js')
+    ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg')
 
     def test_english_first_paint_and_script_order(self):
         html = self.HTML_PATH.read_text(encoding='utf-8')
@@ -520,7 +521,7 @@ console.log(JSON.stringify({ valid: run('zh-CN', false), invalid: run('stale', f
 
 
 class AdminAssetBoundaryTests(unittest.TestCase):
-    ADMIN_ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js')
+    ADMIN_ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg')
 
     def test_admin_assets_remain_mirrored(self):
         for asset in self.ADMIN_ASSETS:
@@ -542,7 +543,7 @@ class AdminAssetBoundaryTests(unittest.TestCase):
 
 
 class DynamicLocaleRendererTests(unittest.TestCase):
-    ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js')
+    ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg')
 
     def test_referenced_dynamic_keys_are_bilingual_and_mirrors(self):
         catalogs = load_locale_catalogs()
@@ -706,7 +707,7 @@ console.log(JSON.stringify(samples));
 
 class ReleaseContractTests(unittest.TestCase):
     ROOTS = (ROOT / 'web-1.8', ROOT / 'web-1.12')
-    RELEASE_ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js')
+    RELEASE_ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg')
 
     @staticmethod
     def digest(path):

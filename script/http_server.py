@@ -99,7 +99,7 @@ def normalize_public_game_url(value):
         parsed.scheme not in ('http', 'https')
         or not parsed.netloc
         or not hostname
-        or any(char in hostname for char in '%^|')
+        or any(char in hostname for char in '%^|<>')
         or (parsed.netloc.startswith('[') and ':' not in hostname)
         or parsed.username is not None
         or parsed.password is not None
