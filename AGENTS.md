@@ -154,14 +154,14 @@ docker run -d -p 5200:5200 -p 127.0.0.1:5201:5201 \
 ### 构建与推送
 
 ```bash
-./build.sh 2.2.3        # 构建并打标签
-./build.sh 2.2.3 push   # 构建并推送
+./build.sh 2.2.4        # 构建并打标签
+./build.sh 2.2.4 push   # 构建并推送
 ```
 
 Dockerfile 用 `COPY .` 打包全部文件（含两个版本），运行时通过软链接选择。镜像约 1.47GB。
 
 ## 当前镜像
-`ghcr.io/yangchuansheng/eaglerx1.8server:2.2.3`
+`ghcr.io/yangchuansheng/eaglerx1.8server:2.2.4`
 
 ## Agent skills
 
