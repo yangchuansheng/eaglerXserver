@@ -665,7 +665,7 @@ button {
   padding: 2px 5px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  color: var(--primary);
+  color: var(--text-secondary);
 }
 
 /* Section Grids */
@@ -801,6 +801,12 @@ button {
   width: 0;
   height: 0;
   position: absolute;
+}
+
+.toggle:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
 }
 
 .toggle .slider {
@@ -1480,7 +1486,7 @@ button {
   width: min(100%, 480px);
   background: var(--surface-1);
   border: 1px solid var(--border-strong);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65);
   display: flex;
   flex-direction: column;
@@ -2223,7 +2229,7 @@ button {
     width: 100%;
     max-width: calc(100vw - 16px);
     max-height: calc(90dvh);
-    border-radius: 14px 14px 8px 8px;
+    border-radius: var(--radius-md);
     box-sizing: border-box;
   }
   .dialog-head {
