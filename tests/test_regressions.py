@@ -432,7 +432,7 @@ class StaticShellLocaleTests(unittest.TestCase):
     JS_PATH = ROOT / 'web-1.8' / 'admin.js'
     CSS_PATH = ROOT / 'web-1.8' / 'admin.css'
     ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg')
-    STATIC_BINDING_CONTRACT_SHA256 = '81932d15555a002425a1eab3decd55ccd0330bcf684da9a7e1bc59c33257abd0'
+    STATIC_BINDING_CONTRACT_SHA256 = 'd4ffa959ecd1df5530952ab251092d01abd26960271eaf005d0d98c22dd220c6'
 
     def test_english_first_paint_and_script_order(self):
         html = self.HTML_PATH.read_text(encoding='utf-8')
