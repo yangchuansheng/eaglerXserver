@@ -392,24 +392,9 @@ button {
 }
 
 .control-nav-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
   padding: 8px 10px 14px;
   border-bottom: 1px solid var(--border-subtle);
   margin-bottom: 8px;
-}
-.nav-sigil {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius-sm);
-  background: var(--primary-faint);
-  color: var(--primary);
-  font-weight: 700;
-  font-size: 13px;
-  font-family: var(--font-mono);
 }
 .control-nav-brand strong {
   display: block;
@@ -473,21 +458,19 @@ button {
   font-weight: 500;
   line-height: 1.25;
 }
-.control-nav-footer {
-  margin-top: 14px;
-  padding: 10px 12px;
-  border-top: 1px solid var(--border-subtle);
-  font-size: 11px;
-  color: var(--text-muted);
+
+.sealos-deploy {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+  min-height: 44px;
+  text-decoration: none;
 }
-.control-nav-footer strong {
-  font-family: var(--font-mono);
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 500;
+.sealos-deploy:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 /* ==========================================================================
@@ -1961,7 +1944,7 @@ button {
     scroll-margin-top: 124px;
   }
 
-  .control-nav-brand, .control-nav-footer {
+  .control-nav-brand {
     display: none;
   }
 
