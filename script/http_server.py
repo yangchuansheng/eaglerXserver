@@ -178,7 +178,6 @@ _paper_started_at = (
     if os.environ.get('PAPER_STARTED_AT') else None
 )
 _paper_state = 'checking'
-_paper_was_ready = False
 _paper_checked_at = 0.0
 
 PANEL_GAMERULES = [
@@ -1175,7 +1174,7 @@ def server_pane_dead():
 
 
 def paper_status():
-    global _paper_state, _paper_was_ready, _paper_checked_at
+    global _paper_state, _paper_started_at, _paper_checked_at
     # Cache the probe across browsers; a busy command connection keeps its last known state.
     with _paper_status_lock:
         if time.monotonic() - _paper_checked_at >= 2:
@@ -1192,10 +1191,10 @@ def paper_status():
                     _wait_for_rcon_slot()
                     _rcon_send_many_once(['list'], timeout=1)
                     _paper_state = 'ready'
-                    _paper_was_ready = True
+                    _paper_started_at = None
                 except Exception as error:
                     starting = (
-                        _paper_started_at is not None and not _paper_was_ready
+                        _paper_started_at is not None
                         and dead is False
                         and _is_retryable_rcon_error(error)
                     )
@@ -1211,11 +1210,10 @@ def paper_status():
 
 
 def mark_paper_starting():
-    global _paper_started_at, _paper_state, _paper_was_ready, _paper_checked_at
+    global _paper_started_at, _paper_state, _paper_checked_at
     with _paper_status_lock:
         _paper_started_at = time.monotonic()
         _paper_state = 'starting'
-        _paper_was_ready = False
         _paper_checked_at = time.monotonic()
 
 

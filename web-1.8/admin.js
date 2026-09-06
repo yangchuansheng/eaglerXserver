@@ -9,7 +9,7 @@ let WORLD_INFO_TIMER = null;
 let WORLD_INFO_REFRESH_HANDLE = null;
 let WORLD_INFO_REFRESH_FORCE = false;
 let RUNTIME_REFRESH_HANDLE = null;
-let INITIAL_REFRESHING = false;
+let PAPER_REFRESHING = false;
 let PAPER_STATUS = { state: 'checking', elapsed_seconds: null };
 let PAPER_STATUS_TIMER = null;
 const PAPER_MESSAGES = {
@@ -355,11 +355,9 @@ function setPaperStatus(status) {
   }
   renderPaperStatus();
   renderConnectionInfo();
-  if (paperReady() && previous !== 'ready' && TOKEN) {
-    setStatus('on', '已连接');
+  if (paperReady() && previous !== 'ready' && TOKEN && STATUS_STATE.state === 'on') {
     toastClient('status.paper.ready');
-    setAllCardsLoading(true);
-    runInitialDashboardRefreshes();
+    refreshPaperDashboard();
   }
 }
 
@@ -368,15 +366,23 @@ async function refreshPaperStatus() {
   try {
     var response = await fetch(BASE + '/api/status', { cache: 'no-store', signal: AbortSignal.timeout(8000) });
     if (response.status === 404) {
+      if (PAPER_STATUS.state !== 'disabled') logClient('console.rconDisabled', {}, 'warn');
+      SERVER_INFO = { minecraftVersion: '', rconPort: '', bridgePort: '', nativeSeedFinderReady: false, serverVersionText: '' };
       setPaperStatus({ state: 'disabled' });
       setStatus('off', presentation('status.rconDisabled'));
       setVersion(presentation('status.rconDisabled'));
+      setSeedState('', presentation('status.rconSeedHint'));
       return;
     }
     if (!response.ok) throw new Error('status unavailable');
     var data = await response.json();
-    updateServerInfo(data);
+    SERVER_INFO.minecraftVersion = data.minecraft_version || '';
+    SERVER_INFO.rconPort = data.rcon_port || '';
+    SERVER_INFO.bridgePort = data.bridge_port || '';
+    SERVER_INFO.nativeSeedFinderReady = !!data.native_seed_finder_ready;
+    setVersion((SERVER_INFO.minecraftVersion ? 'MC ' + SERVER_INFO.minecraftVersion + ' · ' : '') + (SERVER_INFO.rconPort ? 'RCON:' + SERVER_INFO.rconPort : 'RCON'));
     setPaperStatus(data.paper);
+    if (TOKEN && STATUS_STATE.state !== 'on' && !(await restoreStoredAuth())) openLoginModal();
   } catch (error) {
     setPaperStatus({ state: 'offline', elapsed_seconds: null });
   } finally {
@@ -430,48 +436,18 @@ function initNavigation() {
   }
 }
 
-function updateServerInfo(data) {
-  SERVER_INFO.minecraftVersion = data.minecraft_version || '';
-  SERVER_INFO.rconPort = data.rcon_port || '';
-  SERVER_INFO.bridgePort = data.bridge_port || '';
-  SERVER_INFO.nativeSeedFinderReady = !!data.native_seed_finder_ready;
-  setVersion((SERVER_INFO.minecraftVersion ? 'MC ' + SERVER_INFO.minecraftVersion + ' · ' : '') + (SERVER_INFO.rconPort ? 'RCON:' + SERVER_INFO.rconPort : 'RCON'));
-}
-
 async function init() {
   initNavigation();
   renderPaperStatus();
   loadConnectionInfo();
-  try {
-    var r = await fetch(BASE + '/api/status', { cache: 'no-store', signal: AbortSignal.timeout(8000) });
-    if (!r.ok) throw new Error();
-    var d = await r.json();
-    updateServerInfo(d);
-    setPaperStatus(d.paper);
-    setSeedState('', defaultSeedHint());
-    log('RCON 已启用，管理面板准备就绪', 'info');
-    if (!(await restoreStoredAuth())) openLoginModal();
-  } catch (e) {
-    if (!r || r.status !== 404) {
-      setPaperStatus({ state: 'offline', elapsed_seconds: null });
-      if (!(await restoreStoredAuth())) openLoginModal();
-      return;
-    }
-    setPaperStatus({ state: 'disabled' });
-    SERVER_INFO.minecraftVersion = '';
-    SERVER_INFO.rconPort = '';
-    SERVER_INFO.bridgePort = '';
-    SERVER_INFO.nativeSeedFinderReady = false;
-    SERVER_INFO.serverVersionText = '';
-    setStatus('off', presentation('status.rconDisabled'));
-    setVersion(presentation('status.rconDisabled'));
-    setSeedState('', presentation('status.rconSeedHint'));
-    logClient('console.rconDisabled', {}, 'warn');
-  } finally {
-    if (!PAPER_STATUS_TIMER && PAPER_STATUS.state !== 'disabled') {
-      PAPER_STATUS_TIMER = setInterval(function () { if (!document.hidden) refreshPaperStatus(); }, 5000);
-    }
+  await refreshPaperStatus();
+  if (PAPER_STATUS.state === 'disabled') return;
+  if (!PAPER_STATUS_TIMER) {
+    PAPER_STATUS_TIMER = setInterval(function () { if (!document.hidden) refreshPaperStatus(); }, 5000);
   }
+  setSeedState('', defaultSeedHint());
+  if (PAPER_STATUS.state !== 'offline') log('RCON 已启用，管理面板准备就绪', 'info');
+  if (!(await restoreStoredAuth())) openLoginModal();
 }
 
 async function pluginRequest(payload) {
@@ -712,6 +688,7 @@ function renderPluginInventory() {
 
 async function refreshPlugins() {
   if (!TOKEN || !beginRefresh('plugins')) return;
+  setCardLoading('card-plugins', true);
   try {
     var d = await pluginRequest({ action: 'list' });
     if (d.success) {
@@ -1138,6 +1115,7 @@ function rerenderWorldInfo() {
 }
 
 function renderPlayers() {
+  if (!paperReady()) { renderPaperStatus(); return; }
   var el = document.getElementById('players');
   if (!el) return;
   var count = formatNumber(ONLINE_PLAYERS.length);
@@ -1150,6 +1128,7 @@ function renderPlayers() {
 }
 
 function renderTPS() {
+  if (!paperReady()) { renderPaperStatus(); return; }
   var el = document.getElementById('tps-bars');
   if (!el || !TPS_VALUES.length) return;
   var labels = ['1m', '5m', '15m'];
@@ -1543,9 +1522,11 @@ document.addEventListener('visibilitychange', function () {
   refreshRuntimeToggles();
 });
 
-async function runInitialDashboardRefreshes() {
-  if (INITIAL_REFRESHING) return;
-  INITIAL_REFRESHING = true;
+async function refreshPaperDashboard() {
+  if (PAPER_REFRESHING || !TOKEN || !paperReady()) return;
+  PAPER_REFRESHING = true;
+  var cards = LOADING_CARD_IDS.filter(function (id) { return id !== 'card-config' && id !== 'card-plugins'; });
+  cards.forEach(function (id) { setCardLoading(id, true); });
   try {
     await refreshPlayers();
     await sleep(120);
@@ -1557,13 +1538,10 @@ async function runInitialDashboardRefreshes() {
     await sleep(120);
     await refreshServerVersion();
     await sleep(120);
-    await refreshConfig();
-    await sleep(120);
-    await refreshPlugins();
-    await sleep(120);
     await refreshSeedMap();
   } finally {
-    INITIAL_REFRESHING = false;
+    cards.forEach(function (id) { setCardLoading(id, false); });
+    PAPER_REFRESHING = false;
   }
 }
 
@@ -1571,14 +1549,10 @@ function finishAuthenticated(message) {
   setStatus('on', '已连接');
   log(message || '认证成功，RCON 已连接', 'info');
   startAutoRefresh();
-  if (paperReady()) {
-    setAllCardsLoading(true);
-    runInitialDashboardRefreshes();
-  } else {
-    refreshConfig();
-    refreshPlugins();
-    renderPaperStatus();
-  }
+  refreshConfig();
+  refreshPlugins();
+  if (paperReady()) refreshPaperDashboard();
+  else renderPaperStatus();
 }
 
 async function loginWithPassword(pw) {
@@ -1606,25 +1580,30 @@ async function loginWithPassword(pw) {
 async function restoreStoredAuth() {
   var storedToken = getStoredToken();
   if (!storedToken) {
+    clearAuthState();
     setStatus('auth', '请输入密码');
     return false;
   }
+  if (!beginRefresh('auth')) return true;
+  if (!TOKEN) log('检测到浏览器已保存登录态，正在自动恢复连接', 'info');
   TOKEN = storedToken;
   setStatus('auth', '恢复登录中');
-  log('检测到浏览器已保存登录态，正在自动恢复连接', 'info');
   try {
     var r = await fetch(BASE + '/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(8000),
       body: JSON.stringify(buildAuthPayload({ action: 'get' }))
     });
     var d = await r.json();
+    if (TOKEN !== storedToken) return true;
     if (d.success) {
       finishAuthenticated('已从当前浏览器会话恢复登录');
       return true;
     }
-    if (!isAuthError(d.error)) { startAutoRefresh(); return true; }
-  } catch (e) { startAutoRefresh(); return true; }
+    if (!isAuthError(d.error)) return true;
+  } catch (e) { return true; }
+  finally { endRefresh('auth'); }
   clearAuthState();
   clearStoredToken();
   setStatus('auth', '请输入密码');
@@ -2524,6 +2503,7 @@ function syncConfigControls() {
 async function refreshConfig() {
   if (!TOKEN) return;
   if (!beginRefresh('config')) return;
+  setCardLoading('card-config', true);
   try {
     var d = await configRequest({ action: 'get' });
     if (d.success) {
@@ -2549,7 +2529,7 @@ async function refreshPlayers() {
       body: JSON.stringify(buildAuthPayload({ command: 'list' }))
     });
     var d = await r.json();
-    if (d.success) {
+    if (d.success && paperReady()) {
       var resp = d.response || '';
       var m = resp.match(/(\d+)\/(\d+)/);
       if (m) {
@@ -2563,6 +2543,7 @@ async function refreshPlayers() {
       handleAuthFailure(d.error);
     }
   } catch (e) {
+    if (!paperReady()) { renderPaperStatus(); return; }
     ONLINE_PLAYERS = [];
     document.getElementById('player-count').textContent = formatNumber(0);
     var heroPlayerCount = document.getElementById('hero-player-count');
@@ -2584,7 +2565,7 @@ async function refreshTPS() {
       body: JSON.stringify(buildAuthPayload({ command: 'tps' }))
     });
     var d = await r.json();
-    if (d.success) {
+    if (d.success && paperReady()) {
       var resp = d.response || '';
       var tail = resp.split(':').pop() || resp;
       var ms = tail.match(/\*?\d+\.?\d*/g);
@@ -2596,6 +2577,7 @@ async function refreshTPS() {
       handleAuthFailure(d.error);
     }
   } catch (e) {
+    if (!paperReady()) { renderPaperStatus(); return; }
     var heroTps = document.getElementById('hero-tps');
     if (heroTps) heroTps.textContent = '--';
     document.getElementById('tps-bars').innerHTML = '<div class="empty-state">' + escapeHtml(localize('读取 TPS 失败')) + '</div>';

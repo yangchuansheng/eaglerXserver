@@ -723,9 +723,11 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                         browser.run('management-offline', 'wait', '--fn', "document.querySelector('#paper-status-title').textContent === '管理服务连接中断'")
                         browser.check('management-offline', "!!sessionStorage.getItem('eaglerx_admin_token')")
                         server.status_code = 200
+                        browser.run('preserve-config-draft', 'fill', '#cfg-motd', 'Unsaved startup MOTD')
                         server.paper = {'state': 'ready', 'elapsed_seconds': None}
                         browser.run('paper-ready', 'wait', '--fn', "document.querySelector('#paper-status').classList.contains('hidden') && document.querySelector('#world-info .world-info-grid') && document.querySelector('#players').textContent.includes('FixtureAlex')")
                         browser.check('paper-ready', "!document.querySelector('#cmd').matches(':disabled') && !document.querySelector('#runtime-section button').matches(':disabled') && document.querySelector('#plugin-upload-btn').disabled && document.querySelector('#connection-open').hasAttribute('href') && document.querySelector('#modal-overlay').classList.contains('hidden')")
+                        browser.check('preserve-config-draft', "document.querySelector('#cfg-motd').value === 'Unsaved startup MOTD' && !document.querySelector('#card-config').classList.contains('card-loading')")
                         self.assert_recorded(server, '/api/world-state')
                         self.assertEqual(1, sum(row['route'] == '/api/login' for row in server.records))
                         server.status_code = 404

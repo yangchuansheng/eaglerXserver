@@ -418,10 +418,13 @@ class TmuxLifecycleTests(unittest.TestCase):
 
 
 class PaperReadinessTests(unittest.TestCase):
+    def test_dashboard_recovery(self):
+        subprocess.run(['node', str(ROOT / 'tests' / 'test_paper_dashboard.js')], check=True)
+
     def test_startup_readiness_recovery_and_probe_cache(self):
         server = http_server
         with mock.patch.multiple(server, _paper_state='checking', _paper_started_at=900,
-                                 _paper_was_ready=False, _paper_checked_at=0), \
+                                 _paper_checked_at=0), \
                 mock.patch.object(server.time, 'monotonic', return_value=1000) as clock, \
                 mock.patch.object(server, 'server_pane_dead', return_value=False) as dead, \
                 mock.patch.object(server, '_wait_for_rcon_slot'), \
@@ -610,7 +613,7 @@ class DynamicLocaleRendererTests(unittest.TestCase):
         source = (ROOT / 'web-1.8' / 'admin.js').read_text(encoding='utf-8')
         rerender = re.search(r'function rerenderLocalizedState\(\) \{([\s\S]*?)\n\}', source)
         self.assertIsNotNone(rerender)
-        self.assertNotRegex(rerender.group(1), r'\b(fetch|send|init|setInterval|setTimeout|queueWorldInfoRefresh|queueRuntimeRefresh|startAutoRefresh|runInitialDashboardRefreshes)\s*\(')
+        self.assertNotRegex(rerender.group(1), r'\b(fetch|send|init|setInterval|setTimeout|queueWorldInfoRefresh|queueRuntimeRefresh|startAutoRefresh|refreshPaperDashboard)\s*\(')
         self.assertIn('rerenderLocalizedState();', source)
         self.assertIn('Intl.NumberFormat(EaglerXI18n.getLocale()', source)
         self.assertIn('Intl.DateTimeFormat(EaglerXI18n.getLocale()', source)
