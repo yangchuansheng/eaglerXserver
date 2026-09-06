@@ -254,6 +254,7 @@ if ! wait_for_port 127.0.0.1 5200 60; then
     echo "[start] ERROR: Bungee did not become ready on port 5200"
     shutdown_services 1
 fi
+export PAPER_STARTED_AT="$(date +%s)"
 SERVER_PANE="$(tmux split-window -d -h -P -F '#{pane_id}' -t "${BUNGEE_PANE}" "cd \"${ACTIVE_SERVER_DIR}\"; exec ./run.sh")"
 export TMUX_BUNGEE_PANE="${BUNGEE_PANE}" TMUX_SERVER_PANE="${SERVER_PANE}"
 

@@ -9,7 +9,18 @@ let WORLD_INFO_TIMER = null;
 let WORLD_INFO_REFRESH_HANDLE = null;
 let WORLD_INFO_REFRESH_FORCE = false;
 let RUNTIME_REFRESH_HANDLE = null;
-let INITIAL_REFRESHING = false;
+let PAPER_REFRESHING = false;
+let PAPER_STATUS = { state: 'checking', elapsed_seconds: null };
+let PAPER_STATUS_TIMER = null;
+const PAPER_MESSAGES = {
+  checking: ['status.paper.checking', 'status.paper.checkingHint'],
+  starting: ['status.paper.starting', 'status.paper.startingHint'],
+  ready: ['status.paper.ready', ''],
+  stopped: ['status.paper.stopped', 'status.paper.stoppedHint'],
+  unavailable: ['status.paper.unavailable', 'status.paper.unavailableHint'],
+  offline: ['status.paper.offline', 'status.paper.offlineHint'],
+  disabled: ['status.rconDisabled', '']
+};
 let SERVER_INFO = { minecraftVersion: '', rconPort: '', bridgePort: '', nativeSeedFinderReady: false, serverVersionText: '' };
 let CONNECTION_INFO = { state: 'loading' };
 let WORLD_INFO_CACHE = null;
@@ -176,7 +187,7 @@ function setupLocalePreference() {
 var LOADING_CARD_IDS = ['card-world','card-players','card-tps','card-rules','card-config','card-whitelist','card-seedmap','card-plugins'];
 function setCardLoading(id,on){var el=document.getElementById(id);if(!el)return;if(on){el.classList.add('card-loading');el.style.position='relative'}else{el.classList.remove('card-loading')}}
 function setAllCardsLoading(on){for(var i=0;i<LOADING_CARD_IDS.length;i++)setCardLoading(LOADING_CARD_IDS[i],on)}
-function beginRefresh(name){if(REFRESH_IN_FLIGHT[name])return false;REFRESH_IN_FLIGHT[name]=true;return true}
+function beginRefresh(name){if(REFRESH_IN_FLIGHT[name])return false;if(!paperReady()&&['players','tps','world','runtime','seedmap'].indexOf(name)!==-1)return false;REFRESH_IN_FLIGHT[name]=true;return true}
 function endRefresh(name){REFRESH_IN_FLIGHT[name]=false}
 function shouldAutoPoll(){return !document.hidden && !!TOKEN}
 
@@ -283,12 +294,109 @@ function setStatus(state, text) {
 function renderStatus() {
   var state = STATUS_STATE.state;
   var text = renderPresentation(STATUS_STATE.text);
+  if (!paperReady() && PAPER_STATUS.state !== 'disabled') {
+    state = PAPER_STATUS.state === 'starting' || PAPER_STATUS.state === 'checking' ? 'auth' : 'off';
+    text = t(paperTitleKey());
+  }
   var d = document.getElementById('status-dot');
   d.className = state;
   document.getElementById('status-text').textContent = text;
   var heroConnection = document.getElementById('hero-connection');
   if (heroConnection) heroConnection.textContent = text || localize(state === 'on' ? '已连接' : '未连接');
 }
+
+function paperReady() {
+  return PAPER_STATUS.state === 'ready';
+}
+
+function paperTitleKey() {
+  if (PAPER_STATUS.state === 'starting' && PAPER_STATUS.elapsed_seconds >= 180) return 'status.paper.slow';
+  return PAPER_MESSAGES[PAPER_STATUS.state][0];
+}
+
+function renderPaperStatus() {
+  var banner = document.getElementById('paper-status');
+  if (!banner) return;
+  var waiting = !paperReady() && PAPER_STATUS.state !== 'disabled';
+  var starting = PAPER_STATUS.state === 'starting';
+  banner.classList.toggle('hidden', !waiting);
+  banner.classList.toggle('paper-error', ['stopped', 'unavailable', 'offline'].indexOf(PAPER_STATUS.state) !== -1);
+  if (waiting) {
+    var title = t(paperTitleKey());
+    var detailKey = starting && PAPER_STATUS.elapsed_seconds >= 180 ? 'status.paper.slowHint' : PAPER_MESSAGES[PAPER_STATUS.state][1];
+    var detail = t(detailKey);
+    var titleEl = document.getElementById('paper-status-title');
+    var detailEl = document.getElementById('paper-status-detail');
+    if (titleEl.textContent !== title) titleEl.textContent = title;
+    if (detailEl.textContent !== detail) detailEl.textContent = detail;
+    var seconds = Math.max(0, Number(PAPER_STATUS.elapsed_seconds) || 0);
+    document.getElementById('paper-status-elapsed').textContent = starting && PAPER_STATUS.elapsed_seconds != null
+      ? t('status.paper.elapsed', { minutes: formatNumber(Math.floor(seconds / 60)), seconds: formatNumber(seconds % 60) }) : '';
+    document.getElementById('paper-status-progress').classList.toggle('hidden', !starting && PAPER_STATUS.state !== 'checking');
+    setWorldInfoPlaceholder(t('status.paper.worldWaiting'));
+    document.getElementById('players').innerHTML = '<div class="empty-state">' + escapeHtml(t('status.paper.dataWaiting')) + '</div>';
+    document.getElementById('tps-bars').innerHTML = '<div class="empty-state">' + escapeHtml(t('status.paper.dataWaiting')) + '</div>';
+    ['hero-player-count', 'player-count', 'hero-tps'].forEach(function (id) { document.getElementById(id).textContent = '--'; });
+  }
+  document.querySelectorAll('[data-paper-controls], [data-paper-action]').forEach(function (element) { element.disabled = !paperReady(); });
+  document.querySelectorAll('[onclick="restartServer()"]').forEach(function (element) {
+    element.disabled = ['checking', 'starting', 'disabled'].indexOf(PAPER_STATUS.state) !== -1;
+  });
+  renderStatus();
+}
+
+function setPaperStatus(status) {
+  var previous = PAPER_STATUS.state;
+  PAPER_STATUS = status && Object.prototype.hasOwnProperty.call(PAPER_MESSAGES, status.state)
+    ? status : { state: 'unavailable', elapsed_seconds: null };
+  if (!paperReady()) {
+    WORLD_INFO_CACHE = null;
+    setAllCardsLoading(false);
+  }
+  renderPaperStatus();
+  renderConnectionInfo();
+  if (paperReady() && previous !== 'ready' && TOKEN && STATUS_STATE.state === 'on') {
+    toastClient('status.paper.ready');
+    refreshPaperDashboard();
+  }
+}
+
+async function refreshPaperStatus() {
+  if (!beginRefresh('paper')) return;
+  try {
+    var response = await fetch(BASE + '/api/status', { cache: 'no-store', signal: AbortSignal.timeout(8000) });
+    if (response.status === 404) {
+      if (PAPER_STATUS.state !== 'disabled') logClient('console.rconDisabled', {}, 'warn');
+      SERVER_INFO = { minecraftVersion: '', rconPort: '', bridgePort: '', nativeSeedFinderReady: false, serverVersionText: '' };
+      setPaperStatus({ state: 'disabled' });
+      setStatus('off', presentation('status.rconDisabled'));
+      setVersion(presentation('status.rconDisabled'));
+      setSeedState('', presentation('status.rconSeedHint'));
+      return;
+    }
+    if (!response.ok) throw new Error('status unavailable');
+    var data = await response.json();
+    SERVER_INFO.minecraftVersion = data.minecraft_version || '';
+    SERVER_INFO.rconPort = data.rcon_port || '';
+    SERVER_INFO.bridgePort = data.bridge_port || '';
+    SERVER_INFO.nativeSeedFinderReady = !!data.native_seed_finder_ready;
+    setVersion((SERVER_INFO.minecraftVersion ? 'MC ' + SERVER_INFO.minecraftVersion + ' · ' : '') + (SERVER_INFO.rconPort ? 'RCON:' + SERVER_INFO.rconPort : 'RCON'));
+    setPaperStatus(data.paper);
+    if (TOKEN && STATUS_STATE.state !== 'on' && !(await restoreStoredAuth())) openLoginModal();
+  } catch (error) {
+    setPaperStatus({ state: 'offline', elapsed_seconds: null });
+  } finally {
+    endRefresh('paper');
+  }
+}
+
+document.addEventListener('click', function (event) {
+  if (!paperReady() && event.target.closest('[data-paper-controls]')) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    toastClient('status.paper.dataWaiting');
+  }
+}, true);
 
 function setVersion(value) {
   VERSION_STATE = value || '';
@@ -330,30 +438,16 @@ function initNavigation() {
 
 async function init() {
   initNavigation();
+  renderPaperStatus();
   loadConnectionInfo();
-  try {
-    var r = await fetch(BASE + '/api/status');
-    if (!r.ok) throw new Error();
-    var d = await r.json();
-    SERVER_INFO.minecraftVersion = d.minecraft_version || '';
-    SERVER_INFO.rconPort = d.rcon_port || '';
-    SERVER_INFO.bridgePort = d.bridge_port || '';
-    SERVER_INFO.nativeSeedFinderReady = !!d.native_seed_finder_ready;
-    setVersion((SERVER_INFO.minecraftVersion ? 'MC ' + SERVER_INFO.minecraftVersion + ' · ' : '') + (SERVER_INFO.rconPort ? 'RCON:' + SERVER_INFO.rconPort : 'RCON'));
-    setSeedState('', defaultSeedHint());
-    log('RCON 已启用，管理面板准备就绪', 'info');
-    if (!(await restoreStoredAuth())) openLoginModal();
-  } catch (e) {
-    SERVER_INFO.minecraftVersion = '';
-    SERVER_INFO.rconPort = '';
-    SERVER_INFO.bridgePort = '';
-    SERVER_INFO.nativeSeedFinderReady = false;
-    SERVER_INFO.serverVersionText = '';
-    setStatus('off', presentation('status.rconDisabled'));
-    setVersion(presentation('status.rconDisabled'));
-    setSeedState('', presentation('status.rconSeedHint'));
-    logClient('console.rconDisabled', {}, 'warn');
+  await refreshPaperStatus();
+  if (PAPER_STATUS.state === 'disabled') return;
+  if (!PAPER_STATUS_TIMER) {
+    PAPER_STATUS_TIMER = setInterval(function () { if (!document.hidden) refreshPaperStatus(); }, 5000);
   }
+  setSeedState('', defaultSeedHint());
+  if (PAPER_STATUS.state !== 'offline') log('RCON 已启用，管理面板准备就绪', 'info');
+  if (!(await restoreStoredAuth())) openLoginModal();
 }
 
 async function pluginRequest(payload) {
@@ -594,6 +688,7 @@ function renderPluginInventory() {
 
 async function refreshPlugins() {
   if (!TOKEN || !beginRefresh('plugins')) return;
+  setCardLoading('card-plugins', true);
   try {
     var d = await pluginRequest({ action: 'list' });
     if (d.success) {
@@ -987,6 +1082,7 @@ function describeMinecraftPhase(rawTicks) {
 }
 
 function renderWorldInfo(info) {
+  if (!paperReady()) { renderPaperStatus(); return; }
   if (hasWorldInfoPayload(info)) WORLD_INFO_CACHE = info;
   var el = document.getElementById('world-info');
   if (!el) return;
@@ -1019,6 +1115,7 @@ function rerenderWorldInfo() {
 }
 
 function renderPlayers() {
+  if (!paperReady()) { renderPaperStatus(); return; }
   var el = document.getElementById('players');
   if (!el) return;
   var count = formatNumber(ONLINE_PLAYERS.length);
@@ -1031,6 +1128,7 @@ function renderPlayers() {
 }
 
 function renderTPS() {
+  if (!paperReady()) { renderPaperStatus(); return; }
   var el = document.getElementById('tps-bars');
   if (!el || !TPS_VALUES.length) return;
   var labels = ['1m', '5m', '15m'];
@@ -1069,6 +1167,7 @@ function rerenderLocalizedState() {
   if (ACTION_DIALOG) renderActionDialog(dialogSnapshot);
   renderToast();
   renderConsoleHistory();
+  renderPaperStatus();
 }
 
 function setToggleElementChecked(el, checked) {
@@ -1162,7 +1261,7 @@ async function refreshRuntimeToggles() {
 }
 
 async function refreshServerVersion() {
-  if (!TOKEN) return;
+  if (!TOKEN || !paperReady()) return;
   try {
     var r = await fetch(BASE + '/api/rcon', {
       method: 'POST',
@@ -1414,16 +1513,20 @@ function startAutoRefresh() {
 }
 
 document.addEventListener('visibilitychange', function () {
-  if (document.hidden || !TOKEN) return;
+  if (document.hidden) return;
+  refreshPaperStatus();
+  if (!TOKEN) return;
   refreshPlayers();
   refreshTPS();
   refreshWorldInfo(false);
   refreshRuntimeToggles();
 });
 
-async function runInitialDashboardRefreshes() {
-  if (INITIAL_REFRESHING) return;
-  INITIAL_REFRESHING = true;
+async function refreshPaperDashboard() {
+  if (PAPER_REFRESHING || !TOKEN || !paperReady()) return;
+  PAPER_REFRESHING = true;
+  var cards = LOADING_CARD_IDS.filter(function (id) { return id !== 'card-config' && id !== 'card-plugins'; });
+  cards.forEach(function (id) { setCardLoading(id, true); });
   try {
     await refreshPlayers();
     await sleep(120);
@@ -1435,22 +1538,21 @@ async function runInitialDashboardRefreshes() {
     await sleep(120);
     await refreshServerVersion();
     await sleep(120);
-    await refreshConfig();
-    await sleep(120);
-    await refreshPlugins();
-    await sleep(120);
     await refreshSeedMap();
   } finally {
-    INITIAL_REFRESHING = false;
+    cards.forEach(function (id) { setCardLoading(id, false); });
+    PAPER_REFRESHING = false;
   }
 }
 
 function finishAuthenticated(message) {
   setStatus('on', '已连接');
   log(message || '认证成功，RCON 已连接', 'info');
-  setAllCardsLoading(true);
   startAutoRefresh();
-  runInitialDashboardRefreshes();
+  refreshConfig();
+  refreshPlugins();
+  if (paperReady()) refreshPaperDashboard();
+  else renderPaperStatus();
 }
 
 async function loginWithPassword(pw) {
@@ -1478,24 +1580,30 @@ async function loginWithPassword(pw) {
 async function restoreStoredAuth() {
   var storedToken = getStoredToken();
   if (!storedToken) {
+    clearAuthState();
     setStatus('auth', '请输入密码');
     return false;
   }
+  if (!beginRefresh('auth')) return true;
+  if (!TOKEN) log('检测到浏览器已保存登录态，正在自动恢复连接', 'info');
   TOKEN = storedToken;
   setStatus('auth', '恢复登录中');
-  log('检测到浏览器已保存登录态，正在自动恢复连接', 'info');
   try {
-    var r = await fetch(BASE + '/api/rcon', {
+    var r = await fetch(BASE + '/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildAuthPayload({ command: 'list' }))
+      signal: AbortSignal.timeout(8000),
+      body: JSON.stringify(buildAuthPayload({ action: 'get' }))
     });
     var d = await r.json();
+    if (TOKEN !== storedToken) return true;
     if (d.success) {
       finishAuthenticated('已从当前浏览器会话恢复登录');
       return true;
     }
-  } catch (e) { }
+    if (!isAuthError(d.error)) return true;
+  } catch (e) { return true; }
+  finally { endRefresh('auth'); }
   clearAuthState();
   clearStoredToken();
   setStatus('auth', '请输入密码');
@@ -2318,6 +2426,10 @@ async function runCustomCommandDialog() {
 
 async function send(cmd, opts) {
   if (!TOKEN) { toast('请先登录'); openLoginModal(); return; }
+  if (!paperReady()) {
+    toastClient('status.paper.dataWaiting');
+    return { success: false, code: 'paper_not_ready' };
+  }
   opts = opts || {};
   logRaw(cmd, 'cmd');
   try {
@@ -2391,6 +2503,7 @@ function syncConfigControls() {
 async function refreshConfig() {
   if (!TOKEN) return;
   if (!beginRefresh('config')) return;
+  setCardLoading('card-config', true);
   try {
     var d = await configRequest({ action: 'get' });
     if (d.success) {
@@ -2416,7 +2529,7 @@ async function refreshPlayers() {
       body: JSON.stringify(buildAuthPayload({ command: 'list' }))
     });
     var d = await r.json();
-    if (d.success) {
+    if (d.success && paperReady()) {
       var resp = d.response || '';
       var m = resp.match(/(\d+)\/(\d+)/);
       if (m) {
@@ -2430,6 +2543,7 @@ async function refreshPlayers() {
       handleAuthFailure(d.error);
     }
   } catch (e) {
+    if (!paperReady()) { renderPaperStatus(); return; }
     ONLINE_PLAYERS = [];
     document.getElementById('player-count').textContent = formatNumber(0);
     var heroPlayerCount = document.getElementById('hero-player-count');
@@ -2451,7 +2565,7 @@ async function refreshTPS() {
       body: JSON.stringify(buildAuthPayload({ command: 'tps' }))
     });
     var d = await r.json();
-    if (d.success) {
+    if (d.success && paperReady()) {
       var resp = d.response || '';
       var tail = resp.split(':').pop() || resp;
       var ms = tail.match(/\*?\d+\.?\d*/g);
@@ -2463,6 +2577,7 @@ async function refreshTPS() {
       handleAuthFailure(d.error);
     }
   } catch (e) {
+    if (!paperReady()) { renderPaperStatus(); return; }
     var heroTps = document.getElementById('hero-tps');
     if (heroTps) heroTps.textContent = '--';
     document.getElementById('tps-bars').innerHTML = '<div class="empty-state">' + escapeHtml(localize('读取 TPS 失败')) + '</div>';
@@ -2481,7 +2596,8 @@ async function refreshWorldInfo(forceRefresh) {
     WORLD_INFO_CACHE = d;
     renderWorldInfo(d);
   } catch (e) {
-    setWorldInfoPlaceholder('读取世界状态失败', e.message || 'unknown');
+    if (paperReady()) setWorldInfoPlaceholder('读取世界状态失败', e.message || 'unknown');
+    else renderPaperStatus();
   } finally {
     setCardLoading('card-world', false);
     endRefresh('world');
@@ -2598,6 +2714,7 @@ async function stopServer() {
 }
 
 async function restartServer() {
+  if (PAPER_STATUS.state === 'starting') { toastClient('status.paper.dataWaiting'); return; }
   var confirmed = await showActionDialog({
     kicker: '服务器维护',
     title: '重启 Minecraft 服务',
@@ -2608,21 +2725,12 @@ async function restartServer() {
     previewText: 'restart_server'
   });
   if (!confirmed) return;
+  setPaperStatus({ state: 'starting', elapsed_seconds: 0 });
   try {
     var d = await systemRequest({ action: 'restart_server' });
     if (d.success) {
-      toastClient('toast.serverRestarting');
-      logClient('console.serverRestarting', {}, 'warn');
       if (d.message) logRaw(d.message, 'out');
-      setStatus('auth', '重启中');
       refreshPlugins();
-      setTimeout(refreshPlayers, 12000);
-      setTimeout(refreshTPS, 16000);
-      setTimeout(refreshSeedMap, 16000);
-      setTimeout(refreshPlugins, 12000);
-      setTimeout(function () {
-        if (TOKEN) setStatus('on', '已连接');
-      }, 18000);
     } else {
       logClient('console.requestFailed', { error: d.error || 'unknown' }, 'err');
       if (d.error) toastRaw(d.error); else toast('服务器重启失败');
@@ -2630,6 +2738,8 @@ async function restartServer() {
   } catch (e) {
     logClient('console.requestFailed', { error: e.message }, 'err');
     toast('服务器重启请求失败');
+  } finally {
+    refreshPaperStatus();
   }
 }
 
@@ -2768,9 +2878,10 @@ function renderConnectionInfo() {
   source.className = 'connection-source ' + state;
   address.textContent = info.websocketUrl || '--';
   address.title = info.websocketUrl || '';
-  open.classList.toggle('disabled', !info.quickJoinUrl);
-  open.setAttribute('aria-disabled', String(!info.quickJoinUrl));
-  if (info.quickJoinUrl) open.href = info.quickJoinUrl; else open.removeAttribute('href');
+  var canJoin = !!info.quickJoinUrl && (paperReady() || PAPER_STATUS.state === 'disabled');
+  open.classList.toggle('disabled', !canJoin);
+  open.setAttribute('aria-disabled', String(!canJoin));
+  if (canJoin) open.href = info.quickJoinUrl; else open.removeAttribute('href');
   copy.disabled = !info.websocketUrl;
 }
 

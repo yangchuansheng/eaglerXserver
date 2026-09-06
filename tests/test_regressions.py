@@ -417,6 +417,57 @@ class TmuxLifecycleTests(unittest.TestCase):
                 subprocess.run(['tmux', 'kill-session', '-t', session], env=env, check=False)
 
 
+class PaperReadinessTests(unittest.TestCase):
+    def test_dashboard_recovery(self):
+        subprocess.run(['node', str(ROOT / 'tests' / 'test_paper_dashboard.js')], check=True)
+
+    def test_startup_readiness_recovery_and_probe_cache(self):
+        server = http_server
+        with mock.patch.multiple(server, _paper_state='checking', _paper_started_at=900,
+                                 _paper_checked_at=0), \
+                mock.patch.object(server.time, 'monotonic', return_value=1000) as clock, \
+                mock.patch.object(server, 'server_pane_dead', return_value=False) as dead, \
+                mock.patch.object(server, '_wait_for_rcon_slot'), \
+                mock.patch.object(server, '_rcon_send_many_once', side_effect=ConnectionRefusedError()) as probe:
+            self.assertEqual({'state': 'starting', 'elapsed_seconds': 100}, server.paper_status())
+            handler = make_handler(0)
+            handler.path = '/api/status'
+            handler.do_GET()
+            self.assertEqual(200, handler.responses[-1][0])
+            self.assertEqual({'state': 'starting', 'elapsed_seconds': 100}, handler.responses[-1][1]['paper'])
+            clock.return_value = 1001
+            self.assertEqual(101, server.paper_status()['elapsed_seconds'])
+            self.assertEqual(1, probe.call_count)
+            clock.return_value = 1200
+            self.assertEqual({'state': 'starting', 'elapsed_seconds': 300}, server.paper_status())
+            probe.side_effect = None
+            probe.return_value = ['There are 0/20 players online:']
+            clock.return_value += 3
+            self.assertEqual('ready', server.paper_status()['state'])
+            probe.side_effect = ConnectionResetError()
+            clock.return_value += 3
+            self.assertEqual('unavailable', server.paper_status()['state'])
+            dead.return_value = True
+            clock.return_value += 3
+            self.assertEqual('stopped', server.paper_status()['state'])
+
+            server._restart_lock.acquire()
+            try:
+                server.mark_paper_starting()
+                clock.return_value += 3
+                self.assertEqual({'state': 'starting', 'elapsed_seconds': 3}, server.paper_status())
+            finally:
+                server._restart_lock.release()
+            dead.return_value = False
+            probe.side_effect = RuntimeError('RCON password rejected')
+            clock.return_value += 3
+            self.assertEqual('unavailable', server.paper_status()['state'])
+            probe.side_effect = ConnectionRefusedError()
+            server._paper_started_at = None
+            clock.return_value += 3
+            self.assertEqual('unavailable', server.paper_status()['state'])
+
+
 class StartupOrderingTests(unittest.TestCase):
     def test_paper_starts_after_bungee_readiness_check(self):
         source = START_SCRIPT.read_text(encoding='utf-8')
@@ -432,7 +483,7 @@ class StaticShellLocaleTests(unittest.TestCase):
     JS_PATH = ROOT / 'web-1.8' / 'admin.js'
     CSS_PATH = ROOT / 'web-1.8' / 'admin.css'
     ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg')
-    STATIC_BINDING_CONTRACT_SHA256 = 'd4ffa959ecd1df5530952ab251092d01abd26960271eaf005d0d98c22dd220c6'
+    STATIC_BINDING_CONTRACT_SHA256 = '31ff1252252f2317c38f14436b00f2b7bf2a91d97fdc8379772442f33ccc11b8'
 
     def test_english_first_paint_and_script_order(self):
         html = self.HTML_PATH.read_text(encoding='utf-8')
@@ -562,7 +613,7 @@ class DynamicLocaleRendererTests(unittest.TestCase):
         source = (ROOT / 'web-1.8' / 'admin.js').read_text(encoding='utf-8')
         rerender = re.search(r'function rerenderLocalizedState\(\) \{([\s\S]*?)\n\}', source)
         self.assertIsNotNone(rerender)
-        self.assertNotRegex(rerender.group(1), r'\b(fetch|send|init|setInterval|setTimeout|queueWorldInfoRefresh|queueRuntimeRefresh|startAutoRefresh|runInitialDashboardRefreshes)\s*\(')
+        self.assertNotRegex(rerender.group(1), r'\b(fetch|send|init|setInterval|setTimeout|queueWorldInfoRefresh|queueRuntimeRefresh|startAutoRefresh|refreshPaperDashboard)\s*\(')
         self.assertIn('rerenderLocalizedState();', source)
         self.assertIn('Intl.NumberFormat(EaglerXI18n.getLocale()', source)
         self.assertIn('Intl.DateTimeFormat(EaglerXI18n.getLocale()', source)

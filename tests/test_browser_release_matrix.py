@@ -41,6 +41,8 @@ class MockAdminServer:
         self.plugin_pending_restart = True
         self.restart_failure_next = False
         self.restart_success_next = False
+        self.paper = {'state': 'ready', 'elapsed_seconds': None}
+        self.status_code = 200
         self.records = []
         self.server = None
         self.thread = None
@@ -97,12 +99,13 @@ class MockAdminServer:
                     })
                     return
                 if self.path == '/api/status':
-                    self.json(200, {
+                    self.json(fixture.status_code, {
                         'success': True,
                         'minecraft_version': '1.8.8',
                         'rcon_port': 25575,
                         'bridge_port': 5201,
                         'native_seed_finder_ready': True,
+                        'paper': fixture.paper,
                     })
                     return
                 if self.path in ('/admin', '/admin/'):
@@ -158,6 +161,9 @@ class MockAdminServer:
                     return
                 if not self.authorized(payload):
                     self.json(403, {'success': False, 'error': 'token required'})
+                    return
+                if fixture.paper['state'] != 'ready' and route in {'/api/rcon', '/api/world-state', '/api/runtime-state', '/api/seed'}:
+                    self.json(500, {'success': False, 'error': 'level.dat not found' if route == '/api/world-state' else 'Connection refused'})
                     return
                 if route == '/api/rcon':
                     command = str(payload.get('command', '')).strip()
@@ -280,7 +286,7 @@ class MockAdminServer:
 
 
 class AgentBrowser:
-    ALLOWED_ACTIONS = ['launch', 'close', 'navigate', 'reload', 'snapshot', 'click', 'fill', 'type', 'press', 'focus', 'select', 'scroll', 'wait', 'get', 'viewport', 'screenshot', 'eval', 'evaluate', 'dialog', 'network', 'requests']
+    ALLOWED_ACTIONS = ['launch', 'close', 'navigate', 'reload', 'snapshot', 'click', 'fill', 'type', 'press', 'focus', 'select', 'scroll', 'wait', 'waitforfunction', 'get', 'viewport', 'screenshot', 'eval', 'evaluate', 'dialog', 'network', 'requests']
 
     def __init__(self, root_name, profile, policy, screenshot_dir, deadline):
         self.root_name = root_name
@@ -679,6 +685,57 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
         print(f'browser-matrix-evidence {DEPLOYMENT_BOUNDARY}')
         self.assertEqual(25, len(self.evidence))
         self.assertEqual({'boundary': DEPLOYMENT_BOUNDARY}, self.evidence[-1])
+
+    def test_paper_startup_and_automatic_recovery(self):
+        for root in WEB_ROOTS:
+            with self.subTest(root=root.name), tempfile.TemporaryDirectory(prefix='paper-startup-') as temp:
+                base = Path(temp)
+                policy = base / 'policy.json'
+                policy.write_text(json.dumps({'default': 'deny', 'allow': AgentBrowser.ALLOWED_ACTIONS}))
+                (base / 'profile').mkdir()
+                (base / 'screenshots').mkdir()
+                browser = AgentBrowser(root.name, base / 'profile', policy, base / 'screenshots', time.monotonic() + 180)
+                try:
+                    with MockAdminServer(root) as server:
+                        server.paper = {'state': 'starting', 'elapsed_seconds': 12}
+                        browser.batch('startup', [['open', server.base_url + '/admin'], ['snapshot', '-i']])
+                        browser.check('startup', "document.querySelector('#paper-status-title').textContent === 'Paper is starting' && document.querySelector('#paper-status-elapsed').textContent === 'Waited 0 min 12 sec' && document.querySelector('#cmd').matches(':disabled') && !document.querySelector('#connection-open').hasAttribute('href')")
+                        browser.batch('startup-login', [['fill', '#modal-pw', server.fixture_password], ['click', '#modal-btns .btn-ok'], ['wait', '--fn', "document.querySelector('#plugin-list').textContent.includes('FixturePlugin.jar')"], ['snapshot', '-i']])
+                        browser.check('startup-login', "document.querySelector('#world-info').textContent.includes('automatically') && !document.querySelector('#cfg-motd').matches(':disabled') && document.querySelector('#runtime-section button').matches(':disabled') && document.querySelector('#hero-connection').textContent === 'Paper is starting'")
+                        browser.batch('startup-restore', [['reload'], ['wait', '--fn', "document.querySelector('#plugin-list').textContent.includes('FixturePlugin.jar')"], ['snapshot', '-i']])
+                        browser.check('startup-restore', "document.querySelector('#modal-overlay').classList.contains('hidden') && !!sessionStorage.getItem('eaglerx_admin_token')")
+                        self.assertEqual(1, sum(row['route'] == '/api/login' for row in server.records))
+                        self.assertFalse(any(row['route'] in {'/api/rcon', '/api/world-state', '/api/runtime-state', '/api/seed'} for row in server.records))
+                        browser.batch('startup-chinese', [['select', '#locale-select', 'zh-CN'], ['snapshot', '-i'], ['screenshot', str(base / 'screenshots' / 'startup-desktop.png')]])
+                        browser.check('startup-chinese', "document.querySelector('#paper-status-title').textContent === 'Paper 正在启动' && document.querySelector('#paper-status-elapsed').textContent === '已等待 0 分 12 秒' && !document.querySelector('#paper-status').textContent.includes('[[missing:')")
+                        browser.batch('startup-mobile', [['set', 'viewport', '390', '844'], ['screenshot', str(base / 'screenshots' / 'startup-mobile.png')]])
+                        browser.check('startup-mobile', "document.documentElement.scrollWidth <= innerWidth && document.querySelector('#paper-status').getBoundingClientRect().width <= innerWidth && document.querySelector('#paper-status-title').getBoundingClientRect().top >= document.querySelector('.control-nav').getBoundingClientRect().bottom")
+
+                        for state, elapsed, title in (
+                            ('starting', 240, 'Paper 启动耗时较长'),
+                            ('stopped', None, 'Paper 已停止'),
+                            ('unavailable', None, 'Paper 连接暂时不可用'),
+                        ):
+                            server.paper = {'state': state, 'elapsed_seconds': elapsed}
+                            browser.run('paper-' + state, 'wait', '--fn', 'document.querySelector("#paper-status-title").textContent === ' + json.dumps(title))
+                            browser.check('paper-' + state, "document.querySelector('#cmd').matches(':disabled') && !document.querySelector('#world-info').textContent.includes('level.dat')")
+                        server.status_code = 503
+                        browser.run('management-offline', 'wait', '--fn', "document.querySelector('#paper-status-title').textContent === '管理服务连接中断'")
+                        browser.check('management-offline', "!!sessionStorage.getItem('eaglerx_admin_token')")
+                        server.status_code = 200
+                        browser.run('preserve-config-draft', 'fill', '#cfg-motd', 'Unsaved startup MOTD')
+                        server.paper = {'state': 'ready', 'elapsed_seconds': None}
+                        browser.run('paper-ready', 'wait', '--fn', "document.querySelector('#paper-status').classList.contains('hidden') && document.querySelector('#world-info .world-info-grid') && document.querySelector('#players').textContent.includes('FixtureAlex')")
+                        browser.check('paper-ready', "!document.querySelector('#cmd').matches(':disabled') && !document.querySelector('#runtime-section button').matches(':disabled') && document.querySelector('#plugin-upload-btn').disabled && document.querySelector('#connection-open').hasAttribute('href') && document.querySelector('#modal-overlay').classList.contains('hidden')")
+                        browser.check('preserve-config-draft', "document.querySelector('#cfg-motd').value === 'Unsaved startup MOTD' && !document.querySelector('#card-config').classList.contains('card-loading')")
+                        self.assert_recorded(server, '/api/world-state')
+                        self.assertEqual(1, sum(row['route'] == '/api/login' for row in server.records))
+                        server.status_code = 404
+                        browser.run('rcon-disabled', 'wait', '--fn', "document.querySelector('#status-text').textContent === EaglerXI18n.t('status.rconDisabled')")
+                        browser.check('rcon-disabled', "document.querySelector('#paper-status').classList.contains('hidden') && document.querySelector('#connection-open').hasAttribute('href') && document.querySelector('#cmd').matches(':disabled')")
+                        self.emit_evidence(root, 'paper-startup-recovery', 'zh-CN', '/api/status', '390x844')
+                finally:
+                    browser.close()
 
 
 if __name__ == '__main__':
