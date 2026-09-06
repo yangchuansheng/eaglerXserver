@@ -172,6 +172,14 @@ _login_attempts_lock = threading.Lock()
 # ponytail: process-wide locks fit one active server; use per-resource locks for multi-server control.
 _server_properties_lock = threading.Lock()
 _restart_lock = threading.Lock()
+_paper_status_lock = threading.Lock()
+_paper_started_at = (
+    time.monotonic() - max(0, time.time() - float(os.environ['PAPER_STARTED_AT']))
+    if os.environ.get('PAPER_STARTED_AT') else None
+)
+_paper_state = 'checking'
+_paper_was_ready = False
+_paper_checked_at = 0.0
 
 PANEL_GAMERULES = [
     'doDaylightCycle',
@@ -1166,6 +1174,51 @@ def server_pane_dead():
     return tmux_run(['display-message', '-p', '-t', SERVER_PANE, '#{pane_dead}']) == '1'
 
 
+def paper_status():
+    global _paper_state, _paper_was_ready, _paper_checked_at
+    # Cache the probe across browsers; a busy command connection keeps its last known state.
+    with _paper_status_lock:
+        if time.monotonic() - _paper_checked_at >= 2:
+            try:
+                dead = server_pane_dead()
+            except (OSError, RuntimeError):
+                dead = None
+            if _restart_lock.locked():
+                _paper_state = 'starting'
+            elif dead:
+                _paper_state = 'stopped'
+            elif _rcon_lock.acquire(blocking=False):
+                try:
+                    _wait_for_rcon_slot()
+                    _rcon_send_many_once(['list'], timeout=1)
+                    _paper_state = 'ready'
+                    _paper_was_ready = True
+                except Exception as error:
+                    starting = (
+                        _paper_started_at is not None and not _paper_was_ready
+                        and dead is False
+                        and _is_retryable_rcon_error(error)
+                    )
+                    _paper_state = 'starting' if starting else 'unavailable'
+                finally:
+                    _rcon_lock.release()
+            _paper_checked_at = time.monotonic()
+        return {
+            'state': _paper_state,
+            'elapsed_seconds': max(0, int(time.monotonic() - _paper_started_at))
+            if _paper_state == 'starting' and _paper_started_at is not None else None,
+        }
+
+
+def mark_paper_starting():
+    global _paper_started_at, _paper_state, _paper_was_ready, _paper_checked_at
+    with _paper_status_lock:
+        _paper_started_at = time.monotonic()
+        _paper_state = 'starting'
+        _paper_was_ready = False
+        _paper_checked_at = time.monotonic()
+
+
 def wait_for_server_stop(timeout=60):
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -1203,6 +1256,7 @@ def restart_server_process():
     if not _restart_lock.acquire(blocking=False):
         return False
     try:
+        mark_paper_starting()
         if not server_pane_dead():
             try:
                 rcon_send('stop', retries=1)
@@ -1210,7 +1264,7 @@ def restart_server_process():
                 tmux_run(['send-keys', '-t', SERVER_PANE, 'stop', 'C-m'])
             wait_for_server_stop(timeout=60)
         tmux_run(['respawn-pane', '-k', '-t', SERVER_PANE, f'cd "{SERVER_ROOT}"; exec ./run.sh'])
-        deadline = time.time() + 60
+        deadline = time.time() + 300
         while time.time() < deadline:
             if server_pane_dead():
                 raise RuntimeError('server exited during restart')
@@ -1227,7 +1281,7 @@ def restart_server_process():
 
 
 def _is_retryable_rcon_error(err):
-    if isinstance(err, (socket.timeout, ConnectionResetError, BrokenPipeError, TimeoutError)):
+    if isinstance(err, (socket.timeout, ConnectionRefusedError, ConnectionResetError, BrokenPipeError, TimeoutError)):
         return True
     if isinstance(err, OSError) and getattr(err, 'errno', None) in (32, 104, 110, 111):
         return True
@@ -1278,9 +1332,9 @@ def _wait_for_rcon_slot():
     _last_rcon_connect_at = time.monotonic()
 
 
-def _rcon_send_many_once(commands):
+def _rcon_send_many_once(commands, timeout=RCON_SOCKET_TIMEOUT):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(RCON_SOCKET_TIMEOUT)
+        sock.settimeout(timeout)
         sock.connect((RCON_HOST, RCON_PORT))
         sock.sendall(_pack_rcon_packet(1, 3, RCON_PASSWORD))
         auth_id, _, _ = _recv_rcon_packet(sock)
@@ -1368,6 +1422,7 @@ class Handler(SimpleHTTPRequestHandler):
                 'bridge_port': PORT,
                 'minecraft_version': MINECRAFT_VERSION,
                 'native_seed_finder_ready': os.path.exists(CUBIOMES_SHIM_PATH),
+                'paper': paper_status(),
             })
         elif parsed.path == '/admin' or parsed.path == '/admin/':
             self.path = '/admin.html'
@@ -1852,8 +1907,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return
             self._json(200, {
                 'success': True,
-                'message': '服务器正在重启，通常 10-30 秒后恢复连接',
-                'restart_in_progress': True
+                'message': 'Paper is ready.',
+                'restart_in_progress': False
             })
         except Exception as e:
             self._json(500, {'success': False, 'error': str(e)})
