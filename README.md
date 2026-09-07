@@ -6,7 +6,7 @@ Run a Minecraft server that players can join from their browser, with persistent
 
 <!-- README-I18N:START -->
 
-**English** | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
+**English** | [简体中文](./docs/readme/README.zh-CN.md) | [繁體中文](./docs/readme/README.zh-TW.md) | [日本語](./docs/readme/README.ja.md) | [한국어](./docs/readme/README.ko.md) | [Español](./docs/readme/README.es.md) | [Français](./docs/readme/README.fr.md) | [Deutsch](./docs/readme/README.de.md) | [Português (Brasil)](./docs/readme/README.pt-BR.md) | [Русский](./docs/readme/README.ru.md) | [العربية](./docs/readme/README.ar.md) | [हिन्दी](./docs/readme/README.hi.md) | [Bahasa Indonesia](./docs/readme/README.id.md) | [Türkçe](./docs/readme/README.tr.md)
 
 <!-- README-I18N:END -->
 

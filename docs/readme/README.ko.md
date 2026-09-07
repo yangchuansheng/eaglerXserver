@@ -2,11 +2,11 @@
 
 플레이어가 브라우저에서 접속할 수 있는 Minecraft 서버를 운영하세요. 영구 저장소와 플레이어, 월드, 플러그인을 관리하는 관리자 패널을 제공합니다. Docker 이미지에는 EaglercraftX 1.8 / 1.12 클라이언트와 Paper 1.8.8 / 1.12.2 서버가 포함되며, 시작할 때 게임 버전을 선택합니다.
 
-![EaglercraftX 관리자 패널](./docs/images/admin-panel.png)
+![EaglercraftX 관리자 패널](../images/admin-panel.png)
 
 <!-- README-I18N:START -->
 
-[English](./README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | **한국어** | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
+[English](../../README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | **한국어** | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
 
 <!-- README-I18N:END -->
 
@@ -26,7 +26,7 @@
 
 ### 1. 호스트 준비
 
-- **호스트**: Docker를 설치하고 영구 저장소를 준비하세요. 예제는 Linux 경로를 사용합니다. 배포 이미지는 AMD64를 대상으로 하며, ARM64 에뮬레이션과 네이티브 라이브러리 호환성은 별도로 검증해야 합니다. [아키텍처 결정](docs/adr/0006-publish-linux-amd64-only.md)을 참고하세요.
+- **호스트**: Docker를 설치하고 영구 저장소를 준비하세요. 예제는 Linux 경로를 사용합니다. 배포 이미지는 AMD64를 대상으로 하며, ARM64 에뮬레이션과 네이티브 라이브러리 호환성은 별도로 검증해야 합니다. [아키텍처 결정](../adr/0006-publish-linux-amd64-only.md)을 참고하세요.
 - **메모리**: Paper와 Bungee는 각각 `-Xms256M -Xmx256M`을 사용합니다. JVM의 힙 외 메모리, 월드 생성, 플러그인을 위한 여유 메모리도 확보하세요. 힙 크기는 해당 실행 디렉터리의 `run.sh`에서 조정합니다.
 - **EULA**: 시작 스크립트는 `eula=true`를 기록합니다. 배포 전에 [Minecraft EULA](https://www.minecraft.net/en-us/eula)를 읽고 동의하세요.
 
@@ -300,7 +300,7 @@ curl -sS http://127.0.0.1:5201/api/rcon \
 
 ### 로컬 변경과 검증
 
-Python 3와 Docker를 설치한 후 저장소 루트에서 다음 명령을 실행하세요. `web-1.8/`의 관리 자산을 편집하고 동기화 스크립트로 `web-1.12/`를 갱신합니다. 기본 이미지와 네이티브 라이브러리 요구 사항은 [실행 환경 기본 이미지 결정](docs/adr/0007-retain-the-verified-runtime-base.md)을 참고하세요.
+Python 3와 Docker를 설치한 후 저장소 루트에서 다음 명령을 실행하세요. `web-1.8/`의 관리 자산을 편집하고 동기화 스크립트로 `web-1.12/`를 갱신합니다. 기본 이미지와 네이티브 라이브러리 요구 사항은 [실행 환경 기본 이미지 결정](../adr/0007-retain-the-verified-runtime-base.md)을 참고하세요.
 
 ```bash
 python3 script/sync_admin_assets.py
@@ -308,7 +308,7 @@ python3 script/sync_admin_assets.py --check
 docker build --platform linux/amd64 -t eaglerx-local:dev .
 ```
 
-로컬 릴리스 검증에는 Node.js, tmux, `agent-browser`, 정상 실행되는 Chrome도 필요합니다. CI는 `agent-browser@0.26.0`로 고정되어 있습니다. 설치 절차는 [릴리스 워크플로](.github/workflows/release.yml)를 참고하세요.
+로컬 릴리스 검증에는 Node.js, tmux, `agent-browser`, 정상 실행되는 Chrome도 필요합니다. CI는 `agent-browser@0.26.0`로 고정되어 있습니다. 설치 절차는 [릴리스 워크플로](../../.github/workflows/release.yml)를 참고하세요.
 
 ```bash
 agent-browser doctor
@@ -324,7 +324,7 @@ agent-browser doctor
   --evidence-dir artifacts/release-gate
 ```
 
-모든 `--live` 검사를 통과해야 `summary.json`의 `release_ready`를 `true`로 설정합니다. 검사 범위, 증거 형식, Linux 임시 마운트 권한은 [릴리스 검증 문서](docs/release-gate.md)를 참고하세요.
+모든 `--live` 검사를 통과해야 `summary.json`의 `release_ready`를 `true`로 설정합니다. 검사 범위, 증거 형식, Linux 임시 마운트 권한은 [릴리스 검증 문서](../release-gate.md)를 참고하세요.
 
 ### 릴리스 게시
 
@@ -334,7 +334,7 @@ agent-browser doctor
 gh workflow run release.yml -f release_tag=v2.2.5
 ```
 
-`build.sh`는 로컬 빌드를 묶어 제공하며 `push` 인자는 이미지를 바로 푸시합니다. 공식 배포는 [전체 live gate 요구 사항](docs/adr/0005-require-the-live-release-gate.md)과 위 태그 워크플로를 따릅니다.
+`build.sh`는 로컬 빌드를 묶어 제공하며 `push` 인자는 이미지를 바로 푸시합니다. 공식 배포는 [전체 live gate 요구 사항](../adr/0005-require-the-live-release-gate.md)과 위 태그 워크플로를 따릅니다.
 
 ## 문제 보고
 

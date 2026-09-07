@@ -2,11 +2,11 @@
 
 使用 Docker 部署可持久化的 Minecraft 瀏覽器遊戲伺服器，並透過管理介面管理玩家、世界與外掛。映像檔包含 EaglercraftX 1.8 / 1.12 用戶端及 Paper 1.8.8 / 1.12.2 伺服器，啟動時選擇遊戲版本。
 
-![EaglercraftX 管理介面](./docs/images/admin-panel.png)
+![EaglercraftX 管理介面](../images/admin-panel.png)
 
 <!-- README-I18N:START -->
 
-[English](./README.md) | [简体中文](./README.zh-CN.md) | **繁體中文** | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
+[English](../../README.md) | [简体中文](./README.zh-CN.md) | **繁體中文** | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
 
 <!-- README-I18N:END -->
 
@@ -26,7 +26,7 @@
 
 ### 1. 準備主機
 
-- **主機**：安裝 Docker 並準備持久化儲存空間。範例採用 Linux 路徑。發佈映像檔以 AMD64 為目標；ARM64 模擬執行及原生函式庫相容性需另行驗證，請參閱[架構決策](docs/adr/0006-publish-linux-amd64-only.md)。
+- **主機**：安裝 Docker 並準備持久化儲存空間。範例採用 Linux 路徑。發佈映像檔以 AMD64 為目標；ARM64 模擬執行及原生函式庫相容性需另行驗證，請參閱[架構決策](../adr/0006-publish-linux-amd64-only.md)。
 - **記憶體**：Paper 與 Bungee 分別使用 `-Xms256M -Xmx256M`。請為 JVM 堆積以外的記憶體、世界生成及外掛預留空間。調整堆積大小時，編輯對應執行目錄中的 `run.sh`。
 - **EULA**：啟動指令碼會寫入 `eula=true`。部署前請閱讀並接受 [Minecraft EULA](https://www.minecraft.net/en-us/eula)。
 
@@ -300,7 +300,7 @@ curl -sS http://127.0.0.1:5201/api/rcon \
 
 ### 本機修改與驗證
 
-安裝 Python 3 與 Docker 後，在儲存庫根目錄執行下列指令。於 `web-1.8/` 編輯管理資產，再執行同步指令碼更新 `web-1.12/`。基礎映像檔與原生函式庫需求請參閱[執行環境基礎映像檔決策](docs/adr/0007-retain-the-verified-runtime-base.md)。
+安裝 Python 3 與 Docker 後，在儲存庫根目錄執行下列指令。於 `web-1.8/` 編輯管理資產，再執行同步指令碼更新 `web-1.12/`。基礎映像檔與原生函式庫需求請參閱[執行環境基礎映像檔決策](../adr/0007-retain-the-verified-runtime-base.md)。
 
 ```bash
 python3 script/sync_admin_assets.py
@@ -308,7 +308,7 @@ python3 script/sync_admin_assets.py --check
 docker build --platform linux/amd64 -t eaglerx-local:dev .
 ```
 
-本機發佈檢查還需要 Node.js、tmux、`agent-browser` 與可正常啟動的 Chrome。CI 固定使用 `agent-browser@0.26.0`，安裝步驟請參閱[發佈工作流程](.github/workflows/release.yml)。
+本機發佈檢查還需要 Node.js、tmux、`agent-browser` 與可正常啟動的 Chrome。CI 固定使用 `agent-browser@0.26.0`，安裝步驟請參閱[發佈工作流程](../../.github/workflows/release.yml)。
 
 ```bash
 agent-browser doctor
@@ -324,7 +324,7 @@ agent-browser doctor
   --evidence-dir artifacts/release-gate
 ```
 
-完整 `--live` 檢查通過後，檢查流程才會將 `summary.json` 中的 `release_ready` 設為 `true`。檢查範圍、證據格式與 Linux 暫存掛載權限，請參閱[發佈檢查文件](docs/release-gate.md)。
+完整 `--live` 檢查通過後，檢查流程才會將 `summary.json` 中的 `release_ready` 設為 `true`。檢查範圍、證據格式與 Linux 暫存掛載權限，請參閱[發佈檢查文件](../release-gate.md)。
 
 ### 發佈版本
 
@@ -334,7 +334,7 @@ agent-browser doctor
 gh workflow run release.yml -f release_tag=v2.2.5
 ```
 
-`build.sh` 封裝本機建置流程，其 `push` 參數會直接推送映像檔。正式發佈遵循[完整 live gate 要求](docs/adr/0005-require-the-live-release-gate.md)及上述標籤工作流程。
+`build.sh` 封裝本機建置流程，其 `push` 參數會直接推送映像檔。正式發佈遵循[完整 live gate 要求](../adr/0005-require-the-live-release-gate.md)及上述標籤工作流程。
 
 ## 問題回報
 

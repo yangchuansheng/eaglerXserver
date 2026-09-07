@@ -2,11 +2,11 @@
 
 Betreibe einen Minecraft-Server, dem Spieler direkt im Browser beitreten können, mit dauerhaftem Speicher und einem Admin-Panel für Spieler, Welten und Plugins. Das Docker-Image enthält die Clients EaglercraftX 1.8 / 1.12 und die Server Paper 1.8.8 / 1.12.2; die Spielversion wird beim Start gewählt.
 
-![EaglercraftX-Admin-Panel](./docs/images/admin-panel.png)
+![EaglercraftX-Admin-Panel](../images/admin-panel.png)
 
 <!-- README-I18N:START -->
 
-[English](./README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | **Deutsch** | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
+[English](../../README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | **Deutsch** | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
 
 <!-- README-I18N:END -->
 
@@ -26,7 +26,7 @@ Betreibe einen Minecraft-Server, dem Spieler direkt im Browser beitreten können
 
 ### 1. Host vorbereiten
 
-- **Host**: Installiere Docker und richte dauerhaften Speicher ein. Die Beispiele verwenden Linux-Pfade. Veröffentlichte Images sind für AMD64 vorgesehen; ARM64-Emulation und die Kompatibilität nativer Bibliotheken müssen separat geprüft werden. Siehe die [Architekturentscheidung](docs/adr/0006-publish-linux-amd64-only.md).
+- **Host**: Installiere Docker und richte dauerhaften Speicher ein. Die Beispiele verwenden Linux-Pfade. Veröffentlichte Images sind für AMD64 vorgesehen; ARM64-Emulation und die Kompatibilität nativer Bibliotheken müssen separat geprüft werden. Siehe die [Architekturentscheidung](../adr/0006-publish-linux-amd64-only.md).
 - **Arbeitsspeicher**: Paper und Bungee verwenden jeweils `-Xms256M -Xmx256M`. Plane zusätzlichen Speicher für die JVM außerhalb des Heaps, die Weltgenerierung und Plugins ein. Passe die Heap-Größe in `run.sh` im jeweiligen Laufzeitverzeichnis an.
 - **EULA**: Das Startskript schreibt `eula=true`. Lies und akzeptiere die [Minecraft-EULA](https://www.minecraft.net/en-us/eula) vor dem Deployment.
 
@@ -300,7 +300,7 @@ curl -sS http://127.0.0.1:5201/api/rcon \
 
 ### Lokale Änderungen und Validierung
 
-Führe diese Befehle mit installiertem Python 3 und Docker im Repository-Stamm aus. Bearbeite Admin-Dateien in `web-1.8/` und aktualisiere `web-1.12/` mit dem Synchronisierungsskript. Anforderungen an Basis-Image und native Bibliotheken stehen in der [Entscheidung zum Laufzeit-Basis-Image](docs/adr/0007-retain-the-verified-runtime-base.md).
+Führe diese Befehle mit installiertem Python 3 und Docker im Repository-Stamm aus. Bearbeite Admin-Dateien in `web-1.8/` und aktualisiere `web-1.12/` mit dem Synchronisierungsskript. Anforderungen an Basis-Image und native Bibliotheken stehen in der [Entscheidung zum Laufzeit-Basis-Image](../adr/0007-retain-the-verified-runtime-base.md).
 
 ```bash
 python3 script/sync_admin_assets.py
@@ -308,7 +308,7 @@ python3 script/sync_admin_assets.py --check
 docker build --platform linux/amd64 -t eaglerx-local:dev .
 ```
 
-Die lokale Release-Prüfung erfordert außerdem Node.js, tmux, `agent-browser` und ein funktionsfähiges Chrome. Die CI verwendet fest `agent-browser@0.26.0`; Installationsschritte stehen im [Release-Workflow](.github/workflows/release.yml).
+Die lokale Release-Prüfung erfordert außerdem Node.js, tmux, `agent-browser` und ein funktionsfähiges Chrome. Die CI verwendet fest `agent-browser@0.26.0`; Installationsschritte stehen im [Release-Workflow](../../.github/workflows/release.yml).
 
 ```bash
 agent-browser doctor
@@ -324,7 +324,7 @@ Lokale Prüfungen decken Python-Syntax, Server- und Plugin-Regressionen, Ressour
   --evidence-dir artifacts/release-gate
 ```
 
-Die Prüfung setzt `release_ready` in `summary.json` erst nach erfolgreichen vollständigen `--live`-Prüfungen auf `true`. Abdeckung, Nachweisformate und Rechte für temporäre Linux-Mounts beschreibt die [Release-Gate-Dokumentation](docs/release-gate.md).
+Die Prüfung setzt `release_ready` in `summary.json` erst nach erfolgreichen vollständigen `--live`-Prüfungen auf `true`. Abdeckung, Nachweisformate und Rechte für temporäre Linux-Mounts beschreibt die [Release-Gate-Dokumentation](../release-gate.md).
 
 ### Release veröffentlichen
 
@@ -334,7 +334,7 @@ Offizielle Releases verwenden Git-Tags `vMAJOR.MINOR` oder `vMAJOR.MINOR.PATCH`.
 gh workflow run release.yml -f release_tag=v2.2.5
 ```
 
-`build.sh` bündelt lokale Builds; das Argument `push` überträgt das Image direkt. Die offizielle Verteilung folgt der [Vorgabe für vollständige Live-Prüfungen](docs/adr/0005-require-the-live-release-gate.md) und dem beschriebenen Tag-Workflow.
+`build.sh` bündelt lokale Builds; das Argument `push` überträgt das Image direkt. Die offizielle Verteilung folgt der [Vorgabe für vollständige Live-Prüfungen](../adr/0005-require-the-live-release-gate.md) und dem beschriebenen Tag-Workflow.
 
 ## Probleme melden
 

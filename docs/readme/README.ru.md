@@ -2,11 +2,11 @@
 
 Запустите сервер Minecraft, к которому игроки подключаются из браузера, с постоянным хранилищем и панелью управления игроками, мирами и плагинами. Образ Docker включает клиенты EaglercraftX 1.8 / 1.12 и серверы Paper 1.8.8 / 1.12.2; версия игры выбирается при запуске.
 
-![Панель управления EaglercraftX](./docs/images/admin-panel.png)
+![Панель управления EaglercraftX](../images/admin-panel.png)
 
 <!-- README-I18N:START -->
 
-[English](./README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | **Русский** | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
+[English](../../README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | **Русский** | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
 
 <!-- README-I18N:END -->
 
@@ -26,7 +26,7 @@
 
 ### 1. Подготовьте хост
 
-- **Хост**: Установите Docker и подготовьте постоянное хранилище. В примерах используются пути Linux. Публикуемые образы предназначены для AMD64; эмуляция на ARM64 и совместимость нативных библиотек требуют отдельной проверки. См. [архитектурное решение](docs/adr/0006-publish-linux-amd64-only.md).
+- **Хост**: Установите Docker и подготовьте постоянное хранилище. В примерах используются пути Linux. Публикуемые образы предназначены для AMD64; эмуляция на ARM64 и совместимость нативных библиотек требуют отдельной проверки. См. [архитектурное решение](../adr/0006-publish-linux-amd64-only.md).
 - **Память**: Paper и Bungee используют по `-Xms256M -Xmx256M`. Оставьте дополнительную память для JVM вне кучи, генерации мира и плагинов. Размер кучи меняется в `run.sh` соответствующего рабочего каталога.
 - **EULA**: Скрипт запуска записывает `eula=true`. Перед развёртыванием прочитайте и примите [Minecraft EULA](https://www.minecraft.net/en-us/eula).
 
@@ -300,7 +300,7 @@ curl -sS http://127.0.0.1:5201/api/rcon \
 
 ### Локальные изменения и проверка
 
-Выполняйте команды из корня репозитория с установленными Python 3 и Docker. Меняйте ресурсы панели в `web-1.8/`, затем запускайте синхронизацию для обновления `web-1.12/`. Требования к базовому образу и нативным библиотекам описаны в [решении о базовом образе](docs/adr/0007-retain-the-verified-runtime-base.md).
+Выполняйте команды из корня репозитория с установленными Python 3 и Docker. Меняйте ресурсы панели в `web-1.8/`, затем запускайте синхронизацию для обновления `web-1.12/`. Требования к базовому образу и нативным библиотекам описаны в [решении о базовом образе](../adr/0007-retain-the-verified-runtime-base.md).
 
 ```bash
 python3 script/sync_admin_assets.py
@@ -308,7 +308,7 @@ python3 script/sync_admin_assets.py --check
 docker build --platform linux/amd64 -t eaglerx-local:dev .
 ```
 
-Локальная проверка выпуска также требует Node.js, tmux, `agent-browser` и работающий Chrome. CI фиксирует `agent-browser@0.26.0`; шаги установки есть в [процессе публикации](.github/workflows/release.yml).
+Локальная проверка выпуска также требует Node.js, tmux, `agent-browser` и работающий Chrome. CI фиксирует `agent-browser@0.26.0`; шаги установки есть в [процессе публикации](../../.github/workflows/release.yml).
 
 ```bash
 agent-browser doctor
@@ -324,7 +324,7 @@ agent-browser doctor
   --evidence-dir artifacts/release-gate
 ```
 
-Проверка задаёт `release_ready` значение `true` в `summary.json` только после успешного прохождения всех тестов `--live`. Область проверки, форматы доказательств и права временных подключений Linux описаны в [документации release gate](docs/release-gate.md).
+Проверка задаёт `release_ready` значение `true` в `summary.json` только после успешного прохождения всех тестов `--live`. Область проверки, форматы доказательств и права временных подключений Linux описаны в [документации release gate](../release-gate.md).
 
 ### Публикация версии
 
@@ -334,7 +334,7 @@ agent-browser doctor
 gh workflow run release.yml -f release_tag=v2.2.5
 ```
 
-`build.sh` упрощает локальную сборку; аргумент `push` напрямую отправляет образ. Официальная публикация следует [требованию полной live-проверки](docs/adr/0005-require-the-live-release-gate.md) и описанному процессу тегов.
+`build.sh` упрощает локальную сборку; аргумент `push` напрямую отправляет образ. Официальная публикация следует [требованию полной live-проверки](../adr/0005-require-the-live-release-gate.md) и описанному процессу тегов.
 
 ## Сообщить о проблеме
 

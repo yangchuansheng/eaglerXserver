@@ -2,11 +2,11 @@
 
 プレイヤーがブラウザーから参加できる Minecraft サーバーを、永続ストレージとプレイヤー・ワールド・プラグインを管理する管理パネル付きで運用できます。Docker イメージには EaglercraftX 1.8 / 1.12 クライアントと Paper 1.8.8 / 1.12.2 サーバーが含まれ、起動時にゲームのバージョンを選択します。
 
-![EaglercraftX 管理パネル](./docs/images/admin-panel.png)
+![EaglercraftX 管理パネル](../images/admin-panel.png)
 
 <!-- README-I18N:START -->
 
-[English](./README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | **日本語** | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
+[English](../../README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | **日本語** | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
 
 <!-- README-I18N:END -->
 
@@ -26,7 +26,7 @@
 
 ### 1. ホストの準備
 
-- **ホスト**：Docker をインストールし、永続ストレージを用意します。例では Linux のパスを使用します。公開イメージは AMD64 向けです。ARM64 エミュレーションとネイティブライブラリの互換性は別途検証してください。[アーキテクチャの決定](docs/adr/0006-publish-linux-amd64-only.md)を参照してください。
+- **ホスト**：Docker をインストールし、永続ストレージを用意します。例では Linux のパスを使用します。公開イメージは AMD64 向けです。ARM64 エミュレーションとネイティブライブラリの互換性は別途検証してください。[アーキテクチャの決定](../adr/0006-publish-linux-amd64-only.md)を参照してください。
 - **メモリ**：Paper と Bungee はそれぞれ `-Xms256M -Xmx256M` を使用します。JVM のヒープ外メモリ、ワールド生成、プラグイン用にも余裕を確保してください。ヒープサイズは、該当する実行ディレクトリの `run.sh` で変更します。
 - **EULA**：起動スクリプトは `eula=true` を書き込みます。デプロイ前に [Minecraft EULA](https://www.minecraft.net/en-us/eula) を読み、同意してください。
 
@@ -300,7 +300,7 @@ curl -sS http://127.0.0.1:5201/api/rcon \
 
 ### ローカルでの変更と検証
 
-Python 3 と Docker を用意し、リポジトリのルートで次のコマンドを実行します。管理用アセットは `web-1.8/` で編集し、同期スクリプトで `web-1.12/` を更新します。ベースイメージとネイティブライブラリの要件は[実行環境のベースイメージ決定](docs/adr/0007-retain-the-verified-runtime-base.md)を参照してください。
+Python 3 と Docker を用意し、リポジトリのルートで次のコマンドを実行します。管理用アセットは `web-1.8/` で編集し、同期スクリプトで `web-1.12/` を更新します。ベースイメージとネイティブライブラリの要件は[実行環境のベースイメージ決定](../adr/0007-retain-the-verified-runtime-base.md)を参照してください。
 
 ```bash
 python3 script/sync_admin_assets.py
@@ -308,7 +308,7 @@ python3 script/sync_admin_assets.py --check
 docker build --platform linux/amd64 -t eaglerx-local:dev .
 ```
 
-ローカルのリリース検証には Node.js、tmux、`agent-browser`、起動可能な Chrome も必要です。CI は `agent-browser@0.26.0` に固定しています。導入手順は[リリースワークフロー](.github/workflows/release.yml)を参照してください。
+ローカルのリリース検証には Node.js、tmux、`agent-browser`、起動可能な Chrome も必要です。CI は `agent-browser@0.26.0` に固定しています。導入手順は[リリースワークフロー](../../.github/workflows/release.yml)を参照してください。
 
 ```bash
 agent-browser doctor
@@ -324,7 +324,7 @@ agent-browser doctor
   --evidence-dir artifacts/release-gate
 ```
 
-完全な `--live` 検証に合格した場合に限り、`summary.json` の `release_ready` を `true` に設定します。検証範囲、証跡形式、Linux の一時マウント権限は[リリースゲートの文書](docs/release-gate.md)を参照してください。
+完全な `--live` 検証に合格した場合に限り、`summary.json` の `release_ready` を `true` に設定します。検証範囲、証跡形式、Linux の一時マウント権限は[リリースゲートの文書](../release-gate.md)を参照してください。
 
 ### リリースの公開
 
@@ -334,7 +334,7 @@ agent-browser doctor
 gh workflow run release.yml -f release_tag=v2.2.5
 ```
 
-`build.sh` はローカルビルドをまとめ、`push` 引数はイメージを直接プッシュします。正式な配布は[完全な live gate の要件](docs/adr/0005-require-the-live-release-gate.md)と前述のタグワークフローに従います。
+`build.sh` はローカルビルドをまとめ、`push` 引数はイメージを直接プッシュします。正式な配布は[完全な live gate の要件](../adr/0005-require-the-live-release-gate.md)と前述のタグワークフローに従います。
 
 ## 問題の報告
 

@@ -2,11 +2,11 @@
 
 Hébergez un serveur Minecraft accessible depuis le navigateur, avec un stockage persistant et un panneau d’administration pour gérer les joueurs, les mondes et les plugins. L’image Docker inclut les clients EaglercraftX 1.8 / 1.12 et les serveurs Paper 1.8.8 / 1.12.2 ; choisissez la version du jeu au démarrage.
 
-![Panneau d’administration EaglercraftX](./docs/images/admin-panel.png)
+![Panneau d’administration EaglercraftX](../images/admin-panel.png)
 
 <!-- README-I18N:START -->
 
-[English](./README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | **Français** | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
+[English](../../README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | **Français** | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
 
 <!-- README-I18N:END -->
 
@@ -26,7 +26,7 @@ Hébergez un serveur Minecraft accessible depuis le navigateur, avec un stockage
 
 ### 1. Préparer la machine hôte
 
-- **Hôte** : installez Docker et prévoyez un stockage persistant. Les exemples utilisent des chemins Linux. Les images publiées ciblent AMD64 ; l’émulation ARM64 et la compatibilité des bibliothèques natives nécessitent une validation distincte. Consultez la [décision d’architecture](docs/adr/0006-publish-linux-amd64-only.md).
+- **Hôte** : installez Docker et prévoyez un stockage persistant. Les exemples utilisent des chemins Linux. Les images publiées ciblent AMD64 ; l’émulation ARM64 et la compatibilité des bibliothèques natives nécessitent une validation distincte. Consultez la [décision d’architecture](../adr/0006-publish-linux-amd64-only.md).
 - **Mémoire** : Paper et Bungee utilisent chacun `-Xms256M -Xmx256M`. Prévoyez de la mémoire supplémentaire pour la JVM hors du tas, la génération des mondes et les plugins. Pour ajuster la taille du tas, modifiez `run.sh` dans le répertoire d’exécution concerné.
 - **EULA** : le script de démarrage écrit `eula=true`. Lisez et acceptez le [contrat EULA de Minecraft](https://www.minecraft.net/en-us/eula) avant le déploiement.
 
@@ -300,7 +300,7 @@ curl -sS http://127.0.0.1:5201/api/rcon \
 
 ### Modifications locales et validation
 
-Exécutez ces commandes à la racine du dépôt, avec Python 3 et Docker installés. Modifiez les ressources d’administration dans `web-1.8/`, puis lancez le script de synchronisation pour actualiser `web-1.12/`. Consultez la [décision sur l’image de base](docs/adr/0007-retain-the-verified-runtime-base.md) pour les exigences concernant l’image et les bibliothèques natives.
+Exécutez ces commandes à la racine du dépôt, avec Python 3 et Docker installés. Modifiez les ressources d’administration dans `web-1.8/`, puis lancez le script de synchronisation pour actualiser `web-1.12/`. Consultez la [décision sur l’image de base](../adr/0007-retain-the-verified-runtime-base.md) pour les exigences concernant l’image et les bibliothèques natives.
 
 ```bash
 python3 script/sync_admin_assets.py
@@ -308,7 +308,7 @@ python3 script/sync_admin_assets.py --check
 docker build --platform linux/amd64 -t eaglerx-local:dev .
 ```
 
-La validation locale de publication exige aussi Node.js, tmux, `agent-browser` et une installation fonctionnelle de Chrome. La CI fixe `agent-browser@0.26.0` ; les étapes d’installation figurent dans le [workflow de publication](.github/workflows/release.yml).
+La validation locale de publication exige aussi Node.js, tmux, `agent-browser` et une installation fonctionnelle de Chrome. La CI fixe `agent-browser@0.26.0` ; les étapes d’installation figurent dans le [workflow de publication](../../.github/workflows/release.yml).
 
 ```bash
 agent-browser doctor
@@ -324,7 +324,7 @@ Les contrôles locaux couvrent la syntaxe Python, les régressions serveur et pl
   --evidence-dir artifacts/release-gate
 ```
 
-Le contrôle définit `release_ready` à `true` dans `summary.json` uniquement après réussite de tous les tests `--live`. Consultez la [documentation de validation de publication](docs/release-gate.md) pour la couverture, les formats de preuves et les permissions des montages temporaires Linux.
+Le contrôle définit `release_ready` à `true` dans `summary.json` uniquement après réussite de tous les tests `--live`. Consultez la [documentation de validation de publication](../release-gate.md) pour la couverture, les formats de preuves et les permissions des montages temporaires Linux.
 
 ### Publier une version
 
@@ -334,7 +334,7 @@ Les versions officielles utilisent les tags Git `vMAJOR.MINOR` ou `vMAJOR.MINOR.
 gh workflow run release.yml -f release_tag=v2.2.5
 ```
 
-`build.sh` simplifie les constructions locales ; son argument `push` envoie directement l’image. La distribution officielle suit l’[exigence de validation live complète](docs/adr/0005-require-the-live-release-gate.md) et le workflow de tags ci-dessus.
+`build.sh` simplifie les constructions locales ; son argument `push` envoie directement l’image. La distribution officielle suit l’[exigence de validation live complète](../adr/0005-require-the-live-release-gate.md) et le workflow de tags ci-dessus.
 
 ## Signaler un problème
 

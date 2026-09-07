@@ -2,11 +2,11 @@
 
 Oyuncuların tarayıcıdan katılabildiği, kalıcı depolama ve oyuncuları, dünyaları, eklentileri yönetmek için bir yönetim paneli sunan Minecraft sunucusu çalıştırın. Docker imajı EaglercraftX 1.8 / 1.12 istemcilerini ve Paper 1.8.8 / 1.12.2 sunucularını içerir; oyun sürümünü başlatırken seçin.
 
-![EaglercraftX yönetim paneli](./docs/images/admin-panel.png)
+![EaglercraftX yönetim paneli](../images/admin-panel.png)
 
 <!-- README-I18N:START -->
 
-[English](./README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | **Türkçe**
+[English](../../README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | **Türkçe**
 
 <!-- README-I18N:END -->
 
@@ -26,7 +26,7 @@ Oyuncuların tarayıcıdan katılabildiği, kalıcı depolama ve oyuncuları, d�
 
 ### 1. Ana makineyi hazırlayın
 
-- **Ana makine**: Docker’ı kurun ve kalıcı depolama hazırlayın. Örnekler Linux yollarını kullanır. Yayımlanan imajlar AMD64 içindir; ARM64 emülasyonu ve yerel kitaplık uyumluluğu ayrıca doğrulanmalıdır. [Mimari kararına](docs/adr/0006-publish-linux-amd64-only.md) bakın.
+- **Ana makine**: Docker’ı kurun ve kalıcı depolama hazırlayın. Örnekler Linux yollarını kullanır. Yayımlanan imajlar AMD64 içindir; ARM64 emülasyonu ve yerel kitaplık uyumluluğu ayrıca doğrulanmalıdır. [Mimari kararına](../adr/0006-publish-linux-amd64-only.md) bakın.
 - **Bellek**: Paper ve Bungee ayrı ayrı `-Xms256M -Xmx256M` kullanır. JVM’nin heap dışı belleği, dünya üretimi ve eklentiler için ek bellek ayırın. Heap boyutunu değiştirmek için ilgili çalışma dizinindeki `run.sh` dosyasını düzenleyin.
 - **EULA**: Başlatma betiği `eula=true` yazar. Dağıtımdan önce [Minecraft EULA](https://www.minecraft.net/en-us/eula) metnini okuyup kabul edin.
 
@@ -300,7 +300,7 @@ curl -sS http://127.0.0.1:5201/api/rcon \
 
 ### Yerel değişiklikler ve doğrulama
 
-Python 3 ve Docker kurulu halde bu komutları depo kökünde çalıştırın. Yönetim varlıklarını `web-1.8/` içinde düzenleyip eşitleme betiğiyle `web-1.12/` dizinini güncelleyin. Taban imaj ve yerel kitaplık koşulları için [çalışma ortamı taban imajı kararına](docs/adr/0007-retain-the-verified-runtime-base.md) bakın.
+Python 3 ve Docker kurulu halde bu komutları depo kökünde çalıştırın. Yönetim varlıklarını `web-1.8/` içinde düzenleyip eşitleme betiğiyle `web-1.12/` dizinini güncelleyin. Taban imaj ve yerel kitaplık koşulları için [çalışma ortamı taban imajı kararına](../adr/0007-retain-the-verified-runtime-base.md) bakın.
 
 ```bash
 python3 script/sync_admin_assets.py
@@ -308,7 +308,7 @@ python3 script/sync_admin_assets.py --check
 docker build --platform linux/amd64 -t eaglerx-local:dev .
 ```
 
-Yerel yayın kontrolü ayrıca Node.js, tmux, `agent-browser` ve çalışır bir Chrome kurulumu gerektirir. CI `agent-browser@0.26.0` sürümünü sabitler; kurulum adımları [yayın iş akışındadır](.github/workflows/release.yml).
+Yerel yayın kontrolü ayrıca Node.js, tmux, `agent-browser` ve çalışır bir Chrome kurulumu gerektirir. CI `agent-browser@0.26.0` sürümünü sabitler; kurulum adımları [yayın iş akışındadır](../../.github/workflows/release.yml).
 
 ```bash
 agent-browser doctor
@@ -324,7 +324,7 @@ Yerel kontroller Python sözdizimini, sunucu ve eklenti regresyonlarını, iki s
   --evidence-dir artifacts/release-gate
 ```
 
-Kontrol, tüm `--live` denetimleri geçince `summary.json` içindeki `release_ready` değerini `true` yapar. Kapsam, kanıt biçimleri ve Linux geçici bağlantı izinleri için [yayın kontrolü belgelerine](docs/release-gate.md) bakın.
+Kontrol, tüm `--live` denetimleri geçince `summary.json` içindeki `release_ready` değerini `true` yapar. Kapsam, kanıt biçimleri ve Linux geçici bağlantı izinleri için [yayın kontrolü belgelerine](../release-gate.md) bakın.
 
 ### Sürüm yayımlama
 
@@ -334,7 +334,7 @@ Resmî sürümler `vMAJOR.MINOR` veya `vMAJOR.MINOR.PATCH` Git etiketlerini kull
 gh workflow run release.yml -f release_tag=v2.2.5
 ```
 
-`build.sh` yerel derlemeleri sarmalar; `push` argümanı imajı doğrudan gönderir. Resmî dağıtım [tam live gate koşuluna](docs/adr/0005-require-the-live-release-gate.md) ve yukarıdaki etiket iş akışına uyar.
+`build.sh` yerel derlemeleri sarmalar; `push` argümanı imajı doğrudan gönderir. Resmî dağıtım [tam live gate koşuluna](../adr/0005-require-the-live-release-gate.md) ve yukarıdaki etiket iş akışına uyar.
 
 ## Sorun bildirme
 

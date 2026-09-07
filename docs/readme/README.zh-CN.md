@@ -2,11 +2,11 @@
 
 通过 Docker 部署可持久化的 Minecraft 浏览器游戏服务器，并用管理面维护玩家、世界和插件。一个镜像包含 EaglercraftX 1.8 / 1.12 客户端与 Paper 1.8.8 / 1.12.2 服务端，启动时选择游戏版本。
 
-![EaglercraftX 管理面板](./docs/images/admin-panel.png)
+![EaglercraftX 管理面板](../images/admin-panel.png)
 
 <!-- README-I18N:START -->
 
-[English](./README.md) | **简体中文** | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
+[English](../../README.md) | **简体中文** | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
 
 <!-- README-I18N:END -->
 
@@ -26,7 +26,7 @@
 
 ### 1. 准备运行环境
 
-- **主机**：安装 Docker，准备持久化磁盘。示例使用 Linux 路径；发布镜像面向 AMD64，ARM64 模拟运行与原生库兼容性需单独验证，见 [架构约定](docs/adr/0006-publish-linux-amd64-only.md)。
+- **主机**：安装 Docker，准备持久化磁盘。示例使用 Linux 路径；发布镜像面向 AMD64，ARM64 模拟运行与原生库兼容性需单独验证，见 [架构约定](../adr/0006-publish-linux-amd64-only.md)。
 - **内存**：Paper 与 Bungee 各设置 `-Xms256M -Xmx256M`，还需为 JVM 堆外内存、世界生成和插件留出资源。调整堆大小时修改对应运行目录中的 `run.sh`。
 - **EULA**：启动脚本会写入 `eula=true`，部署前请阅读并接受 [Minecraft EULA](https://www.minecraft.net/en-us/eula)。
 
@@ -300,7 +300,7 @@ curl -sS http://127.0.0.1:5201/api/rcon \
 
 ### 本地修改与验证
 
-以下命令在仓库根目录执行，需要 Python 3 和 Docker。修改管理面时，以 `web-1.8/` 为源目录，运行同步脚本更新 `web-1.12/`。基础镜像与原生库约定见 [运行时基础镜像约定](docs/adr/0007-retain-the-verified-runtime-base.md)。
+以下命令在仓库根目录执行，需要 Python 3 和 Docker。修改管理面时，以 `web-1.8/` 为源目录，运行同步脚本更新 `web-1.12/`。基础镜像与原生库约定见 [运行时基础镜像约定](../adr/0007-retain-the-verified-runtime-base.md)。
 
 ```bash
 python3 script/sync_admin_assets.py
@@ -308,7 +308,7 @@ python3 script/sync_admin_assets.py --check
 docker build --platform linux/amd64 -t eaglerx-local:dev .
 ```
 
-本地发布检查还需要 Node.js、tmux、`agent-browser` 和可启动的 Chrome。CI 固定使用 `agent-browser@0.26.0`，安装方式见 [发布工作流](.github/workflows/release.yml)。
+本地发布检查还需要 Node.js、tmux、`agent-browser` 和可启动的 Chrome。CI 固定使用 `agent-browser@0.26.0`，安装方式见 [发布工作流](../../.github/workflows/release.yml)。
 
 ```bash
 agent-browser doctor
@@ -324,7 +324,7 @@ agent-browser doctor
   --evidence-dir artifacts/release-gate
 ```
 
-`summary.json` 仅在完整 `--live` 检查通过时将 `release_ready` 设为 `true`。检查范围、证据格式和 Linux 临时挂载权限要求见 [发布闸门文档](docs/release-gate.md)。
+`summary.json` 仅在完整 `--live` 检查通过时将 `release_ready` 设为 `true`。检查范围、证据格式和 Linux 临时挂载权限要求见 [发布闸门文档](../release-gate.md)。
 
 ### 正式发布
 
@@ -334,7 +334,7 @@ agent-browser doctor
 gh workflow run release.yml -f release_tag=v2.2.5
 ```
 
-`build.sh` 提供本地构建封装，其 `push` 参数直接执行镜像推送。正式分发遵循 [完整 live gate 约定](docs/adr/0005-require-the-live-release-gate.md) 和上述标签工作流。
+`build.sh` 提供本地构建封装，其 `push` 参数直接执行镜像推送。正式分发遵循 [完整 live gate 约定](../adr/0005-require-the-live-release-gate.md) 和上述标签工作流。
 
 ## 问题反馈
 

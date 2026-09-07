@@ -2,11 +2,11 @@
 
 ऐसा Minecraft सर्वर चलाएँ जिससे खिलाड़ी ब्राउज़र के ज़रिए जुड़ सकें। इसमें स्थायी स्टोरेज और खिलाड़ियों, दुनियाओं तथा प्लगइन को सँभालने के लिए एडमिन पैनल है। Docker इमेज में EaglercraftX 1.8 / 1.12 क्लाइंट और Paper 1.8.8 / 1.12.2 सर्वर शामिल हैं; शुरू करते समय गेम का संस्करण चुनें।
 
-![EaglercraftX एडमिन पैनल](./docs/images/admin-panel.png)
+![EaglercraftX एडमिन पैनल](../images/admin-panel.png)
 
 <!-- README-I18N:START -->
 
-[English](./README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | **हिन्दी** | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
+[English](../../README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | **हिन्दी** | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
 
 <!-- README-I18N:END -->
 
@@ -26,7 +26,7 @@
 
 ### 1. होस्ट तैयार करें
 
-- **होस्ट**: Docker इंस्टॉल करें और स्थायी स्टोरेज तैयार रखें। उदाहरणों में Linux पाथ हैं। प्रकाशित इमेज AMD64 के लिए हैं; ARM64 एमुलेशन और नेटिव लाइब्रेरी की अनुकूलता अलग से जाँचें। [आर्किटेक्चर निर्णय](docs/adr/0006-publish-linux-amd64-only.md) देखें।
+- **होस्ट**: Docker इंस्टॉल करें और स्थायी स्टोरेज तैयार रखें। उदाहरणों में Linux पाथ हैं। प्रकाशित इमेज AMD64 के लिए हैं; ARM64 एमुलेशन और नेटिव लाइब्रेरी की अनुकूलता अलग से जाँचें। [आर्किटेक्चर निर्णय](../adr/0006-publish-linux-amd64-only.md) देखें।
 - **मेमोरी**: Paper और Bungee, दोनों अलग-अलग `-Xms256M -Xmx256M` इस्तेमाल करते हैं। JVM के हीप से बाहर की मेमोरी, दुनिया बनाने और प्लगइन के लिए अतिरिक्त जगह रखें। हीप का आकार बदलने के लिए संबंधित रनटाइम डायरेक्टरी में `run.sh` संपादित करें।
 - **EULA**: स्टार्टअप स्क्रिप्ट `eula=true` लिखती है। डिप्लॉय करने से पहले [Minecraft EULA](https://www.minecraft.net/en-us/eula) पढ़कर स्वीकार करें।
 
@@ -300,7 +300,7 @@ curl -sS http://127.0.0.1:5201/api/rcon \
 
 ### स्थानीय बदलाव और सत्यापन
 
-Python 3 और Docker इंस्टॉल करके रिपॉज़िटरी रूट से ये कमांड चलाएँ। एडमिन संसाधन `web-1.8/` में बदलें और सिंक स्क्रिप्ट से `web-1.12/` अपडेट करें। बेस इमेज और नेटिव लाइब्रेरी की जरूरतों के लिए [रनटाइम बेस इमेज निर्णय](docs/adr/0007-retain-the-verified-runtime-base.md) देखें।
+Python 3 और Docker इंस्टॉल करके रिपॉज़िटरी रूट से ये कमांड चलाएँ। एडमिन संसाधन `web-1.8/` में बदलें और सिंक स्क्रिप्ट से `web-1.12/` अपडेट करें। बेस इमेज और नेटिव लाइब्रेरी की जरूरतों के लिए [रनटाइम बेस इमेज निर्णय](../adr/0007-retain-the-verified-runtime-base.md) देखें।
 
 ```bash
 python3 script/sync_admin_assets.py
@@ -308,7 +308,7 @@ python3 script/sync_admin_assets.py --check
 docker build --platform linux/amd64 -t eaglerx-local:dev .
 ```
 
-स्थानीय रिलीज़ जाँच के लिए Node.js, tmux, `agent-browser` और काम करने वाला Chrome भी चाहिए। CI में `agent-browser@0.26.0` तय है; इंस्टॉलेशन के चरण [रिलीज़ वर्कफ़्लो](.github/workflows/release.yml) में हैं।
+स्थानीय रिलीज़ जाँच के लिए Node.js, tmux, `agent-browser` और काम करने वाला Chrome भी चाहिए। CI में `agent-browser@0.26.0` तय है; इंस्टॉलेशन के चरण [रिलीज़ वर्कफ़्लो](../../.github/workflows/release.yml) में हैं।
 
 ```bash
 agent-browser doctor
@@ -324,7 +324,7 @@ agent-browser doctor
   --evidence-dir artifacts/release-gate
 ```
 
-सभी `--live` जाँच सफल होने पर ही प्रक्रिया `summary.json` में `release_ready` को `true` करती है। कवरेज, साक्ष्य प्रारूप और Linux अस्थायी माउंट अनुमतियों के लिए [रिलीज़ जाँच दस्तावेज़](docs/release-gate.md) देखें।
+सभी `--live` जाँच सफल होने पर ही प्रक्रिया `summary.json` में `release_ready` को `true` करती है। कवरेज, साक्ष्य प्रारूप और Linux अस्थायी माउंट अनुमतियों के लिए [रिलीज़ जाँच दस्तावेज़](../release-gate.md) देखें।
 
 ### रिलीज़ प्रकाशित करना
 
@@ -334,7 +334,7 @@ agent-browser doctor
 gh workflow run release.yml -f release_tag=v2.2.5
 ```
 
-`build.sh` स्थानीय बिल्ड को एक साथ चलाता है; उसका `push` तर्क इमेज सीधे पुश करता है। आधिकारिक वितरण [पूरी live gate जाँच की शर्त](docs/adr/0005-require-the-live-release-gate.md) और ऊपर की टैग प्रक्रिया का पालन करता है।
+`build.sh` स्थानीय बिल्ड को एक साथ चलाता है; उसका `push` तर्क इमेज सीधे पुश करता है। आधिकारिक वितरण [पूरी live gate जाँच की शर्त](../adr/0005-require-the-live-release-gate.md) और ऊपर की टैग प्रक्रिया का पालन करता है।
 
 ## समस्या की रिपोर्ट
 

@@ -2,11 +2,11 @@
 
 شغّل خادم Minecraft يمكن للاعبين الانضمام إليه من المتصفح، مع تخزين دائم ولوحة لإدارة اللاعبين والعوالم والإضافات. تتضمن صورة Docker عميلَي EaglercraftX 1.8 / 1.12 وخادمَي Paper 1.8.8 / 1.12.2؛ اختر إصدار اللعبة عند بدء التشغيل.
 
-![لوحة إدارة EaglercraftX](./docs/images/admin-panel.png)
+![لوحة إدارة EaglercraftX](../images/admin-panel.png)
 
 <!-- README-I18N:START -->
 
-[English](./README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | **العربية** | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
+[English](../../README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | **العربية** | [हिन्दी](./README.hi.md) | [Bahasa Indonesia](./README.id.md) | [Türkçe](./README.tr.md)
 
 <!-- README-I18N:END -->
 
@@ -26,7 +26,7 @@
 
 ### 1. إعداد المضيف
 
-- **المضيف**: ثبّت Docker وجهّز تخزينًا دائمًا. تستخدم الأمثلة مسارات Linux. الصور المنشورة مخصصة لـ AMD64؛ تتطلب محاكاة ARM64 وتوافق المكتبات الأصلية تحققًا منفصلًا. راجع [القرار المعماري](docs/adr/0006-publish-linux-amd64-only.md).
+- **المضيف**: ثبّت Docker وجهّز تخزينًا دائمًا. تستخدم الأمثلة مسارات Linux. الصور المنشورة مخصصة لـ AMD64؛ تتطلب محاكاة ARM64 وتوافق المكتبات الأصلية تحققًا منفصلًا. راجع [القرار المعماري](../adr/0006-publish-linux-amd64-only.md).
 - **الذاكرة**: يستخدم كل من Paper وBungee الإعداد `-Xms256M -Xmx256M`. خصص ذاكرة إضافية لـ JVM خارج الكومة، وتوليد العوالم والإضافات. لتعديل حجم الكومة، حرّر `run.sh` في مجلد التشغيل المعني.
 - **EULA**: يكتب برنامج بدء التشغيل `eula=true`. اقرأ [اتفاقية Minecraft EULA](https://www.minecraft.net/en-us/eula) ووافق عليها قبل النشر.
 
@@ -300,7 +300,7 @@ curl -sS http://127.0.0.1:5201/api/rcon \
 
 ### التعديلات المحلية والتحقق
 
-نفّذ الأوامر من جذر المستودع بعد تثبيت Python 3 وDocker. عدّل موارد الإدارة في `web-1.8/`، ثم شغّل برنامج المزامنة لتحديث `web-1.12/`. راجع [قرار صورة التشغيل الأساسية](docs/adr/0007-retain-the-verified-runtime-base.md) لمتطلبات الصورة والمكتبات الأصلية.
+نفّذ الأوامر من جذر المستودع بعد تثبيت Python 3 وDocker. عدّل موارد الإدارة في `web-1.8/`، ثم شغّل برنامج المزامنة لتحديث `web-1.12/`. راجع [قرار صورة التشغيل الأساسية](../adr/0007-retain-the-verified-runtime-base.md) لمتطلبات الصورة والمكتبات الأصلية.
 
 ```bash
 python3 script/sync_admin_assets.py
@@ -308,7 +308,7 @@ python3 script/sync_admin_assets.py --check
 docker build --platform linux/amd64 -t eaglerx-local:dev .
 ```
 
-يتطلب فحص الإصدار المحلي Node.js وtmux و`agent-browser` وتثبيت Chrome صالحًا للعمل. تستخدم CI الإصدار المثبت `agent-browser@0.26.0`؛ خطوات التثبيت في [سير عمل النشر](.github/workflows/release.yml).
+يتطلب فحص الإصدار المحلي Node.js وtmux و`agent-browser` وتثبيت Chrome صالحًا للعمل. تستخدم CI الإصدار المثبت `agent-browser@0.26.0`؛ خطوات التثبيت في [سير عمل النشر](../../.github/workflows/release.yml).
 
 ```bash
 agent-browser doctor
@@ -324,7 +324,7 @@ agent-browser doctor
   --evidence-dir artifacts/release-gate
 ```
 
-يضبط الفحص `release_ready` إلى `true` في `summary.json` فقط بعد نجاح جميع اختبارات `--live`. راجع [توثيق فحص الإصدار](docs/release-gate.md) لنطاق الاختبارات وصيغ الأدلة وأذونات الربط المؤقت في Linux.
+يضبط الفحص `release_ready` إلى `true` في `summary.json` فقط بعد نجاح جميع اختبارات `--live`. راجع [توثيق فحص الإصدار](../release-gate.md) لنطاق الاختبارات وصيغ الأدلة وأذونات الربط المؤقت في Linux.
 
 ### نشر إصدار
 
@@ -334,7 +334,7 @@ agent-browser doctor
 gh workflow run release.yml -f release_tag=v2.2.5
 ```
 
-يغلّف `build.sh` عمليات البناء المحلية؛ يدفع المعامل `push` الصورة مباشرة. يتبع التوزيع الرسمي [متطلب الفحص الحي الكامل](docs/adr/0005-require-the-live-release-gate.md) وسير عمل الوسوم أعلاه.
+يغلّف `build.sh` عمليات البناء المحلية؛ يدفع المعامل `push` الصورة مباشرة. يتبع التوزيع الرسمي [متطلب الفحص الحي الكامل](../adr/0005-require-the-live-release-gate.md) وسير عمل الوسوم أعلاه.
 
 ## الإبلاغ عن المشكلات
 

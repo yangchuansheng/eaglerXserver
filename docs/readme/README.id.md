@@ -2,11 +2,11 @@
 
 Jalankan server Minecraft yang dapat diakses pemain melalui browser, dengan penyimpanan persisten dan panel admin untuk mengelola pemain, dunia, serta plugin. Image Docker mencakup klien EaglercraftX 1.8 / 1.12 dan server Paper 1.8.8 / 1.12.2; pilih versi game saat memulai.
 
-![Panel admin EaglercraftX](./docs/images/admin-panel.png)
+![Panel admin EaglercraftX](../images/admin-panel.png)
 
 <!-- README-I18N:START -->
 
-[English](./README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | **Bahasa Indonesia** | [Türkçe](./README.tr.md)
+[English](../../README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Español](./README.es.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Português (Brasil)](./README.pt-BR.md) | [Русский](./README.ru.md) | [العربية](./README.ar.md) | [हिन्दी](./README.hi.md) | **Bahasa Indonesia** | [Türkçe](./README.tr.md)
 
 <!-- README-I18N:END -->
 
@@ -26,7 +26,7 @@ Jalankan server Minecraft yang dapat diakses pemain melalui browser, dengan peny
 
 ### 1. Siapkan host
 
-- **Host**: Pasang Docker dan siapkan penyimpanan persisten. Contoh menggunakan path Linux. Image yang dirilis menargetkan AMD64; emulasi ARM64 dan kompatibilitas pustaka native perlu divalidasi secara terpisah. Lihat [keputusan arsitektur](docs/adr/0006-publish-linux-amd64-only.md).
+- **Host**: Pasang Docker dan siapkan penyimpanan persisten. Contoh menggunakan path Linux. Image yang dirilis menargetkan AMD64; emulasi ARM64 dan kompatibilitas pustaka native perlu divalidasi secara terpisah. Lihat [keputusan arsitektur](../adr/0006-publish-linux-amd64-only.md).
 - **Memori**: Paper dan Bungee masing-masing menggunakan `-Xms256M -Xmx256M`. Sediakan memori tambahan untuk JVM di luar heap, pembuatan dunia, dan plugin. Untuk mengubah ukuran heap, edit `run.sh` di direktori runtime terkait.
 - **EULA**: Skrip awal menulis `eula=true`. Baca dan setujui [Minecraft EULA](https://www.minecraft.net/en-us/eula) sebelum deployment.
 
@@ -300,7 +300,7 @@ curl -sS http://127.0.0.1:5201/api/rcon \
 
 ### Perubahan lokal dan validasi
 
-Jalankan perintah ini dari root repositori dengan Python 3 dan Docker terpasang. Edit aset admin di `web-1.8/`, lalu jalankan skrip sinkronisasi untuk memperbarui `web-1.12/`. Lihat [keputusan image dasar runtime](docs/adr/0007-retain-the-verified-runtime-base.md) untuk kebutuhan image dasar dan pustaka native.
+Jalankan perintah ini dari root repositori dengan Python 3 dan Docker terpasang. Edit aset admin di `web-1.8/`, lalu jalankan skrip sinkronisasi untuk memperbarui `web-1.12/`. Lihat [keputusan image dasar runtime](../adr/0007-retain-the-verified-runtime-base.md) untuk kebutuhan image dasar dan pustaka native.
 
 ```bash
 python3 script/sync_admin_assets.py
@@ -308,7 +308,7 @@ python3 script/sync_admin_assets.py --check
 docker build --platform linux/amd64 -t eaglerx-local:dev .
 ```
 
-Pemeriksaan rilis lokal juga memerlukan Node.js, tmux, `agent-browser`, dan Chrome yang dapat dijalankan. CI menetapkan `agent-browser@0.26.0`; lihat langkah pemasangan pada [alur rilis](.github/workflows/release.yml).
+Pemeriksaan rilis lokal juga memerlukan Node.js, tmux, `agent-browser`, dan Chrome yang dapat dijalankan. CI menetapkan `agent-browser@0.26.0`; lihat langkah pemasangan pada [alur rilis](../../.github/workflows/release.yml).
 
 ```bash
 agent-browser doctor
@@ -324,7 +324,7 @@ Pemeriksaan lokal mencakup sintaks Python, regresi server dan plugin, aset kedua
   --evidence-dir artifacts/release-gate
 ```
 
-Pemeriksaan menetapkan `release_ready` menjadi `true` di `summary.json` hanya setelah seluruh pemeriksaan `--live` lulus. Lihat [dokumentasi pemeriksaan rilis](docs/release-gate.md) untuk cakupan, format bukti, dan izin mount sementara Linux.
+Pemeriksaan menetapkan `release_ready` menjadi `true` di `summary.json` hanya setelah seluruh pemeriksaan `--live` lulus. Lihat [dokumentasi pemeriksaan rilis](../release-gate.md) untuk cakupan, format bukti, dan izin mount sementara Linux.
 
 ### Menerbitkan rilis
 
@@ -334,7 +334,7 @@ Rilis resmi memakai tag Git `vMAJOR.MINOR` atau `vMAJOR.MINOR.PATCH`. Alur kerja
 gh workflow run release.yml -f release_tag=v2.2.5
 ```
 
-`build.sh` membungkus build lokal; argumen `push` mengirim image secara langsung. Distribusi resmi mengikuti [persyaratan pemeriksaan live lengkap](docs/adr/0005-require-the-live-release-gate.md) dan alur tag di atas.
+`build.sh` membungkus build lokal; argumen `push` mengirim image secara langsung. Distribusi resmi mengikuti [persyaratan pemeriksaan live lengkap](../adr/0005-require-the-live-release-gate.md) dan alur tag di atas.
 
 ## Melaporkan masalah
 
