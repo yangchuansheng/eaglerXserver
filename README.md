@@ -103,7 +103,7 @@ Set `PUBLIC_GAME_URL` to the URL for that instance. To manage the second instanc
 
 ## Joining the server
 
-1. Open the game URL, or use the quick-join link your server owner shares from the admin panel's Overview page. The 1.12 client starts with an empty server list; add `ws://YOUR_SERVER:5200/` in Multiplayer, or use the corresponding `wss://` address for an HTTPS game endpoint.
+1. Open the game URL, or use the quick-join link your server owner shares from the admin panel's Overview page. The Multiplayer screen already lists this server: the client derives the `ws://` or `wss://` address from the page URL, so custom ports and HTTPS game endpoints work without configuration. The quick-join link connects directly. To join a different server, add its `ws://HOST:5200/` address in Multiplayer.
 2. On your first visit, follow the LoginSecurity prompt and enter `/register <password>`. Use `/login <password>` on later visits. Registration is required by default, passwords must contain at least 6 characters, and the login timeout is 30 seconds.
 3. LoginSecurity manages player account passwords. The admin panel uses the server owner's `RCON_PASSWORD`.
 

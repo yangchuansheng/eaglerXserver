@@ -17,6 +17,16 @@
 		<script type="text/javascript" src="fix-webm-duration.js"></script>
 		<script type="text/javascript">
 			"use strict";
+			// The game page and the WebSocket gateway share one origin on the game
+			// port, so the page location names this server. Keeping the page
+			// directory (usually "/") also covers sub-path reverse proxies.
+			function defaultServers() {
+				var loc = window.location;
+				if(!loc.host) return [];
+				var scheme = loc.protocol === "https:" ? "wss://" : "ws://";
+				var path = String(loc.pathname || "/").replace(/[^\/]*$/, "");
+				return [ { addr: scheme + loc.host + path, name: loc.hostname } ];
+			}
 			window.addEventListener("load", () => {
 				if(document.location.href.startsWith("file:")) {
 					alert("HTTP please, do not open this file locally, run a local HTTP server and load it via HTTP");
@@ -29,6 +39,7 @@
 					if(!opts.container) opts.container = "game_frame";
 					if(!opts.assetsURI) opts.assetsURI = "assets.epk";
 					if(!opts.localesURI) opts.localesURI = "lang/";
+					if(!opts.servers || opts.servers.length === 0) opts.servers = defaultServers();
 					
 					if(!opts.joinServer)  {
 						var q = window.location.search;

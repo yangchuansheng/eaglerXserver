@@ -103,7 +103,7 @@ Setze `PUBLIC_GAME_URL` auf die URL dieser Instanz. Verwende zur Fernverwaltung 
 
 ## Dem Server beitreten
 
-1. Öffne die Spiel-URL oder den Schnellbeitrittslink, den der Serverbetreiber über die Seite Overview des Admin-Panels teilt. Der 1.12-Client startet mit einer leeren Serverliste; füge im Mehrspielermodus `ws://YOUR_SERVER:5200/` hinzu oder verwende bei HTTPS die entsprechende `wss://`-Adresse.
+1. Öffne die Spiel-URL oder den Schnellbeitrittslink, den der Serverbetreiber über die Seite Overview des Admin-Panels teilt. Die Serverliste im Mehrspielermodus enthält diesen Server bereits: Der Client leitet die `ws://`- oder `wss://`-Adresse aus der Seiten-URL ab, sodass eigene Ports und HTTPS-Zugänge ohne Konfiguration funktionieren. Der Schnellbeitrittslink verbindet direkt. Um einem anderen Server beizutreten, füge dessen Adresse `ws://HOST:5200/` im Mehrspielermodus hinzu.
 2. Folge beim ersten Besuch dem LoginSecurity-Hinweis und gib `/register <password>` ein. Bei späteren Besuchen verwendest du `/login <password>`. Standardmäßig ist eine Registrierung erforderlich; Passwörter müssen mindestens 6 Zeichen lang sein und die Anmeldung muss innerhalb von 30 Sekunden erfolgen.
 3. LoginSecurity verwaltet die Passwörter der Spielerkonten. Das Admin-Panel verwendet das `RCON_PASSWORD` des Serverbetreibers.
 

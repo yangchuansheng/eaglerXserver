@@ -103,7 +103,7 @@ Isi `PUBLIC_GAME_URL` dengan URL instance tersebut. Untuk mengelola instance ked
 
 ## Bergabung ke server
 
-1. Buka URL game atau tautan bergabung cepat yang dibagikan pemilik server dari halaman Overview pada panel. Klien 1.12 dimulai dengan daftar server kosong; tambahkan `ws://YOUR_SERVER:5200/` pada Multiplayer, atau gunakan alamat `wss://` yang sesuai untuk akses HTTPS.
+1. Buka URL game atau tautan bergabung cepat yang dibagikan pemilik server dari halaman Overview pada panel. Daftar Multiplayer sudah memuat server ini: klien menurunkan alamat `ws://` atau `wss://` dari URL halaman, sehingga port kustom dan akses HTTPS berfungsi tanpa konfigurasi. Tautan bergabung cepat langsung terhubung. Untuk bergabung ke server lain, tambahkan alamat `ws://HOST:5200/` miliknya pada Multiplayer.
 2. Pada kunjungan pertama, ikuti petunjuk LoginSecurity dan masukkan `/register <password>`. Gunakan `/login <password>` pada kunjungan berikutnya. Pendaftaran diwajibkan secara default, kata sandi minimal 6 karakter, dan batas waktu login 30 detik.
 3. LoginSecurity mengelola kata sandi akun pemain. Panel admin memakai `RCON_PASSWORD` milik pemilik server.
 

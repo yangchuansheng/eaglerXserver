@@ -103,7 +103,7 @@ HTTPS oyun girişi için DNS, sertifika ve **5200** portuna HTTP ile WebSocket y
 
 ## Sunucuya katılma
 
-1. Oyun URL’sini veya sunucu sahibinin paneldeki Overview sayfasından paylaştığı hızlı katılma bağlantısını açın. 1.12 istemcisi boş sunucu listesiyle başlar; Çok Oyunculu bölümüne `ws://YOUR_SERVER:5200/` ekleyin veya HTTPS için karşılık gelen `wss://` adresini kullanın.
+1. Oyun URL’sini veya sunucu sahibinin paneldeki Overview sayfasından paylaştığı hızlı katılma bağlantısını açın. Çok Oyunculu listesinde bu sunucu zaten yer alır: istemci `ws://` veya `wss://` adresini sayfa URL’sinden türetir, bu yüzden özel portlar ve HTTPS erişimi ek ayar gerektirmez. Hızlı katılma bağlantısı doğrudan bağlanır. Başka bir sunucuya katılmak için Çok Oyunculu bölümüne o sunucunun `ws://HOST:5200/` adresini ekleyin.
 2. İlk girişte LoginSecurity yönergesini izleyip `/register <password>` yazın. Sonraki girişlerde `/login <password>` kullanın. Varsayılan olarak kayıt zorunludur, parola en az 6 karakter olmalıdır ve giriş süresi 30 saniyedir.
 3. LoginSecurity oyuncu hesabı parolalarını yönetir. Panel, sunucu sahibinin `RCON_PASSWORD` değerini kullanır.
 
