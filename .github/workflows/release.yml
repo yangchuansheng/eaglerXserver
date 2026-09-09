@@ -25,49 +25,27 @@ jobs:
           import time
           from script import release_gate as gate
 
-          original = gate.post_json
-          def probe(base_url, path, token, payload, timeout=10):
-              started = time.monotonic()
-              status, body = original(base_url, path, token, payload, 380 if path == '/api/system' else timeout)
-              if path == '/api/system':
-                  known = {
-                      'server restart already in progress',
-                      'server exited during restart',
-                      'server did not start in time',
-                      'server did not stop in time',
-                  }
-                  reason = body.get('error', '')
-                  print('[DEBUG-restart] ' + json.dumps({
-                      'http_status': status,
-                      'success': body.get('success'),
-                      'elapsed_seconds': round(time.monotonic() - started, 2),
-                      'reason': reason if reason in known else 'other',
-                      'error_sha256': gate.digest(reason),
-                  }), flush=True)
-                  ids = subprocess.check_output(['docker', 'ps', '-aq', '--filter', 'name=eaglerx-gate-'], text=True).split()
-                  for container_id in ids:
-                      print('[DEBUG-restart] state ' + subprocess.check_output([
-                          'docker', 'inspect', '--format', '{{.State.Status}} {{.State.ExitCode}} {{.State.OOMKilled}}', container_id
-                      ], text=True).strip(), flush=True)
-                      result = subprocess.run(['docker', 'logs', container_id], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-                      print('[DEBUG-restart] supervisor ' + json.dumps({
-                          message: message in result.stdout for message in (
-                              'HTTP service exited', 'Bungee service exited', 'Paper service exited'
-                          )
-                      }), flush=True)
-                      result = subprocess.run(['docker', 'exec', container_id, 'bash', '-lc', "tmux list-panes -a -F '#{pane_id} #{pane_dead} #{pane_dead_status} #{pane_current_command}'"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-                      print('[DEBUG-restart] panes ' + result.stdout.strip(), flush=True)
-                      result = subprocess.run(['docker', 'exec', container_id, 'cat', '/eaglerX-1.8-server/server/logs/latest.log'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-                      print('[DEBUG-restart] paper-events ' + json.dumps({
-                          message: result.stdout.count(message) for message in (
-                              'Done (', 'Stopping server', 'Starting minecraft server',
-                              'RCON running on', 'RCON Listener', 'Exception', 'ERROR',
-                              'OutOfMemoryError', 'Address already in use'
-                          )
-                      }), flush=True)
-              return status, body
-          gate.post_json = probe
-          evidence = gate.Evidence('/tmp/restart-evidence', True)
-          gate.run_live_version('eaglerx-diagnose', gate.inspect_image('eaglerx-diagnose'), '1.8', evidence)
-          print('[DEBUG-restart] full-1.8-smoke-pass', flush=True)
+          import tempfile
+          import secrets
+          from pathlib import Path
+          original = gate.run_command
+          def with_blackhole(args, *rest, **kwargs):
+              if args[:3] == ['docker', 'run', '-d']:
+                  args = args[:3] + ['--add-host=ci.destroystokyo.com:127.0.0.1'] + args[3:]
+              return original(args, *rest, **kwargs)
+          gate.run_command = with_blackhole
+          with tempfile.TemporaryDirectory() as mount:
+              container = gate.LiveContainer('eaglerx-diagnose', 'eaglerx-version-probe', Path(mount), '1.8', secrets.token_urlsafe(32))
+              try:
+                  container.start()
+                  subprocess.run(['docker', 'exec', '-d', container.name, 'python3', '-c',
+                      'import socket,time; s=socket.socket(); s.bind(("127.0.0.1",443)); s.listen(); c,a=s.accept(); time.sleep(300)'], check=True)
+                  token = gate.login(container)
+                  gate.poll_until('local-ready', lambda: gate.try_runtime_command(container, token, 'list'), lambda value: value is not None, 120)
+                  for command in ['version', 'version', 'list']:
+                      started = time.monotonic()
+                      status, body = gate.post_json(container.base_url, '/api/rcon', token, {'command': command}, timeout=20)
+                      print('[DEBUG-version] ' + json.dumps({'probe': command, 'status': status, 'success': body.get('success'), 'elapsed_seconds': round(time.monotonic()-started, 2)}), flush=True)
+              finally:
+                  container.stop()
           PY
