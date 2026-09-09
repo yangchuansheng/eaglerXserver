@@ -51,6 +51,7 @@ function dashboard() {
   vm.runInContext(fs.readFileSync(path.join(root, 'admin-i18n.js'), 'utf8'), context);
   context.EaglerXI18n = context.window.EaglerXI18n;
   vm.runInContext(fs.readFileSync(path.join(root, 'admin.js'), 'utf8').replace('setupLocalePreference();\ninit();', ''), context);
+  fixture.refreshWorldInfo = context.refreshWorldInfo;
   for (const name of ['initNavigation', 'loadConnectionInfo', 'renderConnectionInfo', 'setSeedState',
     'log', 'logClient', 'toastClient', 'openLoginModal', 'refreshPlugins', 'refreshWorldInfo',
     'refreshRuntimeToggles', 'refreshServerVersion', 'refreshSeedMap']) {
@@ -64,6 +65,111 @@ function dashboard() {
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
 const cases = {
+  'world controls reflect measured state and clear during startup'() {
+    const app = dashboard();
+    const attributes = [{ 'data-weather': 'clear' }, { 'data-world-setting': 'difficulty', 'data-world-value': '2' },
+      { 'data-world-setting': 'gamemode', 'data-world-value': '0' }, { 'data-time': '6000' }];
+    const buttons = attributes.map(values => ({
+      getAttribute: key => values[key], setAttribute: (key, value) => { values[key] = value; },
+      removeAttribute: key => { delete values[key]; },
+    }));
+    app.context.document.querySelectorAll = selector => buttons.filter((button, index) =>
+      selector.split(', ').some(part => attributes[index][part.slice(1, -1)] !== undefined));
+    app.evaluate("PAPER_STATUS = { state: 'ready' }");
+    app.context.renderWorldInfo({ servertime: 30000, hasStorm: false, difficulty: 2, gamemode: 0 });
+    assert.equal(attributes[0]['aria-pressed'], 'true');
+    assert.equal(attributes[3]['aria-pressed'], 'true');
+    assert.equal(buttons[1].value, '2');
+    assert.equal(buttons[2].value, '0');
+    app.context.setDifficulty = mode => { app.calls.push(['difficulty', mode]); };
+    buttons[1].value = '1';
+    app.context.setWorldSetting(buttons[1]);
+    assert.deepEqual(app.calls.pop(), ['difficulty', 'easy']);
+    assert.equal(buttons[1].value, '2');
+    buttons[1].value = 'custom';
+    app.context.setWorldSetting(buttons[1]);
+    assert.deepEqual(app.calls.pop(), ['difficulty', undefined]);
+    app.context.send = command => { app.calls.push(['command', command]); };
+    for (const [value, mode] of ['survival', 'creative', 'adventure', 'spectator'].entries()) {
+      buttons[2].value = String(value);
+      app.context.setWorldSetting(buttons[2]);
+      assert.deepEqual(app.calls.pop(), ['command', 'defaultgamemode ' + mode]);
+      assert.equal(buttons[2].value, '0');
+    }
+    assert.equal(app.element('control-world-time').textContent, '12:00');
+    app.context.renderWorldInfo({ servertime: 6001, hasStorm: true });
+    assert.equal(attributes[0]['aria-pressed'], 'false');
+    assert.equal(attributes[3]['aria-pressed'], 'false');
+    assert.equal(buttons[1].value, '');
+    assert.equal(buttons[2].value, '');
+    assert.equal(app.context.classifyCommandRefresh('defaultgamemode creative').world, true);
+    app.context.setPaperStatus({ state: 'starting', elapsed_seconds: 1 });
+    assert.ok(attributes.every(values => values['aria-pressed'] === undefined));
+    assert.equal(app.element('control-world-time').textContent, '--:--');
+    app.context.setPaperStatus({ state: 'ready' });
+    app.context.renderWorldInfo({ servertime: 6000, hasStorm: false, difficulty: 2, gamemode: 0 });
+    app.evaluate('TPS_VALUES = [20, 20, 20]');
+    app.context.renderPluginInventory = () => {};
+    app.context.resetAuthUi();
+    assert.ok(attributes.every(values => values['aria-pressed'] === undefined));
+    assert.equal(buttons[1].value, '');
+    assert.equal(buttons[2].value, '');
+    assert.equal(app.evaluate('TPS_VALUES.length'), 0);
+  },
+  async 'world refresh keeps responses within their session and readiness state'() {
+    for (const transition of ['logout', 'replacement', 'current', 'starting']) {
+      for (const outcome of ['success', 'authentication', 'network']) {
+        const app = dashboard();
+        const placeholders = [];
+        app.context.setWorldInfoPlaceholder = text => { placeholders.push(text); };
+        app.context.renderPluginInventory = app.context.toast = () => {};
+        app.evaluate("TOKEN = 'old'; PAPER_STATUS = { state: 'ready' }");
+        let complete, reject;
+        app.context.fetch = async (url, options) => {
+          assert.equal(url, 'http://localhost:5201/api/world-state');
+          assert.deepEqual(JSON.parse(options.body), transition === 'starting'
+            ? { force_refresh: true, token: 'old' } : { token: 'old' });
+          return { json: () => new Promise((resolve, fail) => { complete = resolve; reject = fail; }) };
+        };
+        const pending = app.refreshWorldInfo(transition === 'starting');
+        await settle();
+        if (transition === 'logout' || transition === 'replacement') app.context.logout();
+        if (transition === 'replacement') {
+          app.evaluate("TOKEN = 'new'");
+          app.context.renderWorldInfo({ servertime: 1000, hasStorm: true, difficulty: 1, gamemode: 1 });
+        }
+        if (transition === 'starting') app.context.setPaperStatus({ state: 'starting', elapsed_seconds: 1 });
+        const snapshot = () => JSON.stringify({
+          token: app.evaluate('TOKEN'), cache: app.evaluate('JSON.stringify(WORLD_INFO_CACHE)'),
+          clock: app.element('control-world-time').textContent, placeholders,
+          loginPrompts: app.calls.filter(([name]) => name === 'openLoginModal').length,
+        });
+        const before = snapshot();
+        if (outcome === 'network') reject(new Error('connection reset'));
+        else complete(outcome === 'authentication' ? { success: false, error: 'token expired' }
+          : { success: true, servertime: 6000, hasStorm: false, difficulty: 2, gamemode: 0 });
+        await pending;
+        if (transition === 'logout' || transition === 'replacement') {
+          assert.equal(snapshot(), before, transition + ': ' + outcome);
+        } else {
+          assert.equal(app.evaluate('TOKEN'), outcome === 'authentication' ? '' : 'old');
+          assert.equal(app.calls.filter(([name]) => name === 'openLoginModal').length, outcome === 'authentication' ? 1 : 0);
+          if (transition === 'starting') {
+            assert.equal(app.evaluate('WORLD_INFO_CACHE'), null);
+            assert.equal(app.element('control-world-time').textContent, '--:--');
+            assert.equal(placeholders.at(-1), app.context.t('status.paper.worldWaiting'));
+          } else if (outcome === 'success') {
+            assert.equal(app.evaluate('WORLD_INFO_CACHE.difficulty'), 2);
+            assert.equal(app.element('control-world-time').textContent, '12:00');
+          } else {
+            assert.equal(app.evaluate('WORLD_INFO_CACHE'), null);
+            assert.ok(placeholders.at(-1));
+          }
+        }
+        assert.equal(app.evaluate('REFRESH_IN_FLIGHT.world'), false);
+      }
+    }
+  },
   async 'readiness recovery preserves configuration edits'() {
     const app = dashboard();
     app.evaluate("TOKEN = 'stored'; PAPER_STATUS = { state: 'starting', elapsed_seconds: 12 }");
@@ -134,6 +240,13 @@ const cases = {
     assert.equal(app.evaluate('TOKEN'), '');
     assert.equal(probes, 1);
   },
+  async 'player pixel identifiers are stable and contain only generated geometry'() {
+    const app = dashboard();
+    assert.equal(app.context.playerAvatar('Alex'), app.context.playerAvatar('alex'));
+    assert.notEqual(app.context.playerAvatar('Alex'), app.context.playerAvatar('Steve'));
+    assert.match(app.context.playerAvatar('Alex'), /viewBox="0 0 8 8"/);
+    assert.doesNotMatch(app.context.playerAvatar('<script>'), /<script>/);
+  },
   async 'late player and TPS responses preserve startup placeholders'() {
     for (const [method, id, state] of [['refreshPlayers', 'players', 'ONLINE_PLAYERS'], ['refreshTPS', 'tps-bars', 'TPS_VALUES']]) {
       for (const failed of [false, true]) {
@@ -162,7 +275,7 @@ const cases = {
       await check();
       console.log('PASS ' + name);
     } catch (error) {
-      console.error('FAIL ' + name + ': ' + error.message);
+      console.error('FAIL ' + name + ': ' + error.stack);
       process.exitCode = 1;
     }
   }
