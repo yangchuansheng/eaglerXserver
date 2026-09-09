@@ -319,6 +319,8 @@ function renderPaperStatus() {
   if (!banner) return;
   var waiting = !paperReady() && PAPER_STATUS.state !== 'disabled';
   var starting = PAPER_STATUS.state === 'starting';
+  document.getElementById('world-health').textContent = t(paperTitleKey());
+  document.getElementById('world-health').className = 'world-health ' + (paperReady() ? 'ready' : 'waiting');
   banner.classList.toggle('hidden', !waiting);
   banner.classList.toggle('paper-error', ['stopped', 'unavailable', 'offline'].indexOf(PAPER_STATUS.state) !== -1);
   if (waiting) {
@@ -334,6 +336,7 @@ function renderPaperStatus() {
       ? t('status.paper.elapsed', { minutes: formatNumber(Math.floor(seconds / 60)), seconds: formatNumber(seconds % 60) }) : '';
     document.getElementById('paper-status-progress').classList.toggle('hidden', !starting && PAPER_STATUS.state !== 'checking');
     setWorldInfoPlaceholder(t('status.paper.worldWaiting'));
+    clearWorldControlState();
     document.getElementById('players').innerHTML = '<div class="empty-state">' + escapeHtml(t('status.paper.dataWaiting')) + '</div>';
     document.getElementById('tps-bars').innerHTML = '<div class="empty-state">' + escapeHtml(t('status.paper.dataWaiting')) + '</div>';
     ['hero-player-count', 'player-count', 'hero-tps'].forEach(function (id) { document.getElementById(id).textContent = '--'; });
@@ -407,33 +410,49 @@ function renderVersion() {
   document.getElementById('ver-tag').textContent = renderPresentation(VERSION_STATE) || '--';
 }
 
+function renderWorkspace(focus) {
+  var links = Array.from(document.querySelectorAll('.control-nav-link'));
+  var link = links.find(function (item) { return item.hash === window.location.hash; }) || links[0];
+  if (!link) return;
+  var target = link.hash.slice(1);
+  document.body.setAttribute('data-workspace', target);
+  document.getElementById('workspace-select').value = target;
+  links.forEach(function (item) {
+    item.classList.toggle('is-active', item === link);
+    if (item === link) item.setAttribute('aria-current', 'page');
+    else item.removeAttribute('aria-current');
+  });
+  document.querySelectorAll('.workspace-section').forEach(function (section) {
+    var visible = section.id === target || (target === 'overview' && ['status-section', 'runtime-section'].includes(section.id));
+    section.classList.toggle('hidden', !visible);
+  });
+  var heading = document.getElementById('workspace-title');
+  heading.textContent = target === 'overview' ? t('design.overview') : link.textContent.trim();
+  var descriptionKey = 'design.hint.' + target;
+  document.getElementById('workspace-description').textContent = t(descriptionKey);
+  if (focus) {
+    heading.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+}
+
 function initNavigation() {
-  var links = Array.prototype.slice.call(document.querySelectorAll('.control-nav-link'));
-  var setActiveLink = function (link, center) {
-    links.forEach(function (item) { item.classList.toggle('is-active', item === link); });
-    if (center && window.innerWidth <= 860 && link.parentElement) {
-      link.parentElement.scrollTo({ left: link.offsetLeft - (link.parentElement.clientWidth - link.clientWidth) / 2 });
-    }
-  };
-  links.forEach(function (link) {
-    link.addEventListener('click', function () {
-      setActiveLink(link, true);
+  document.querySelector('.skip-link').addEventListener('click', function (event) {
+    event.preventDefault();
+    document.getElementById('workspace-title').focus();
+  });
+  document.getElementById('workspace-select').addEventListener('change', function (event) {
+    window.location.hash = event.target.value;
+  });
+  document.querySelectorAll('.control-nav-link, .card-link').forEach(function (link) {
+    link.addEventListener('click', function (event) {
+      event.preventDefault();
+      if (link.hash !== window.location.hash) window.history.pushState(null, '', link.hash);
+      renderWorkspace(true);
     });
   });
-  if ('IntersectionObserver' in window) {
-    var sectionObserver = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (!entry.isIntersecting) return;
-        var link = links.find(function (item) { return item.getAttribute('href') === '#' + entry.target.id; });
-        if (link) setActiveLink(link, false);
-      });
-    }, { rootMargin: '-24% 0px -70% 0px', threshold: 0 });
-    links.forEach(function (link) {
-      var targetId = link.getAttribute('href').slice(1);
-      var target = document.getElementById(targetId);
-      if (target) sectionObserver.observe(target);
-    });
-  }
+  window.addEventListener('hashchange', function () { renderWorkspace(true); });
+  renderWorkspace(false);
 }
 
 async function init() {
@@ -818,12 +837,20 @@ function clearAuthState() {
   TOKEN = '';
 }
 
+function clearWorldControlState() {
+  document.getElementById('control-world-time').textContent = '--:--';
+  document.querySelectorAll('[data-weather], [data-time]').forEach(function (button) { button.removeAttribute('aria-pressed'); });
+  document.querySelectorAll('[data-world-setting]').forEach(function (select) { select.value = ''; });
+}
+
 function resetAuthUi() {
   setStatus('auth', '请输入密码');
   PLUGIN_INVENTORY = null;
   renderPluginInventory();
   ONLINE_PLAYERS = [];
   WORLD_INFO_CACHE = null;
+  TPS_VALUES = [];
+  clearWorldControlState();
   document.getElementById('player-count').textContent = '0';
   var heroPlayerCount = document.getElementById('hero-player-count');
   if (heroPlayerCount) heroPlayerCount.textContent = '0';
@@ -1092,20 +1119,25 @@ function renderWorldInfo(info) {
     return;
   }
   var weather = world && world.isThundering ? '雷暴' : (world && world.hasStorm ? '下雨' : '晴朗');
+  document.querySelectorAll('[data-weather]').forEach(function (button) {
+    var activeWeather = world.isThundering ? 'thunder' : world.hasStorm ? 'rain' : 'clear';
+    button.setAttribute('aria-pressed', String(button.getAttribute('data-weather') === activeWeather));
+  });
+  document.querySelectorAll('[data-world-setting]').forEach(function (select) {
+    var value = world[select.getAttribute('data-world-setting')];
+    select.value = value == null ? '' : String(value);
+  });
   var ticks = Number(world && typeof world.servertime !== 'undefined' ? world.servertime : 0);
-  var maxPlayers = CONFIG_CACHE['max-players'] || '--';
+  document.getElementById('control-world-time').textContent = formatMinecraftClock(ticks);
+  document.querySelectorAll('[data-time]').forEach(function (button) {
+    button.setAttribute('aria-pressed', String(ticks % 24000 === Number(button.getAttribute('data-time'))));
+  });
   var cards = [
-    { label: localize('世界'), value: localize('主世界') },
-    { label: localize('游戏版本'), value: SERVER_INFO.minecraftVersion ? ('MC ' + SERVER_INFO.minecraftVersion) : '--' },
-    { label: localize('在线玩家'), value: formatNumber(ONLINE_PLAYERS.length) + ' / ' + String(maxPlayers) },
-    { label: localize('天气'), value: localize(weather) },
-    { label: localize('时间'), value: formatMinecraftClock(ticks) },
-    { label: localize('时段'), value: localize(describeMinecraftPhase(ticks)) },
-    { label: localize('游戏刻'), value: formatNumber(ticks) },
-    { label: localize('雷暴'), value: localize(world && world.isThundering ? '进行中' : '无') }
+    { label: localize('天气'), value: localize(weather), meta: localize('雷暴') + ' · ' + localize(world.isThundering ? '进行中' : '无') },
+    { label: localize('时间'), value: formatMinecraftClock(ticks), meta: localize(describeMinecraftPhase(ticks)) + ' · ' + formatNumber(ticks) + ' ticks' }
   ];
   el.innerHTML = '<div class="world-info-grid">' + cards.map(function (item) {
-    return '<div class="world-info-item"><strong>' + escapeHtml(item.label) + '</strong><span>' + escapeHtml(item.value) + '</span></div>';
+    return '<div class="world-info-item"><strong>' + escapeHtml(item.label) + '</strong><span>' + escapeHtml(item.value) + '</span><small>' + escapeHtml(item.meta) + '</small></div>';
   }).join('') + '</div>';
 }
 
@@ -1122,8 +1154,8 @@ function renderPlayers() {
   document.getElementById('player-count').textContent = count;
   var heroPlayerCount = document.getElementById('hero-player-count');
   if (heroPlayerCount) heroPlayerCount.textContent = count;
-  el.innerHTML = ONLINE_PLAYERS.length ? ONLINE_PLAYERS.map(function (name, index) {
-    return '<div class="player-item"><div class="player-avatar" style="background:' + playerColor(index) + '">' + escapeHtml(name.charAt(0) || '?') + '</div><span class="player-name">' + escapeHtml(name) + '</span></div>';
+  el.innerHTML = ONLINE_PLAYERS.length ? ONLINE_PLAYERS.map(function (name) {
+    return '<div class="player-item">' + playerAvatar(name) + '<span class="player-name">' + escapeHtml(name) + '</span></div>';
   }).join('') : '<div class="empty-state">' + escapeHtml(localize('暂无在线玩家')) + '</div>';
 }
 
@@ -1131,18 +1163,19 @@ function renderTPS() {
   if (!paperReady()) { renderPaperStatus(); return; }
   var el = document.getElementById('tps-bars');
   if (!el || !TPS_VALUES.length) return;
-  var labels = ['1m', '5m', '15m'];
+  var labels = [t('design.tps1m'), t('design.tps5m'), t('design.tps15m')];
   var heroTps = document.getElementById('hero-tps');
   if (heroTps) heroTps.textContent = formatNumber(TPS_VALUES[0], { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  el.innerHTML = TPS_VALUES.map(function (value, index) {
-    var pct = Math.min(100, value * 5);
+  if (heroTps) heroTps.className = 'tps-val ' + (TPS_VALUES[0] >= 19 ? 'good' : TPS_VALUES[0] >= 15 ? 'ok' : 'bad');
+  el.innerHTML = TPS_VALUES.slice(1).map(function (value, index) {
     var cls = value >= 19 ? 'good' : value >= 15 ? 'ok' : 'bad';
-    return '<div class="tps-row"><span class="tps-label">' + labels[index] + '</span><div class="tps-track"><div class="tps-fill ' + cls + '" style="width:' + pct + '%"></div></div><span class="tps-val">' + formatNumber(value, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '</span></div>';
+    return '<div class="tps-row"><span class="tps-label">' + escapeHtml(labels[index + 1]) + '</span><span class="tps-val ' + cls + '">' + formatNumber(value, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '</span></div>';
   }).join('');
 }
 
 function rerenderLocalizedState() {
   if (!window.EaglerXI18n) return;
+  renderWorkspace(false);
   var dialogSnapshot = captureActionDialogSnapshot();
   renderStatus();
   renderVersion();
@@ -1209,7 +1242,7 @@ function queueRuntimeRefresh(delay) {
 function classifyCommandRefresh(cmd) {
   var text = String(cmd || '').trim().toLowerCase();
   return {
-    world: /^(time\b|weather\b)/.test(text),
+    world: /^(time\b|weather\b|difficulty\b|defaultgamemode\b)/.test(text),
     runtime: /^(gamerule\b|save-on\b|save-off\b|whitelist\b)/.test(text),
     config: /^(reload\b|restart\b|stop\b)/.test(text)
   };
@@ -2241,6 +2274,16 @@ async function setTimeValue(value, label) {
   });
 }
 
+function setWorldSetting(select) {
+  var setting = select.getAttribute('data-world-setting');
+  var modes = setting === 'difficulty' ? ['peaceful', 'easy', 'normal', 'hard'] : ['survival', 'creative', 'adventure', 'spectator'];
+  var mode = modes[select.value];
+  var current = WORLD_INFO_CACHE && WORLD_INFO_CACHE[setting];
+  select.value = current == null ? '' : String(current);
+  if (setting === 'difficulty') setDifficulty(mode);
+  else setDefaultGamemode(mode);
+}
+
 async function setDifficulty(mode, label) {
   if (mode) {
     send('difficulty ' + mode);
@@ -2470,9 +2513,19 @@ function exec() {
   send(v);
 }
 
-function playerColor(i) {
-  var cols = ['#5090f0', '#7c4dff', '#3ecf8e', '#f0a040', '#f05454', '#2dd4bf', '#f472b6', '#82b1ff'];
-  return cols[i % cols.length];
+function playerAvatar(name) {
+  var hash = 5381;
+  String(name).toLowerCase().split('').forEach(function (character) { hash = ((hash * 33) ^ character.charCodeAt(0)) >>> 0; });
+  var pixels = '';
+  for (var y = 0; y < 6; y++) {
+    hash ^= hash << 13; hash ^= hash >>> 17; hash ^= hash << 5;
+    for (var x = 0; x < 3; x++) {
+      if ((hash >>> x) & 1) {
+        pixels += '<path d="M' + (x + 1) + ' ' + (y + 1) + 'h1v1h-1zM' + (6 - x) + ' ' + (y + 1) + 'h1v1h-1z"/>';
+      }
+    }
+  }
+  return '<svg class="player-avatar" viewBox="0 0 8 8" aria-hidden="true" shape-rendering="crispEdges">' + pixels + '</svg>';
 }
 
 function escapeHtml(s) {

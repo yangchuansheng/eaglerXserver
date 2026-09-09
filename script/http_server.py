@@ -869,6 +869,8 @@ def resolve_world_state(force_refresh=False):
     result = {
         'world': level_name,
         'servertime': daytime,
+        'difficulty': data.get('Difficulty'),
+        'gamemode': data.get('GameType'),
         'hasStorm': bool(int(data.get('raining', 0) or 0)),
         'isThundering': bool(int(data.get('thundering', 0) or 0)),
         'rainTime': int(data.get('rainTime', 0) or 0),

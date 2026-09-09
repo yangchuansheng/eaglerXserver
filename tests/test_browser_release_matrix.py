@@ -239,7 +239,7 @@ class MockAdminServer:
                         self.json(200, {'success': True, 'restart_in_progress': True})
                     return
                 if route == '/api/world-state':
-                    self.json(200, {'success': True, 'world': 'fixture-world', 'servertime': 6000, 'hasStorm': False, 'isThundering': False, 'timestamp': 1700000000000})
+                    self.json(200, {'success': True, 'world': 'fixture-world', 'servertime': 6000, 'difficulty': 2, 'gamemode': 0, 'hasStorm': False, 'isThundering': False, 'timestamp': 1700000000000})
                     return
                 if route == '/api/runtime-state':
                     self.json(200, {'success': True, 'gamerules': {'doDaylightCycle': True}, 'save_enabled': True, 'whitelist_enabled': False, 'pvp_enabled': True})
@@ -417,7 +417,8 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         doctor = subprocess.run(['agent-browser', 'doctor'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30, check=False)
-        if doctor.returncode or 'Launch test\n  pass' not in doctor.stdout:
+        # This local matrix only requires a working browser launch.
+        if 'Launch test\n  pass' not in doctor.stdout:
             raise RuntimeError('agent-browser prerequisite failed: run agent-browser doctor and install a usable local Chrome')
 
     def setUp(self):
@@ -471,7 +472,7 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 self.emit_evidence(root, stage, 'en', '/admin')
                 stage = 'authenticate'
                 browser.batch(stage, [['fill', '#modal-pw', server.fixture_password], ['click', '#modal-btns .btn-ok'], ['wait', '1200'], ['snapshot', '-i']])
-                browser.check(stage, "document.querySelector('#players').innerText.includes('FixtureAlex') && document.querySelector('#world-info').innerText.includes('1.8.8') && document.querySelector('#cfg-motd').value === 'Fixture MOTD' && document.querySelector('#plugin-version').textContent === 'MC 1.8' && document.querySelector('#plugin-list').textContent.includes('FixturePlugin.jar') && document.querySelector('#plugin-list').textContent.includes('DisabledPlugin.jar') && !document.querySelector('#plugin-restart-banner').classList.contains('hidden')")
+                browser.check(stage, "document.querySelector('#players').innerText.includes('FixtureAlex') && document.querySelector('#world-info').innerText.includes('12:00') && document.querySelector('#ver-tag').textContent.includes('1.8.8') && document.querySelector('#cfg-motd').value === 'Fixture MOTD' && document.querySelector('#plugin-version').textContent === 'MC 1.8' && document.querySelector('#plugin-list').textContent.includes('FixturePlugin.jar') && document.querySelector('#plugin-list').textContent.includes('DisabledPlugin.jar') && !document.querySelector('#plugin-restart-banner').classList.contains('hidden')")
                 browser.run(stage, 'eval', "(() => { const writeText = async (value) => { window.__connectionCopied = value; }; Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } }); return true; })()")
                 browser.run(stage, 'eval', "document.querySelector('#connection-copy').click(); true")
                 browser.run(stage, 'wait', 300)
@@ -499,6 +500,22 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 for route in ('/api/login', '/api/rcon', '/api/world-state', '/api/runtime-state', '/api/config', '/api/seed', '/api/plugins'):
                     self.assert_recorded(server, route)
                 self.emit_evidence(root, stage, 'en', '/api/login')
+                stage = 'workspace-navigation'
+                browser.check(stage, "document.body.dataset.workspace === 'overview' && document.querySelector('.control-nav-link[aria-current=page]').hash === '#overview' && !document.querySelector('#status-section').classList.contains('hidden') && document.querySelector('#system-section').classList.contains('hidden') && document.querySelector('[data-weather=clear]').getAttribute('aria-pressed') === 'true' && document.querySelector('#world-difficulty').value === '2' && document.querySelector('#world-gamemode').value === '0'")
+                browser.run(stage, 'select', '#world-difficulty', '1')
+                browser.run(stage, 'wait', 300)
+                self.assert_recorded(server, '/api/rcon', 'difficulty easy')
+                browser.check(stage, "document.querySelector('#world-difficulty').value === '2'")
+                browser.run(stage, 'click', '.control-nav-link[href="#runtime-section"]')
+                browser.check(stage, "document.body.dataset.workspace === 'runtime-section' && document.activeElement.id === 'workspace-title' && document.querySelector('#status-section').classList.contains('hidden') && !document.querySelector('#runtime-section').classList.contains('hidden')")
+                browser.run(stage, 'eval', "document.querySelector('.skip-link').click(); true")
+                browser.check(stage, "document.body.dataset.workspace === 'runtime-section' && document.activeElement.id === 'workspace-title'")
+                browser.run(stage, 'click', '#card-rules > summary')
+                browser.check(stage, "document.querySelector('#card-rules').open && document.querySelector('#card-rules .toggle').getBoundingClientRect().height > 0")
+                browser.run(stage, 'select', '#locale-select', 'zh-CN')
+                browser.check(stage, "document.querySelector('#workspace-title').textContent === '运行控制' && document.body.dataset.workspace === 'runtime-section'")
+                browser.run(stage, 'select', '#locale-select', 'en')
+                browser.run(stage, 'click', '.control-nav-link[href="#system-section"]')
                 stage = 'plugin-upload'
                 browser.run(stage, 'eval', "(() => { const input = document.querySelector('#plugin-upload-input'); const data = new Uint8Array([80,75,3,4,1,2,3,4,80,75,5,6]); const file = new File([data], 'FixtureUpload.jar', { type: 'application/java-archive' }); const transfer = new DataTransfer(); transfer.items.add(file); input.files = transfer.files; updatePluginUploadSelection(); return true; })()")
                 browser.check(stage, "document.querySelector('#plugin-upload-btn').disabled === false && document.querySelector('#plugin-upload-warning-text').textContent.includes('executes code')")
@@ -582,7 +599,7 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 browser.check(stage, "document.querySelector('#plugin-restart-text').textContent.includes('待重启插件变更')")
                 browser.batch(stage, [['reload'], ['wait', '500'], ['snapshot', '-i']])
                 browser.check(stage, "document.documentElement.lang === 'zh-CN' && document.querySelector('#locale-select').value === 'zh-CN'")
-                browser.check(stage, "document.querySelector('#hero-connection').textContent.includes('已连接') && document.querySelector('#world-info').textContent.includes('世界') && document.querySelector('#players').textContent.includes('FixtureAlex')")
+                browser.check(stage, "document.querySelector('#hero-connection').textContent.includes('已连接') && document.querySelector('#world-info').textContent.includes('12:00') && document.querySelector('#players').textContent.includes('FixtureAlex')")
                 self.emit_evidence(root, stage, 'zh-CN', '/admin')
                 browser.run(stage, 'select', '#locale-select', 'en')
                 stage = 'dialog-validation-recovery'
@@ -608,6 +625,7 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 browser.run(stage, 'set', 'viewport', '1440', '900')
                 browser.run(stage, 'wait', 1500)
                 browser.check(stage, "!document.querySelector('#seed-search-btn').disabled")
+                browser.run(stage, 'click', '.control-nav-link[href="#map-section"]')
                 browser.run(stage, 'eval', "(() => { document.querySelector('#seed-search-btn').scrollIntoView({ block: 'center', behavior: 'instant' }); return true; })()")
                 browser.run(stage, 'click', '#seed-search-btn')
                 browser.run(stage, 'wait', 200)
@@ -723,6 +741,8 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                         browser.run('management-offline', 'wait', '--fn', "document.querySelector('#paper-status-title').textContent === '管理服务连接中断'")
                         browser.check('management-offline', "!!sessionStorage.getItem('eaglerx_admin_token')")
                         server.status_code = 200
+                        browser.run('preserve-config-draft', 'select', '#workspace-select', 'system-section')
+                        browser.run('preserve-config-draft', 'wait', '--fn', "document.body.dataset.workspace === 'system-section'")
                         browser.run('preserve-config-draft', 'fill', '#cfg-motd', 'Unsaved startup MOTD')
                         server.paper = {'state': 'ready', 'elapsed_seconds': None}
                         browser.run('paper-ready', 'wait', '--fn', "document.querySelector('#paper-status').classList.contains('hidden') && document.querySelector('#world-info .world-info-grid') && document.querySelector('#players').textContent.includes('FixtureAlex')")

@@ -64,6 +64,50 @@ function dashboard() {
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
 const cases = {
+  'world controls reflect measured state and clear during startup'() {
+    const app = dashboard();
+    const attributes = [{ 'data-weather': 'clear' }, { 'data-world-setting': 'difficulty', 'data-world-value': '2' },
+      { 'data-world-setting': 'gamemode', 'data-world-value': '0' }, { 'data-time': '6000' }];
+    const buttons = attributes.map(values => ({
+      getAttribute: key => values[key], setAttribute: (key, value) => { values[key] = value; },
+      removeAttribute: key => { delete values[key]; },
+    }));
+    app.context.document.querySelectorAll = selector => buttons.filter((button, index) =>
+      selector.split(', ').some(part => attributes[index][part.slice(1, -1)] !== undefined));
+    app.evaluate("PAPER_STATUS = { state: 'ready' }");
+    app.context.renderWorldInfo({ servertime: 30000, hasStorm: false, difficulty: 2, gamemode: 0 });
+    assert.equal(attributes[0]['aria-pressed'], 'true');
+    assert.equal(attributes[3]['aria-pressed'], 'true');
+    assert.equal(buttons[1].value, '2');
+    assert.equal(buttons[2].value, '0');
+    app.context.setDifficulty = mode => { app.calls.push(['difficulty', mode]); };
+    buttons[1].value = '1';
+    app.context.setWorldSetting(buttons[1]);
+    assert.deepEqual(app.calls.pop(), ['difficulty', 'easy']);
+    assert.equal(buttons[1].value, '2');
+    buttons[1].value = 'custom';
+    app.context.setWorldSetting(buttons[1]);
+    assert.deepEqual(app.calls.pop(), ['difficulty', undefined]);
+    assert.equal(app.element('control-world-time').textContent, '12:00');
+    app.context.renderWorldInfo({ servertime: 6001, hasStorm: true });
+    assert.equal(attributes[0]['aria-pressed'], 'false');
+    assert.equal(attributes[3]['aria-pressed'], 'false');
+    assert.equal(buttons[1].value, '');
+    assert.equal(buttons[2].value, '');
+    assert.equal(app.context.classifyCommandRefresh('defaultgamemode creative').world, true);
+    app.context.setPaperStatus({ state: 'starting', elapsed_seconds: 1 });
+    assert.ok(attributes.every(values => values['aria-pressed'] === undefined));
+    assert.equal(app.element('control-world-time').textContent, '--:--');
+    app.context.setPaperStatus({ state: 'ready' });
+    app.context.renderWorldInfo({ servertime: 6000, hasStorm: false, difficulty: 2, gamemode: 0 });
+    app.evaluate('TPS_VALUES = [20, 20, 20]');
+    app.context.renderPluginInventory = () => {};
+    app.context.resetAuthUi();
+    assert.ok(attributes.every(values => values['aria-pressed'] === undefined));
+    assert.equal(buttons[1].value, '');
+    assert.equal(buttons[2].value, '');
+    assert.equal(app.evaluate('TPS_VALUES.length'), 0);
+  },
   async 'readiness recovery preserves configuration edits'() {
     const app = dashboard();
     app.evaluate("TOKEN = 'stored'; PAPER_STATUS = { state: 'starting', elapsed_seconds: 12 }");
@@ -134,6 +178,13 @@ const cases = {
     assert.equal(app.evaluate('TOKEN'), '');
     assert.equal(probes, 1);
   },
+  async 'player pixel identifiers are stable and contain only generated geometry'() {
+    const app = dashboard();
+    assert.equal(app.context.playerAvatar('Alex'), app.context.playerAvatar('alex'));
+    assert.notEqual(app.context.playerAvatar('Alex'), app.context.playerAvatar('Steve'));
+    assert.match(app.context.playerAvatar('Alex'), /viewBox="0 0 8 8"/);
+    assert.doesNotMatch(app.context.playerAvatar('<script>'), /<script>/);
+  },
   async 'late player and TPS responses preserve startup placeholders'() {
     for (const [method, id, state] of [['refreshPlayers', 'players', 'ONLINE_PLAYERS'], ['refreshTPS', 'tps-bars', 'TPS_VALUES']]) {
       for (const failed of [false, true]) {
@@ -162,7 +213,7 @@ const cases = {
       await check();
       console.log('PASS ' + name);
     } catch (error) {
-      console.error('FAIL ' + name + ': ' + error.message);
+      console.error('FAIL ' + name + ': ' + error.stack);
       process.exitCode = 1;
     }
   }

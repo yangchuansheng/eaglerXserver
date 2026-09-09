@@ -162,6 +162,20 @@ class ConnectionInfoTests(unittest.TestCase):
                 self.assertEqual(expected, {key: handler.responses[0][1][key] for key in expected})
 
 
+class WorldControlStateTests(unittest.TestCase):
+    def test_world_controls_use_saved_values_and_preserve_unknown_state(self):
+        with mock.patch.object(http_server, 'RCON_ENABLED', False), \
+             mock.patch.object(http_server, '_world_state_cache', {'expires_at': 0, 'value': None}), \
+             mock.patch.object(http_server, 'get_level_name', return_value='world'), \
+             mock.patch.object(http_server.os.path, 'exists', return_value=True), \
+             mock.patch.object(http_server, '_load_nbt_file') as load:
+            for data in ({'Difficulty': 2, 'GameType': 0}, {}):
+                load.return_value = {'Data': data}
+                state = http_server.resolve_world_state(force_refresh=True)
+                self.assertEqual(state['difficulty'], data.get('Difficulty'))
+                self.assertEqual(state['gamemode'], data.get('GameType'))
+
+
 class AuthenticationTests(unittest.TestCase):
     def setUp(self):
         with http_server._login_attempts_lock:
@@ -482,8 +496,8 @@ class StaticShellLocaleTests(unittest.TestCase):
     HTML_PATH = ROOT / 'web-1.8' / 'admin.html'
     JS_PATH = ROOT / 'web-1.8' / 'admin.js'
     CSS_PATH = ROOT / 'web-1.8' / 'admin.css'
-    ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg')
-    STATIC_BINDING_CONTRACT_SHA256 = '31ff1252252f2317c38f14436b00f2b7bf2a91d97fdc8379772442f33ccc11b8'
+    ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg', 'admin-world.png')
+    STATIC_BINDING_CONTRACT_SHA256 = '0ffa316ba29bb0a8694be27e63be965e6b13dd6b949c5a81e8d3bfdae4828cd7'
 
     def test_english_first_paint_and_script_order(self):
         html = self.HTML_PATH.read_text(encoding='utf-8')
@@ -576,7 +590,7 @@ console.log(JSON.stringify({ valid: run('zh-CN', false), invalid: run('stale', f
 
 
 class AdminAssetBoundaryTests(unittest.TestCase):
-    ADMIN_ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg')
+    ADMIN_ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg', 'admin-world.png')
 
     def test_admin_assets_remain_mirrored(self):
         for asset in self.ADMIN_ASSETS:
@@ -598,7 +612,7 @@ class AdminAssetBoundaryTests(unittest.TestCase):
 
 
 class DynamicLocaleRendererTests(unittest.TestCase):
-    ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg')
+    ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg', 'admin-world.png')
 
     def test_referenced_dynamic_keys_are_bilingual_and_mirrors(self):
         catalogs = load_locale_catalogs()
@@ -765,7 +779,7 @@ console.log(JSON.stringify(samples));
 
 class ReleaseContractTests(unittest.TestCase):
     ROOTS = (ROOT / 'web-1.8', ROOT / 'web-1.12')
-    RELEASE_ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg')
+    RELEASE_ASSETS = ('admin.html', 'admin.js', 'admin.css', 'admin-i18n.js', 'eaglercraft-server.svg', 'admin-world.png')
 
     @staticmethod
     def digest(path):
