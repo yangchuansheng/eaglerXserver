@@ -19,7 +19,6 @@ concurrency:
 
 jobs:
   release:
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -108,48 +107,6 @@ jobs:
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
           create-storage-record: false
-
-      - name: Upload release gate evidence
-        if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: release-gate-${{ github.run_id }}
-          path: artifacts/release-gate
-          if-no-files-found: ignore
-          retention-days: 30
-
-  validate:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    permissions:
-      contents: read
-    steps:
-      - name: Check out candidate
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - name: Install release gate browser
-        run: |
-          npm install --global agent-browser@0.26.0
-          agent-browser install --with-deps
-          agent-browser doctor
-
-      - name: Run complete release gate
-        run: |
-          # The image initializes Linux bind mounts as root during the live gate.
-          sudo env \
-            "HOME=${HOME}" \
-            "PATH=${PATH}" \
-            "AGENT_BROWSER_ARGS=--no-sandbox" \
-            "GIT_CONFIG_COUNT=1" \
-            "GIT_CONFIG_KEY_0=safe.directory" \
-            "GIT_CONFIG_VALUE_0=${GITHUB_WORKSPACE}" \
-            ./script/release_gate.sh \
-            --build --live \
-            --timeout 1800 \
-            --image "eaglerx-restart-validation" \
-            --evidence-dir artifacts/release-gate
 
       - name: Upload release gate evidence
         if: ${{ always() }}
