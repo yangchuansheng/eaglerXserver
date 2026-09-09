@@ -185,7 +185,7 @@ def check_static_release(evidence):
 
 def run_server_regression(evidence):
     run_command(
-        [sys.executable, "-m", "unittest", "tests.test_regressions", "tests.test_plugin_inventory"],
+        [sys.executable, "-m", "unittest", "tests.test_regressions", "tests.test_plugin_inventory", "tests.test_release_gate"],
         "server-regression",
         timeout=300,
     )
@@ -472,7 +472,7 @@ def restart_and_wait(container, token, present):
         "/api/system",
         token,
         {"action": "restart_server"},
-        timeout=130,
+        timeout=380,  # Allow the server's 60-second stop and 300-second start budgets.
     )
     if status != 200 or body.get("success") is not True:
         raise GateFailure(f"live-restart-{container.version}")

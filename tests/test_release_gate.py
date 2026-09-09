@@ -1,8 +1,11 @@
 import importlib.util
+import http.server
 import io
 import json
 from pathlib import Path
 import tempfile
+import threading
+import time
 from types import SimpleNamespace
 import unittest
 import zipfile
@@ -108,8 +111,38 @@ class ReleaseGateTests(unittest.TestCase):
             "/api/system",
             "fixture-token",
             {"action": "restart_server"},
-            timeout=130,
+            timeout=380,
         )
+
+    def test_restart_accepts_a_slow_successful_http_response(self):
+        class SlowRestart(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.rfile.read(int(self.headers['Content-Length']))
+                time.sleep(0.18)  # Scale a valid 180-second restart to milliseconds.
+                try:
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(b'{"success": true}')
+                except BrokenPipeError:
+                    pass
+
+            def log_message(self, *args):
+                pass
+
+        urlopen = release_gate.urllib.request.urlopen
+        with http.server.HTTPServer(('127.0.0.1', 0), SlowRestart) as server:
+            thread = threading.Thread(target=server.handle_request)
+            thread.start()
+            container = SimpleNamespace(
+                base_url=f'http://127.0.0.1:{server.server_port}', version='1.8'
+            )
+            try:
+                with mock.patch.object(release_gate.urllib.request, 'urlopen',
+                    side_effect=lambda request, timeout: urlopen(request, timeout=timeout / 1000)
+                ), mock.patch.object(release_gate, 'poll_until'):
+                    release_gate.restart_and_wait(container, 'fixture-token', True)
+            finally:
+                thread.join(timeout=2)
 
 
 if __name__ == "__main__":
