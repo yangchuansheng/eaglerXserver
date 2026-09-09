@@ -555,7 +555,7 @@ console.log(JSON.stringify({ valid: run('zh-CN', false), invalid: run('stale', f
         css = self.CSS_PATH.read_text(encoding='utf-8')
         html = self.HTML_PATH.read_text(encoding='utf-8')
         self.assertIn('@media (prefers-reduced-motion: reduce)', css)
-        for stat_id in ('hero-connection', 'hero-player-count', 'hero-tps'):
+        for stat_id in ('status-text', 'hero-player-count', 'hero-tps'):
             self.assertIn(f'id="{stat_id}"', html)
         for asset in self.ASSETS:
             self.assertEqual((ROOT / 'web-1.8' / asset).read_bytes(), (ROOT / 'web-1.12' / asset).read_bytes())

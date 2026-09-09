@@ -301,8 +301,6 @@ function renderStatus() {
   var d = document.getElementById('status-dot');
   d.className = state;
   document.getElementById('status-text').textContent = text;
-  var heroConnection = document.getElementById('hero-connection');
-  if (heroConnection) heroConnection.textContent = text || localize(state === 'on' ? '已连接' : '未连接');
 }
 
 function paperReady() {
@@ -339,7 +337,7 @@ function renderPaperStatus() {
     clearWorldControlState();
     document.getElementById('players').innerHTML = '<div class="empty-state">' + escapeHtml(t('status.paper.dataWaiting')) + '</div>';
     document.getElementById('tps-bars').innerHTML = '<div class="empty-state">' + escapeHtml(t('status.paper.dataWaiting')) + '</div>';
-    ['hero-player-count', 'player-count', 'hero-tps'].forEach(function (id) { document.getElementById(id).textContent = '--'; });
+    ['hero-player-count', 'hero-tps'].forEach(function (id) { document.getElementById(id).textContent = '--'; });
   }
   document.querySelectorAll('[data-paper-controls], [data-paper-action]').forEach(function (element) { element.disabled = !paperReady(); });
   document.querySelectorAll('[onclick="restartServer()"]').forEach(function (element) {
@@ -777,17 +775,6 @@ async function playerLocationRequest(payload) {
   return d;
 }
 
-async function worldStateRequest(payload) {
-  var r = await fetch(BASE + '/api/world-state', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(buildAuthPayload(payload || {}))
-  });
-  var d = await r.json();
-  if (!d.success && isAuthError(d.error)) handleAuthFailure(d.error);
-  return d;
-}
-
 async function runtimeStateRequest(payload) {
   var r = await fetch(BASE + '/api/runtime-state', {
     method: 'POST',
@@ -851,7 +838,6 @@ function resetAuthUi() {
   WORLD_INFO_CACHE = null;
   TPS_VALUES = [];
   clearWorldControlState();
-  document.getElementById('player-count').textContent = '0';
   var heroPlayerCount = document.getElementById('hero-player-count');
   if (heroPlayerCount) heroPlayerCount.textContent = '0';
   document.getElementById('players').innerHTML = '<div class="empty-state">请先登录后查看玩家列表</div>';
@@ -1151,7 +1137,6 @@ function renderPlayers() {
   var el = document.getElementById('players');
   if (!el) return;
   var count = formatNumber(ONLINE_PLAYERS.length);
-  document.getElementById('player-count').textContent = count;
   var heroPlayerCount = document.getElementById('hero-player-count');
   if (heroPlayerCount) heroPlayerCount.textContent = count;
   el.innerHTML = ONLINE_PLAYERS.length ? ONLINE_PLAYERS.map(function (name) {
@@ -2281,7 +2266,7 @@ function setWorldSetting(select) {
   var current = WORLD_INFO_CACHE && WORLD_INFO_CACHE[setting];
   select.value = current == null ? '' : String(current);
   if (setting === 'difficulty') setDifficulty(mode);
-  else setDefaultGamemode(mode);
+  else send('defaultgamemode ' + mode);
 }
 
 async function setDifficulty(mode, label) {
@@ -2301,26 +2286,6 @@ async function setDifficulty(mode, label) {
       return input && input.difficulty ? ('difficulty ' + input.difficulty) : '';
     },
     buildCommand: function (values) { return 'difficulty ' + values.difficulty; }
-  });
-}
-
-async function setDefaultGamemode(mode, label) {
-  if (mode) {
-    send('defaultgamemode ' + mode);
-    return;
-  }
-  await runDialogCommand({
-    kicker: '世界设置',
-    title: '设置默认游戏模式',
-    description: '修改新进入服务器玩家的默认模式。',
-    confirmText: '设置默认模式',
-    fields: [
-      textField('mode', '默认模式', 'survival', { required: true, list: ['survival', 'creative', 'adventure', 'spectator'], hint: '可填写 survival / creative / adventure / spectator' })
-    ],
-    previewText: function (input) {
-      return input && input.mode ? ('defaultgamemode ' + input.mode) : '';
-    },
-    buildCommand: function (values) { return 'defaultgamemode ' + values.mode; }
   });
 }
 
@@ -2598,7 +2563,6 @@ async function refreshPlayers() {
   } catch (e) {
     if (!paperReady()) { renderPaperStatus(); return; }
     ONLINE_PLAYERS = [];
-    document.getElementById('player-count').textContent = formatNumber(0);
     var heroPlayerCount = document.getElementById('hero-player-count');
     if (heroPlayerCount) heroPlayerCount.textContent = '0';
     document.getElementById('players').innerHTML = '<div class="empty-state">' + escapeHtml(localize('读取在线玩家失败')) + '</div>';
@@ -2641,14 +2605,25 @@ async function refreshTPS() {
 }
 
 async function refreshWorldInfo(forceRefresh) {
-  if (!TOKEN) return;
-  if (!beginRefresh('world')) return;
+  if (!TOKEN || !beginRefresh('world')) return;
+  var token = TOKEN;
   try {
-    var d = await worldStateRequest(forceRefresh ? { force_refresh: true } : {});
+    var r = await fetch(BASE + '/api/world-state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildAuthPayload(forceRefresh ? { force_refresh: true } : {}))
+    });
+    var d = await r.json();
+    if (TOKEN !== token) return;
+    if (!d.success && isAuthError(d.error)) {
+      handleAuthFailure(d.error);
+      if (!paperReady()) renderPaperStatus();
+      return;
+    }
     if (!d.success) throw new Error(d.error || '世界状态返回为空');
-    WORLD_INFO_CACHE = d;
     renderWorldInfo(d);
   } catch (e) {
+    if (TOKEN !== token) return;
     if (paperReady()) setWorldInfoPlaceholder('读取世界状态失败', e.message || 'unknown');
     else renderPaperStatus();
   } finally {

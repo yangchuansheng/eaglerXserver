@@ -620,20 +620,6 @@ button {
   color: var(--text);
 }
 
-.card-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: var(--radius-full);
-  background: var(--surface-3);
-  color: var(--primary);
-  font-size: 11px;
-  font-weight: 600;
-  font-family: var(--font-mono);
-}
 
 .card-context {
   font-size: 11px;
@@ -682,9 +668,6 @@ button {
 }
 
 /* Public game connection */
-.connection-card {
-  padding: 0;
-}
 
 .connection-heading {
   display: flex;
@@ -1062,27 +1045,10 @@ button {
   border: 0;
   border-radius: var(--radius-sm);
 }
-.world-info-item strong {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-muted);
-}
-.world-info-item span {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text);
-  font-family: var(--font-mono);
-}
 
 /* Measured TPS averages */
-.tps-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; width: 100%; }
-#tps-bars { display: contents; }
-.tps-row { display: flex; flex-direction: column-reverse; gap: 8px; width: 100%; }
-.tps-label { color: var(--text-secondary); font: 13px var(--font-mono); }
-.tps-val { color: var(--text-secondary); font: 32px/1.1 var(--font-sans); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
-#hero-tps { font-size: 32px; }
-.tps-val.ok { color: var(--warning); }
-.tps-val.bad { color: var(--danger); }
+.tps-metrics, .tps-row { width: 100%; }
+.tps-val { letter-spacing: -.02em; }
 
 /* ==========================================================================
    Server Config Fields
@@ -1924,33 +1890,6 @@ button {
     display: none;
   }
 
-  .control-nav-links {
-    display: flex;
-    flex-direction: row;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 2px;
-    gap: 6px;
-    scrollbar-width: none;
-    min-width: 0;
-    max-width: 100%;
-    width: 100%;
-    flex-wrap: nowrap;
-    box-sizing: border-box;
-  }
-  .control-nav-links::-webkit-scrollbar {
-    display: none;
-  }
-
-  .control-nav-link {
-    flex-shrink: 0;
-    min-height: 38px;
-    padding: 8px 14px;
-    font-size: 13px;
-    display: inline-flex;
-    align-items: center;
-    white-space: nowrap;
-  }
   .control-grid, .stack-grid, .rule-list, .setting-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2047,11 +1986,6 @@ button {
     padding: 6px 8px;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
   }
-  .control-nav-link {
-    min-height: 44px;
-    padding: 6px 12px;
-    font-size: 12px;
-  }
 
   .workspace-section {
     scroll-margin-top: 114px;
@@ -2082,9 +2016,6 @@ button {
     max-width: 100%;
     box-sizing: border-box;
     overflow: hidden;
-  }
-  .connection-card {
-    padding: 0;
   }
   .connection-heading {
     gap: 10px;
@@ -2491,7 +2422,7 @@ button {
 [data-workspace]:not([data-workspace="overview"]) .workspace-section > .section-heading, #status-section > .section-heading { display: none; }
 [data-workspace="overview"] #card-rules { display: none; }
 .overview-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 24px; }
-#card-world { background: transparent; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; color: var(--text); position: relative; grid-column: 1 / -1; grid-row: 1; min-height: 112px; overflow: hidden; padding: 12px 24px; background: #263e30; color: #f2f1e8; border: 0; border-radius: var(--radius-md); }
+#card-world { position: relative; grid-column: 1 / -1; grid-row: 1; min-height: 112px; overflow: hidden; padding: 12px 24px; background: #263e30; color: #f2f1e8; border: 0; border-radius: var(--radius-md); }
 #card-world .card-head { margin-left: 104px; position: relative; z-index: 1; margin-bottom: 8px; }
 #card-world .card-title { color: inherit; font-size: 28px; font-weight: 600; line-height: 1.2; letter-spacing: -.02em; }
 .world-art { position: absolute; left: 12px; top: 4px; width: 104px; max-width: 104px; height: auto; pointer-events: none; }
@@ -2522,16 +2453,15 @@ button {
 #tps-bars .tps-val { font-size: 40px; }
 .tps-row { display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 0; background: transparent; border-radius: 0; }
 
-.tps-val, #hero-tps { font: 32px/1.1 var(--font-sans); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--primary); }
+.tps-val { font: 32px/1.1 var(--font-sans); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--primary); }
 .tps-val.ok { color: var(--warning); }
 .tps-val.bad { color: var(--danger); }
-.tps-label { color: var(--text-secondary); font: 13px var(--font-sans); color: var(--text-secondary); }
+.tps-label { color: var(--text-secondary); font: 13px var(--font-sans); }
 #tps-bars { display: contents; }
 #card-players { display: flex; flex-direction: column; grid-column: 4; grid-row: 2; padding: 8px 0; border-color: transparent; border-bottom-color: var(--border); border-radius: 0; background: transparent; }
 #card-players .card-head { margin-bottom: 8px; }
 #card-players #players { min-height: 24px; justify-content: flex-start; padding-top: 8px; }
 #card-connection .connection-main { min-height: 50px; align-items: center; }
-#card-players #player-count { display: none; }
 .player-total { display: block; margin-top: 24px; font: 40px/1.1 var(--font-sans); font-weight: 600; color: var(--text); }
 #card-players .card-link { margin-left: auto; }
 #players { min-height: 32px; max-height: 160px; gap: 10px; }

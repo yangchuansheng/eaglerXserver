@@ -500,6 +500,8 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 for route in ('/api/login', '/api/rcon', '/api/world-state', '/api/runtime-state', '/api/config', '/api/seed', '/api/plugins'):
                     self.assert_recorded(server, route)
                 self.emit_evidence(root, stage, 'en', '/api/login')
+                stage = 'tps-health-colors'
+                browser.check(stage, "(() => { const saved = TPS_VALUES.slice(); try { return [[20, '--primary'], [17, '--warning'], [10, '--danger']].every(([value, token]) => { TPS_VALUES = [value, value, value]; renderTPS(); const probe = document.createElement('span'); probe.style.color = 'var(' + token + ')'; document.body.append(probe); const color = getComputedStyle(probe).color; probe.remove(); const values = Array.from(document.querySelectorAll('#card-tps .tps-val')); return values.length === 3 && values.every(element => getComputedStyle(element).color === color); }); } finally { TPS_VALUES = saved; renderTPS(); } })()")
                 stage = 'workspace-navigation'
                 browser.check(stage, "document.body.dataset.workspace === 'overview' && document.querySelector('.control-nav-link[aria-current=page]').hash === '#overview' && !document.querySelector('#status-section').classList.contains('hidden') && document.querySelector('#system-section').classList.contains('hidden') && document.querySelector('[data-weather=clear]').getAttribute('aria-pressed') === 'true' && document.querySelector('#world-difficulty').value === '2' && document.querySelector('#world-gamemode').value === '0'")
                 browser.run(stage, 'select', '#world-difficulty', '1')
@@ -599,7 +601,7 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                 browser.check(stage, "document.querySelector('#plugin-restart-text').textContent.includes('待重启插件变更')")
                 browser.batch(stage, [['reload'], ['wait', '500'], ['snapshot', '-i']])
                 browser.check(stage, "document.documentElement.lang === 'zh-CN' && document.querySelector('#locale-select').value === 'zh-CN'")
-                browser.check(stage, "document.querySelector('#hero-connection').textContent.includes('已连接') && document.querySelector('#world-info').textContent.includes('12:00') && document.querySelector('#players').textContent.includes('FixtureAlex')")
+                browser.check(stage, "document.querySelector('#status-text').textContent.includes('已连接') && document.querySelector('#world-info').textContent.includes('12:00') && document.querySelector('#players').textContent.includes('FixtureAlex')")
                 self.emit_evidence(root, stage, 'zh-CN', '/admin')
                 browser.run(stage, 'select', '#locale-select', 'en')
                 stage = 'dialog-validation-recovery'
@@ -668,7 +670,7 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                     browser.run(stage, 'screenshot', str(image))
                     browser.check(stage, "(function(){const s=document.querySelector('#locale-select'), p=document.querySelector('#cmd-bar button');return s.getBoundingClientRect().width > 0 && p.getBoundingClientRect().width > 0 && document.documentElement.scrollWidth <= window.innerWidth;}())")
                     if width <= 640:
-                        browser.check(stage, "(() => { const selectors = ['.skip-link', '#locale-select', '#logout-btn', '.control-nav-link', '.qbtns button', '.pill-btn', '.connection-open', '.setting-input', '.plugin-upload-file', '#plugin-upload-btn', '.dynmap-full-btn', '.seedmap-link', '.toggle', '#cmd', '#cmd-bar button', '.dialog-close', '.btn-cancel', '.btn-ok']; return selectors.every(selector => Array.from(document.querySelectorAll(selector)).every(element => { const style = getComputedStyle(element); return Math.max(parseFloat(style.height) || 0, parseFloat(style.minHeight) || 0) >= 44; })); })()")
+                        browser.check(stage, "(() => { const selectors = ['.skip-link', '#locale-select', '#logout-btn', '#workspace-select', '.control-nav-link', '.qbtns button', '.pill-btn', '.connection-open', '.setting-input', '.plugin-upload-file', '#plugin-upload-btn', '.dynmap-full-btn', '.seedmap-link', '.toggle', '#cmd', '#cmd-bar button', '.dialog-close', '.btn-cancel', '.btn-ok']; return selectors.every(selector => Array.from(document.querySelectorAll(selector)).every(element => { const style = getComputedStyle(element); if (!element.getClientRects().length || style.visibility === 'hidden') return true; return Math.max(parseFloat(style.height) || 0, parseFloat(style.minHeight) || 0) >= 44; })); })()")
                     self.assertTrue(image.is_file(), f'{root.name}: missing {name} screenshot')
                     screenshot_digest = hashlib.sha256(image.read_bytes()).hexdigest()
                     self.assertTrue(screenshot_digest, f'{root.name}: empty {name} screenshot digest')
@@ -719,7 +721,7 @@ class BrowserReleaseMatrixTests(unittest.TestCase):
                         browser.batch('startup', [['open', server.base_url + '/admin'], ['snapshot', '-i']])
                         browser.check('startup', "document.querySelector('#paper-status-title').textContent === 'Paper is starting' && document.querySelector('#paper-status-elapsed').textContent === 'Waited 0 min 12 sec' && document.querySelector('#cmd').matches(':disabled') && !document.querySelector('#connection-open').hasAttribute('href')")
                         browser.batch('startup-login', [['fill', '#modal-pw', server.fixture_password], ['click', '#modal-btns .btn-ok'], ['wait', '--fn', "document.querySelector('#plugin-list').textContent.includes('FixturePlugin.jar')"], ['snapshot', '-i']])
-                        browser.check('startup-login', "document.querySelector('#world-info').textContent.includes('automatically') && !document.querySelector('#cfg-motd').matches(':disabled') && document.querySelector('#runtime-section button').matches(':disabled') && document.querySelector('#hero-connection').textContent === 'Paper is starting'")
+                        browser.check('startup-login', "document.querySelector('#world-info').textContent.includes('automatically') && !document.querySelector('#cfg-motd').matches(':disabled') && document.querySelector('#runtime-section button').matches(':disabled') && document.querySelector('#status-text').textContent === 'Paper is starting'")
                         browser.batch('startup-restore', [['reload'], ['wait', '--fn', "document.querySelector('#plugin-list').textContent.includes('FixturePlugin.jar')"], ['snapshot', '-i']])
                         browser.check('startup-restore', "document.querySelector('#modal-overlay').classList.contains('hidden') && !!sessionStorage.getItem('eaglerx_admin_token')")
                         self.assertEqual(1, sum(row['route'] == '/api/login' for row in server.records))
