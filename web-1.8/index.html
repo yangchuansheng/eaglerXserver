@@ -29,6 +29,14 @@
 					if(!opts.container) opts.container = "game_frame";
 					if(!opts.assetsURI) opts.assetsURI = "assets.epk";
 					if(!opts.localesURI) opts.localesURI = "lang/";
+					if(!opts.servers) {
+						var loc = window.location;
+						opts.servers = [{
+							addr: (loc.protocol === "https:" ? "wss://" : "ws://") +
+								loc.host + loc.pathname.replace(/[^/]*$/, ""),
+							name: loc.hostname
+						}];
+					}
 					
 					if(!opts.joinServer)  {
 						var q = window.location.search;

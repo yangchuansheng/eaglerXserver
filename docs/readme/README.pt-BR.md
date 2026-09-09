@@ -103,7 +103,7 @@ Defina `PUBLIC_GAME_URL` com a URL dessa instância. Para administrar a segunda 
 
 ## Entrar no servidor
 
-1. Abra a URL do jogo ou use o link de entrada rápida que o dono do servidor compartilhar pela página Overview do painel. O cliente 1.12 inicia com uma lista de servidores vazia; adicione `ws://YOUR_SERVER:5200/` em Multijogador ou use o endereço `wss://` correspondente para acesso HTTPS.
+1. Abra a URL do jogo ou use o link de entrada rápida que o dono do servidor compartilhar pela página Overview do painel. A tela Multijogador já lista este servidor: o cliente deriva o endereço `ws://` ou `wss://` da URL da página, então portas personalizadas e acessos HTTPS funcionam sem configuração. O link de entrada rápida conecta diretamente. Para entrar em outro servidor, adicione o endereço `ws://HOST:5200/` dele em Multijogador.
 2. Na primeira visita, siga a instrução do LoginSecurity e digite `/register <password>`. Nas próximas visitas, use `/login <password>`. O cadastro é obrigatório por padrão, a senha precisa ter pelo menos 6 caracteres e o prazo para login é de 30 segundos.
 3. O LoginSecurity gerencia as senhas das contas dos jogadores. O painel usa a `RCON_PASSWORD` do administrador do servidor.
 
