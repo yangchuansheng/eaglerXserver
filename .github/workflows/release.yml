@@ -1,51 +1,161 @@
-name: Diagnose Paper restart
+name: Publish GHCR image
+
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Diagnostic label
+        description: Existing release tag to rebuild
         required: true
         type: string
-permissions:
-  contents: read
+
+permissions: {}
+
+concurrency:
+  group: publish-ghcr-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  diagnose:
+  release:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 90
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+    env:
+      IMAGE: ghcr.io/yangchuansheng/eaglerx1.8server
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Check out authoritative repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Prepare release checkout
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        run: python3 script/prepare_release.py --tag "$RELEASE_TAG" --event "$GITHUB_EVENT_NAME"
+
+      - name: Install release gate browser
+        run: |
+          npm install --global agent-browser@0.26.0
+          agent-browser install --with-deps
+          agent-browser doctor
+
+      - name: Run complete release gate
+        run: |
+          # The image initializes Linux bind mounts as root during the live gate.
+          sudo env \
+            "HOME=${HOME}" \
+            "PATH=${PATH}" \
+            "AGENT_BROWSER_ARGS=--no-sandbox" \
+            "GIT_CONFIG_COUNT=1" \
+            "GIT_CONFIG_KEY_0=safe.directory" \
+            "GIT_CONFIG_VALUE_0=${GITHUB_WORKSPACE}" \
+            ./script/release_gate.sh \
+            --build --live \
+            --timeout 1800 \
+            --image "eaglerx-release:${{ steps.release.outputs.short_sha }}" \
+            --evidence-dir artifacts/release-gate
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push the tested image
+        id: push
+        env:
+          PROMOTE_LATEST: ${{ steps.release.outputs.promote_latest }}
+          SHA_TAG: ${{ steps.release.outputs.sha_tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          local_image="eaglerx-release:${{ steps.release.outputs.short_sha }}"
+          version_image="${IMAGE}:${VERSION}"
+          sha_image="${IMAGE}:${SHA_TAG}"
+          push_log="${RUNNER_TEMP}/eaglerx-version-push.log"
+
+          docker tag "$local_image" "$version_image"
+          docker tag "$local_image" "$sha_image"
+          docker image push "$version_image" 2>&1 | tee "$push_log"
+          digest="$(sed -nE 's/^.*digest: (sha256:[0-9a-f]{64}).*$/\1/p' "$push_log" | tail -n 1)"
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Unable to resolve the pushed image digest" >&2
+            exit 1
+          fi
+
+          docker image push "$sha_image"
+          if [[ "$PROMOTE_LATEST" == "true" ]]; then
+            docker tag "$local_image" "${IMAGE}:latest"
+            docker image push "${IMAGE}:latest"
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Attest the published image
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+
+      - name: Upload release gate evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-gate-${{ github.run_id }}
+          path: artifacts/release-gate
+          if-no-files-found: ignore
+          retention-days: 30
+
+  validate:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Reproduce the live restart failure
+      - name: Install release gate browser
         run: |
-          docker build -t eaglerx-diagnose .
-          sudo python3 -u - <<'PY'
-          import json
-          import subprocess
-          import time
-          from script import release_gate as gate
+          npm install --global agent-browser@0.26.0
+          agent-browser install --with-deps
+          agent-browser doctor
 
-          import tempfile
-          import secrets
-          from pathlib import Path
-          original = gate.run_command
-          def with_blackhole(args, *rest, **kwargs):
-              if args[:3] == ['docker', 'run', '-d']:
-                  args = args[:3] + ['--add-host=ci.destroystokyo.com:127.0.0.1'] + args[3:]
-              return original(args, *rest, **kwargs)
-          gate.run_command = with_blackhole
-          with tempfile.TemporaryDirectory() as mount:
-              container = gate.LiveContainer('eaglerx-diagnose', 'eaglerx-version-probe', Path(mount), '1.8', secrets.token_urlsafe(32))
-              try:
-                  container.start()
-                  subprocess.run(['docker', 'exec', '-d', container.name, 'python3', '-c',
-                      'import socket,time; s=socket.socket(); s.bind(("127.0.0.1",443)); s.listen(); c,a=s.accept(); time.sleep(300)'], check=True)
-                  token = gate.login(container)
-                  gate.poll_until('local-ready', lambda: gate.try_runtime_command(container, token, 'list'), lambda value: value is not None, 120)
-                  for command in ['version', 'version', 'list']:
-                      started = time.monotonic()
-                      status, body = gate.post_json(container.base_url, '/api/rcon', token, {'command': command}, timeout=20)
-                      print('[DEBUG-version] ' + json.dumps({'probe': command, 'status': status, 'success': body.get('success'), 'elapsed_seconds': round(time.monotonic()-started, 2)}), flush=True)
-              finally:
-                  container.stop()
-          PY
+      - name: Run complete release gate
+        run: |
+          # The image initializes Linux bind mounts as root during the live gate.
+          sudo env \
+            "HOME=${HOME}" \
+            "PATH=${PATH}" \
+            "AGENT_BROWSER_ARGS=--no-sandbox" \
+            "GIT_CONFIG_COUNT=1" \
+            "GIT_CONFIG_KEY_0=safe.directory" \
+            "GIT_CONFIG_VALUE_0=${GITHUB_WORKSPACE}" \
+            ./script/release_gate.sh \
+            --build --live \
+            --timeout 1800 \
+            --image "eaglerx-restart-validation" \
+            --evidence-dir artifacts/release-gate
+
+      - name: Upload release gate evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-gate-${{ github.run_id }}
+          path: artifacts/release-gate
+          if-no-files-found: ignore
+          retention-days: 30
