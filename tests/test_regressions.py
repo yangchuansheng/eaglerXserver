@@ -889,7 +889,7 @@ console.log(JSON.stringify({
 
 
 class GameClientServerListTests(unittest.TestCase):
-    """The bare game URL lists this server; ``?server=`` still wins."""
+    """Default lists preserve explicit configuration and quick joins."""
 
     ROOTS = (ROOT / 'web-1.8', ROOT / 'web-1.12')
     INLINE_SCRIPT = re.compile(r'<script type="text/javascript">([\s\S]*?)</script>')
@@ -898,14 +898,21 @@ class GameClientServerListTests(unittest.TestCase):
         ('http://127.0.0.1:5300/index.html', 'ws://127.0.0.1:5300/', '127.0.0.1'),
         ('https://play.example/', 'wss://play.example/', 'play.example'),
         ('https://play.example/eagler/index.html?x=1', 'wss://play.example/eagler/', 'play.example'),
+        ('https://play.example:8443/#multiplayer', 'wss://play.example:8443/', 'play.example'),
+        ('http://[::1]:5300/index.html', 'ws://[::1]:5300/', '[::1]'),
+        ('https://[2001:db8::1]:8443/eagler/index.html?x=1#play', 'wss://[2001:db8::1]:8443/eagler/', '[2001:db8::1]'),
+        ('http://play.example/eagler/', 'ws://play.example/eagler/', 'play.example'),
+        ('https://play.example/games%20room/index.html?x=1#play', 'wss://play.example/games%20room/', 'play.example'),
     )
 
     @classmethod
-    def launch(cls, root, href):
+    def launch(cls, root, href, config=None):
         html = (root / 'index.html').read_text(encoding='utf-8')
         scripts = cls.INLINE_SCRIPT.findall(html)
         if root.name == 'web-1.8':
-            scripts.insert(0, (root / 'eaglercraft_opts.js').read_text(encoding='utf-8'))
+            if config is None:
+                config = (root / 'eaglercraft_opts.js').read_text(encoding='utf-8')
+            scripts.insert(0, config)
         script = """
 const vm = require('vm');
 const url = new URL(process.argv[1]);
@@ -914,11 +921,12 @@ const listeners = {};
 const location = { href: url.href, protocol: url.protocol, host: url.host, hostname: url.hostname, pathname: url.pathname, search: url.search };
 const window = { location: location, URLSearchParams: URLSearchParams, addEventListener: function(name, callback) { listeners[name] = callback; } };
 let launched = 0;
-const context = { window: window, document: { location: location }, URLSearchParams: URLSearchParams, Math: Math, alert: function(message) { throw new Error('alert: ' + message); }, main: function() { launched += 1; } };
+let alerts = 0;
+const context = { window: window, document: { location: location }, URLSearchParams: URLSearchParams, Math: Math, alert: function() { alerts += 1; }, main: function() { launched += 1; } };
 for (const source of scripts) vm.runInNewContext(source, context);
 listeners.load();
-const opts = window.eaglercraftXOpts;
-console.log(JSON.stringify({ launched: launched, servers: opts.servers, joinServer: opts.joinServer || null }));
+const opts = window.eaglercraftXOpts || {};
+console.log(JSON.stringify({ launched: launched, alerts: alerts, servers: opts.servers, joinServer: opts.joinServer || null }));
 """
         result = subprocess.run(
             ['node', '-e', script, href, json.dumps(scripts)],
@@ -926,19 +934,26 @@ console.log(JSON.stringify({ launched: launched, servers: opts.servers, joinServ
         )
         return json.loads(result.stdout)
 
-    def test_helper_is_identical_in_both_web_roots(self):
-        helpers = []
-        for root in self.ROOTS:
-            html = (root / 'index.html').read_text(encoding='utf-8')
-            match = re.search(r'function defaultServers\(\) \{[\s\S]*?\n\t\t\t\}', html)
-            self.assertIsNotNone(match, root.name)
-            helpers.append(match.group(0))
-            self.assertIn('defaultServers()', html[match.end():], f'{root.name}: helper unused')
-        self.assertEqual(helpers[0], helpers[1])
-        for root in self.ROOTS:
-            with self.subTest(root=root.name):
-                opts = (root / 'eaglercraft_opts.js').read_text(encoding='utf-8')
-                self.assertNotRegex(opts, r'(?m)^\s*servers\s*:', f'{root.name}: eaglercraft_opts.js must not override the derived list')
+    def test_explicit_server_lists_are_preserved(self):
+        for servers in ([], [{'addr': 'wss://custom.example/', 'name': 'Custom'}]):
+            for factory in (False, True):
+                with self.subTest(servers=servers, factory=factory):
+                    value = json.dumps({'servers': servers})
+                    config = 'window.eaglercraftXOpts = ' + (f'() => ({value})' if factory else value) + ';'
+                    launch = self.launch(self.ROOTS[0], 'https://play.example/?server=wss%3A%2F%2Fother.example%2F', config)
+                    self.assertEqual(1, launch['launched'])
+                    self.assertEqual(0, launch['alerts'])
+                    self.assertEqual(servers, launch['servers'])
+                    self.assertEqual('wss://other.example/', launch['joinServer'])
+
+    def test_missing_server_list_uses_default(self):
+        for config in ('', 'window.eaglercraftXOpts = {lang: "en_US"};', 'window.eaglercraftXOpts = () => ({lang: "en_US"});'):
+            with self.subTest(config=config):
+                launch = self.launch(self.ROOTS[0], 'https://play.example/', config)
+                self.assertEqual(1, launch['launched'])
+                self.assertEqual(0, launch['alerts'])
+                self.assertEqual([{'addr': 'wss://play.example/', 'name': 'play.example'}], launch['servers'])
+                self.assertIsNone(launch['joinServer'])
 
     def test_bare_game_url_lists_this_server(self):
         for root in self.ROOTS:
@@ -946,17 +961,27 @@ console.log(JSON.stringify({ launched: launched, servers: opts.servers, joinServ
                 with self.subTest(root=root.name, href=href):
                     launch = self.launch(root, href)
                     self.assertEqual(1, launch['launched'])
+                    self.assertEqual(0, launch['alerts'])
                     self.assertEqual([{'addr': addr, 'name': name}], launch['servers'])
                     self.assertIsNone(launch['joinServer'])
 
     def test_server_query_parameter_still_wins(self):
         target = 'wss://other.example/'
         for root in self.ROOTS:
+            for query in (target, 'wss%3A%2F%2Fother.example%2F'):
+                with self.subTest(root=root.name, query=query):
+                    launch = self.launch(root, 'http://127.0.0.1:5200/?server=' + query + '#play')
+                    self.assertEqual(1, launch['launched'])
+                    self.assertEqual(0, launch['alerts'])
+                    self.assertEqual(target, launch['joinServer'])
+                    self.assertEqual([{'addr': 'ws://127.0.0.1:5200/', 'name': '127.0.0.1'}], launch['servers'])
+
+    def test_file_urls_do_not_launch(self):
+        for root in self.ROOTS:
             with self.subTest(root=root.name):
-                launch = self.launch(root, 'http://127.0.0.1:5200/?server=' + target)
-                self.assertEqual(1, launch['launched'])
-                self.assertEqual(target, launch['joinServer'])
-                self.assertEqual([{'addr': 'ws://127.0.0.1:5200/', 'name': '127.0.0.1'}], launch['servers'])
+                launch = self.launch(root, 'file:///tmp/index.html')
+                self.assertEqual(0, launch['launched'])
+                self.assertEqual(1, launch['alerts'])
 
 
 class DirectRootStaticServer:

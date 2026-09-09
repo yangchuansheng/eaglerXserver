@@ -15,16 +15,6 @@
 		<script type="text/javascript" src="bootstrap.js?v=cobalt-20260903"></script>
 		<script type="text/javascript">
 			"use strict";
-			// The game page and the WebSocket gateway share one origin on the game
-			// port, so the page location names this server. Keeping the page
-			// directory (usually "/") also covers sub-path reverse proxies.
-			function defaultServers() {
-				var loc = window.location;
-				if(!loc.host) return [];
-				var scheme = loc.protocol === "https:" ? "wss://" : "ws://";
-				var path = String(loc.pathname || "/").replace(/[^\/]*$/, "");
-				return [ { addr: scheme + loc.host + path, name: loc.hostname } ];
-			}
 			window.addEventListener("load", function() {
 				if(window.location.href.indexOf("file:") === 0) {
 					alert("HTTP please, do not open this file locally, run a local HTTP server and load it via HTTP");
@@ -32,13 +22,18 @@
 					
 					// %%%%%%%%% launch options %%%%%%%%%%%%
 					
+					var loc = window.location;
 					var relayId = Math.floor(Math.random() * 3);
 					window.eaglercraftXOpts = {
 						demoMode: false,
 						container: "game_frame",
 						assetsURI: "assets.epw",
 						worldsDB: "worlds",
-						servers: defaultServers(),
+						servers: [{
+							addr: (loc.protocol === "https:" ? "wss://" : "ws://") +
+								loc.host + loc.pathname.replace(/[^/]*$/, ""),
+							name: loc.hostname
+						}],
 						relays: [
 							{ addr: "wss://relay.deev.is/", comment: "lax1dude relay #1", primary: relayId == 0 },
 							{ addr: "wss://relay.lax1dude.net/", comment: "lax1dude relay #2", primary: relayId == 1 },
