@@ -28,7 +28,7 @@ jobs:
           original = gate.post_json
           def probe(base_url, path, token, payload, timeout=10):
               started = time.monotonic()
-              status, body = original(base_url, path, token, payload, timeout)
+              status, body = original(base_url, path, token, payload, 380 if path == '/api/system' else timeout)
               if path == '/api/system':
                   known = {
                       'server restart already in progress',
@@ -55,8 +55,16 @@ jobs:
                               'HTTP service exited', 'Bungee service exited', 'Paper service exited'
                           )
                       }), flush=True)
-                      result = subprocess.run(['docker', 'exec', container_id, 'tmux', 'list-panes', '-a', '-F', '#{pane_id} #{pane_dead} #{pane_dead_status} #{pane_current_command}'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+                      result = subprocess.run(['docker', 'exec', container_id, 'bash', '-lc', "tmux list-panes -a -F '#{pane_id} #{pane_dead} #{pane_dead_status} #{pane_current_command}'"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
                       print('[DEBUG-restart] panes ' + result.stdout.strip(), flush=True)
+                      result = subprocess.run(['docker', 'exec', container_id, 'cat', '/eaglerX-1.8-server/server/logs/latest.log'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+                      print('[DEBUG-restart] paper-events ' + json.dumps({
+                          message: result.stdout.count(message) for message in (
+                              'Done (', 'Stopping server', 'Starting minecraft server',
+                              'RCON running on', 'RCON Listener', 'Exception', 'ERROR',
+                              'OutOfMemoryError', 'Address already in use'
+                          )
+                      }), flush=True)
               return status, body
           gate.post_json = probe
           evidence = gate.Evidence('/tmp/restart-evidence', True)
