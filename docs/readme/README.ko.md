@@ -10,6 +10,11 @@
 
 <!-- README-I18N:END -->
 
+<!-- release-doc:identity:start -->
+Release Version: `v2.2.7` · [Compatibility](../compatibility.md) · [Release](https://github.com/yangchuansheng/eaglerXserver/releases/tag/v2.2.7) · [Release Verification Record](../verification/v2.2.7.md).
+<!-- release-doc:identity:end -->
+
+
 [빠른 시작](#빠른-시작) · [서버 접속](#서버-접속) · [관리자 패널과 플러그인](#관리자-패널과-플러그인) · [백업과 업그레이드](#백업-업그레이드-및-롤백) · [문제 해결](#운영-및-문제-해결) · [환경 변수](#환경-변수) · [관리 API](#관리-api) · [개발과 릴리스](#개발-빌드-및-릴리스) · [문제 보고](#문제-보고)
 
 ## 기능
@@ -36,8 +41,9 @@
 
 이 예제는 호스트의 `/data/eagler-1.12`를 컨테이너 내부의 `/eaglerX-1.8-server`에 마운트하여 월드, 플러그인, 설정, 프런트엔드 파일을 포함한 **전체 실행 디렉터리**를 영구 보관합니다. 빈 디렉터리는 처음 사용할 때 자동으로 초기화됩니다. 기존 디렉터리가 불완전하면 내용을 보존한 채 시작을 종료합니다. 기존 배포의 실행 파일을 옮길 때는 [백업, 업그레이드 및 롤백](#백업-업그레이드-및-롤백)을 따르세요.
 
+<!-- release-doc:quick-start:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 
 docker run -d \
   --name eaglerx-1.12 \
@@ -49,8 +55,9 @@ docker run -d \
   -e MINECRAFT_VERSION=1.12 \
   -e 'RCON_PASSWORD=replace-with-a-strong-password' \
   -e 'PUBLIC_GAME_URL=http://YOUR_SERVER:5200' \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 ```
+<!-- release-doc:quick-start:end -->
 
 ### 3. 관리자 패널을 열고 준비 상태 확인
 
@@ -86,7 +93,9 @@ HTTPS 게임 접속에는 DNS, 인증서, **5200**으로 전달하는 HTTP 및 W
 
 ### 1.8 선택 또는 두 버전 동시 실행
 
-`2.2.5`는 이미지 릴리스 버전입니다. `MINECRAFT_VERSION=1.8`은 Paper 1.8.8을, `1.12`는 Paper 1.12.2를 선택합니다. 각 컨테이너는 한 번에 하나의 게임 버전을 실행하며 독립된 실행 디렉터리를 사용합니다.
+<!-- release-doc:version-guidance:start -->
+`2.2.7`는 이미지 릴리스 버전입니다. `MINECRAFT_VERSION=1.8`은 Paper 1.8.8을, `1.12`는 Paper 1.12.2를 선택합니다. 각 컨테이너는 한 번에 하나의 게임 버전을 실행하며 독립된 실행 디렉터리를 사용합니다.
+<!-- release-doc:version-guidance:end -->
 
 1.8을 실행하려면 빠른 시작 명령에서 다음 매개변수를 변경하세요:
 
@@ -174,17 +183,21 @@ sudo tar -czf "/data/backups/eagler-1.12-$(date +%Y%m%d-%H%M%S).tar.gz" \
 
 **1단계: 정지하고 백업하세요.** 이전 컨테이너, 실행 디렉터리, 이미지 버전을 보관합니다.
 
-**2단계: 새 실행 디렉터리를 준비하세요.** 대상 이미지에서 전체 템플릿을 복사합니다. 이 예제는 `2.2.5`를 사용합니다. 사용하지 않는 템플릿 컨테이너 이름과 디렉터리를 선택하세요:
+<!-- release-doc:version-guidance:start -->
+**2단계: 새 실행 디렉터리를 준비하세요.** 대상 이미지에서 전체 템플릿을 복사합니다. 이 예제는 `2.2.7`를 사용합니다. 사용하지 않는 템플릿 컨테이너 이름과 디렉터리를 선택하세요:
+<!-- release-doc:version-guidance:end -->
 
+<!-- release-doc:upgrade-target:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 docker create --name eaglerx-upgrade-template --platform linux/amd64 \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 sudo mkdir /data/eagler-1.12-next
 sudo docker cp eaglerx-upgrade-template:/opt/eaglerX-1.8-server-image/. \
   /data/eagler-1.12-next/
 docker rm eaglerx-upgrade-template
 ```
+<!-- release-doc:upgrade-target:end -->
 
 템플릿 컨테이너는 시작하지 않은 상태로 둡니다. [docker cp](https://docs.docker.com/reference/cli/docker/container/cp/)는 정지된 컨테이너에서 파일을 복사할 수 있습니다. 템플릿 복사 후 이전 디렉터리의 영구 상태를 옮기세요:
 
@@ -330,9 +343,11 @@ agent-browser doctor
 
 공식 릴리스는 `vMAJOR.MINOR` 또는 `vMAJOR.MINOR.PATCH` Git 태그를 사용합니다. 워크플로는 같은 이미지에 전체 검증을 수행한 후 버전 태그, 커밋 SHA 태그, 빌드 출처 증명과 함께 GHCR에 게시합니다. 가장 높은 버전의 자동 릴리스가 `latest`를 갱신합니다. 수동 재실행은 지정 버전과 SHA 태그만 갱신합니다.
 
+<!-- release-doc:release-command:start -->
 ```bash
-gh workflow run release.yml -f release_tag=v2.2.5
+gh workflow run release.yml -f release_tag=v2.2.7
 ```
+<!-- release-doc:release-command:end -->
 
 `build.sh`는 로컬 빌드를 묶어 제공하며 `push` 인자는 이미지를 바로 푸시합니다. 공식 배포는 [전체 live gate 요구 사항](../adr/0005-require-the-live-release-gate.md)과 위 태그 워크플로를 따릅니다.
 

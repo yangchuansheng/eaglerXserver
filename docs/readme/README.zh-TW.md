@@ -10,6 +10,11 @@
 
 <!-- README-I18N:END -->
 
+<!-- release-doc:identity:start -->
+Release Version: `v2.2.7` · [Compatibility](../compatibility.md) · [Release](https://github.com/yangchuansheng/eaglerXserver/releases/tag/v2.2.7) · [Release Verification Record](../verification/v2.2.7.md).
+<!-- release-doc:identity:end -->
+
+
 [快速開始](#快速開始) · [加入伺服器](#加入伺服器) · [管理介面與外掛](#管理介面與外掛) · [備份與升級](#備份升級與回復舊版) · [疑難排解](#日常維護與疑難排解) · [環境變數](#環境變數) · [管理 API](#管理-api) · [開發與發佈](#開發建置與發佈) · [問題回報](#問題回報)
 
 ## 功能
@@ -36,8 +41,9 @@
 
 此範例將主機的 `/data/eagler-1.12` 掛載至容器內的 `/eaglerX-1.8-server`，持久化**整個執行目錄**，涵蓋世界、外掛、設定與前端檔案。首次使用空目錄時會自動初始化；現有目錄結構不完整時，啟動程序會保留內容並結束。既有部署請依照[備份、升級與回復舊版](#備份升級與回復舊版)遷移執行檔案。
 
+<!-- release-doc:quick-start:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 
 docker run -d \
   --name eaglerx-1.12 \
@@ -49,8 +55,9 @@ docker run -d \
   -e MINECRAFT_VERSION=1.12 \
   -e 'RCON_PASSWORD=replace-with-a-strong-password' \
   -e 'PUBLIC_GAME_URL=http://YOUR_SERVER:5200' \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 ```
+<!-- release-doc:quick-start:end -->
 
 ### 3. 開啟管理介面並確認就緒
 
@@ -86,7 +93,9 @@ HTTPS 遊戲入口需要 DNS、憑證，以及轉送至 **5200** 的 HTTP 與 We
 
 ### 選擇 1.8 或同時執行兩個版本
 
-`2.2.5` 是映像檔發佈版本。`MINECRAFT_VERSION=1.8` 選擇 Paper 1.8.8，`1.12` 選擇 Paper 1.12.2。每個容器一次執行一個遊戲版本，並使用獨立執行目錄。
+<!-- release-doc:version-guidance:start -->
+`2.2.7` 是映像檔發佈版本。`MINECRAFT_VERSION=1.8` 選擇 Paper 1.8.8，`1.12` 選擇 Paper 1.12.2。每個容器一次執行一個遊戲版本，並使用獨立執行目錄。
+<!-- release-doc:version-guidance:end -->
 
 若要執行 1.8，請調整快速開始指令中的下列參數：
 
@@ -174,17 +183,21 @@ sudo tar -czf "/data/backups/eagler-1.12-$(date +%Y%m%d-%H%M%S).tar.gz" \
 
 **第一步：停服備份。** 保留舊容器、執行目錄與映像檔版本。
 
-**第二步：準備新執行目錄。** 從目標映像檔複製完整範本。此範例使用 `2.2.5`；請選擇尚未使用的範本容器名稱與目錄：
+<!-- release-doc:version-guidance:start -->
+**第二步：準備新執行目錄。** 從目標映像檔複製完整範本。此範例使用 `2.2.7`；請選擇尚未使用的範本容器名稱與目錄：
+<!-- release-doc:version-guidance:end -->
 
+<!-- release-doc:upgrade-target:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 docker create --name eaglerx-upgrade-template --platform linux/amd64 \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 sudo mkdir /data/eagler-1.12-next
 sudo docker cp eaglerx-upgrade-template:/opt/eaglerX-1.8-server-image/. \
   /data/eagler-1.12-next/
 docker rm eaglerx-upgrade-template
 ```
+<!-- release-doc:upgrade-target:end -->
 
 範本容器保持未啟動狀態。[docker cp](https://docs.docker.com/reference/cli/docker/container/cp/) 支援從停止的容器複製檔案。複製範本後，再遷移舊目錄中的持久化狀態：
 
@@ -330,9 +343,11 @@ agent-browser doctor
 
 正式發佈使用 `vMAJOR.MINOR` 或 `vMAJOR.MINOR.PATCH` Git 標籤。工作流程對同一映像檔執行完整檢查，再發佈至 GHCR，附上版本與提交 SHA 標籤及建置來源證明。最高版本的自動發佈會更新 `latest`；手動重新執行只更新指定版本與 SHA 標籤。
 
+<!-- release-doc:release-command:start -->
 ```bash
-gh workflow run release.yml -f release_tag=v2.2.5
+gh workflow run release.yml -f release_tag=v2.2.7
 ```
+<!-- release-doc:release-command:end -->
 
 `build.sh` 封裝本機建置流程，其 `push` 參數會直接推送映像檔。正式發佈遵循[完整 live gate 要求](../adr/0005-require-the-live-release-gate.md)及上述標籤工作流程。
 

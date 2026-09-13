@@ -10,6 +10,11 @@
 
 <!-- README-I18N:END -->
 
+<!-- release-doc:identity:start -->
+Release Version: `v2.2.7` · [Compatibility](../compatibility.md) · [Release](https://github.com/yangchuansheng/eaglerXserver/releases/tag/v2.2.7) · [Release Verification Record](../verification/v2.2.7.md).
+<!-- release-doc:identity:end -->
+
+
 [البدء السريع](#البدء-السريع) · [الانضمام إلى الخادم](#الانضمام-إلى-الخادم) · [لوحة الإدارة والإضافات](#لوحة-الإدارة-والإضافات) · [النسخ الاحتياطي والترقية](#النسخ-الاحتياطي-والترقية-والتراجع) · [استكشاف الأخطاء](#التشغيل-واستكشاف-الأخطاء) · [متغيرات البيئة](#متغيرات-البيئة) · [واجهة الإدارة البرمجية](#واجهة-الإدارة-البرمجية) · [التطوير والنشر](#التطوير-والبناء-والنشر) · [الإبلاغ عن المشكلات](#الإبلاغ-عن-المشكلات)
 
 ## الميزات
@@ -36,8 +41,9 @@
 
 يربط هذا المثال `/data/eagler-1.12` على المضيف بالمسار `/eaglerX-1.8-server` داخل الحاوية، ويحفظ **مجلد التشغيل كاملًا** بصورة دائمة: العوالم والإضافات والإعدادات وملفات الواجهة الأمامية. يُهيّأ المجلد الفارغ تلقائيًا عند أول استخدام. إذا كان المجلد الموجود غير مكتمل، يحتفظ بدء التشغيل بمحتواه ثم ينتهي. لترحيل ملفات تثبيت قائم، اتبع [النسخ الاحتياطي والترقية والتراجع](#النسخ-الاحتياطي-والترقية-والتراجع).
 
+<!-- release-doc:quick-start:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 
 docker run -d \
   --name eaglerx-1.12 \
@@ -49,8 +55,9 @@ docker run -d \
   -e MINECRAFT_VERSION=1.12 \
   -e 'RCON_PASSWORD=replace-with-a-strong-password' \
   -e 'PUBLIC_GAME_URL=http://YOUR_SERVER:5200' \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 ```
+<!-- release-doc:quick-start:end -->
 
 ### 3. فتح لوحة الإدارة والتحقق من الجاهزية
 
@@ -86,7 +93,9 @@ ssh -N -L 5201:127.0.0.1:5201 user@YOUR_SERVER
 
 ### اختيار 1.8 أو تشغيل الإصدارين معًا
 
-`2.2.5` هو رقم إصدار الصورة. يختار `MINECRAFT_VERSION=1.8` إصدار Paper 1.8.8، ويختار `1.12` إصدار Paper 1.12.2. تشغّل كل حاوية إصدار لعبة واحدًا في كل مرة وتستخدم مجلد تشغيل مستقلًا.
+<!-- release-doc:version-guidance:start -->
+`2.2.7` هو رقم إصدار الصورة. يختار `MINECRAFT_VERSION=1.8` إصدار Paper 1.8.8، ويختار `1.12` إصدار Paper 1.12.2. تشغّل كل حاوية إصدار لعبة واحدًا في كل مرة وتستخدم مجلد تشغيل مستقلًا.
+<!-- release-doc:version-guidance:end -->
 
 لتشغيل 1.8، عدّل هذه المعاملات في أمر البدء السريع:
 
@@ -174,17 +183,21 @@ sudo tar -czf "/data/backups/eagler-1.12-$(date +%Y%m%d-%H%M%S).tar.gz" \
 
 **الخطوة 1: الإيقاف والنسخ الاحتياطي.** احتفظ بالحاوية القديمة ومجلد التشغيل وإصدار الصورة.
 
-**الخطوة 2: تجهيز مجلد تشغيل جديد.** انسخ القالب الكامل من الصورة المستهدفة. يستخدم المثال `2.2.5`؛ اختر اسم حاوية قالب ومجلدًا لم يُستخدما بعد:
+<!-- release-doc:version-guidance:start -->
+**الخطوة 2: تجهيز مجلد تشغيل جديد.** انسخ القالب الكامل من الصورة المستهدفة. يستخدم المثال `2.2.7`؛ اختر اسم حاوية قالب ومجلدًا لم يُستخدما بعد:
+<!-- release-doc:version-guidance:end -->
 
+<!-- release-doc:upgrade-target:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 docker create --name eaglerx-upgrade-template --platform linux/amd64 \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 sudo mkdir /data/eagler-1.12-next
 sudo docker cp eaglerx-upgrade-template:/opt/eaglerX-1.8-server-image/. \
   /data/eagler-1.12-next/
 docker rm eaglerx-upgrade-template
 ```
+<!-- release-doc:upgrade-target:end -->
 
 أبقِ حاوية القالب دون تشغيل. تدعم [docker cp](https://docs.docker.com/reference/cli/docker/container/cp/) نسخ الملفات من الحاويات المتوقفة. بعد نسخ القالب، رحّل الحالة الدائمة من المجلد القديم:
 
@@ -330,9 +343,11 @@ agent-browser doctor
 
 تستخدم الإصدارات الرسمية وسوم Git من الشكل `vMAJOR.MINOR` أو `vMAJOR.MINOR.PATCH`. يفحص سير العمل صورة واحدة بالكامل ثم ينشرها إلى GHCR بوسوم الإصدار وSHA للالتزام وإثبات مصدر البناء. يحدّث النشر التلقائي لأعلى إصدار الوسم `latest`. تحدّث الإعادات اليدوية الإصدار المحدد ووسوم SHA فقط.
 
+<!-- release-doc:release-command:start -->
 ```bash
-gh workflow run release.yml -f release_tag=v2.2.5
+gh workflow run release.yml -f release_tag=v2.2.7
 ```
+<!-- release-doc:release-command:end -->
 
 يغلّف `build.sh` عمليات البناء المحلية؛ يدفع المعامل `push` الصورة مباشرة. يتبع التوزيع الرسمي [متطلب الفحص الحي الكامل](../adr/0005-require-the-live-release-gate.md) وسير عمل الوسوم أعلاه.
 

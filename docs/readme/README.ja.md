@@ -10,6 +10,11 @@
 
 <!-- README-I18N:END -->
 
+<!-- release-doc:identity:start -->
+Release Version: `v2.2.7` · [Compatibility](../compatibility.md) · [Release](https://github.com/yangchuansheng/eaglerXserver/releases/tag/v2.2.7) · [Release Verification Record](../verification/v2.2.7.md).
+<!-- release-doc:identity:end -->
+
+
 [クイックスタート](#クイックスタート) · [サーバーへの参加](#サーバーへの参加) · [管理パネルとプラグイン](#管理パネルとプラグイン) · [バックアップと更新](#バックアップ更新ロールバック) · [トラブルシューティング](#運用とトラブルシューティング) · [環境変数](#環境変数) · [管理 API](#管理-api) · [開発とリリース](#開発ビルドリリース) · [問題の報告](#問題の報告)
 
 ## 機能
@@ -36,8 +41,9 @@
 
 この例ではホストの `/data/eagler-1.12` をコンテナ内の `/eaglerX-1.8-server` にマウントし、ワールド、プラグイン、設定、フロントエンドを含む**実行ディレクトリ全体**を永続化します。空のディレクトリは初回利用時に自動初期化されます。既存ディレクトリが不完全な場合は、内容を保持して起動処理を終了します。既存環境の実行ファイルの移行は[バックアップ・更新・ロールバック](#バックアップ更新ロールバック)に従ってください。
 
+<!-- release-doc:quick-start:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 
 docker run -d \
   --name eaglerx-1.12 \
@@ -49,8 +55,9 @@ docker run -d \
   -e MINECRAFT_VERSION=1.12 \
   -e 'RCON_PASSWORD=replace-with-a-strong-password' \
   -e 'PUBLIC_GAME_URL=http://YOUR_SERVER:5200' \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 ```
+<!-- release-doc:quick-start:end -->
 
 ### 3. 管理パネルを開いて準備状態を確認
 
@@ -86,7 +93,9 @@ HTTPS のゲームアクセスには DNS、証明書、**5200** への HTTP・We
 
 ### 1.8 の選択と両バージョンの同時運用
 
-`2.2.5` はイメージのリリースバージョンです。`MINECRAFT_VERSION=1.8` は Paper 1.8.8、`1.12` は Paper 1.12.2 を選択します。各コンテナは一度に一つのゲームバージョンを実行し、独立した実行ディレクトリを使用します。
+<!-- release-doc:version-guidance:start -->
+`2.2.7` はイメージのリリースバージョンです。`MINECRAFT_VERSION=1.8` は Paper 1.8.8、`1.12` は Paper 1.12.2 を選択します。各コンテナは一度に一つのゲームバージョンを実行し、独立した実行ディレクトリを使用します。
+<!-- release-doc:version-guidance:end -->
 
 1.8 を実行するには、クイックスタートのコマンドで次のパラメーターを変更します：
 
@@ -174,17 +183,21 @@ sudo tar -czf "/data/backups/eagler-1.12-$(date +%Y%m%d-%H%M%S).tar.gz" \
 
 **手順 1：停止してバックアップ。** 旧コンテナ、実行ディレクトリ、イメージのバージョンを保持します。
 
-**手順 2：新しい実行ディレクトリを用意。** 対象イメージから完全なテンプレートをコピーします。この例は `2.2.5` を使います。未使用のテンプレートコンテナ名とディレクトリを選んでください：
+<!-- release-doc:version-guidance:start -->
+**手順 2：新しい実行ディレクトリを用意。** 対象イメージから完全なテンプレートをコピーします。この例は `2.2.7` を使います。未使用のテンプレートコンテナ名とディレクトリを選んでください：
+<!-- release-doc:version-guidance:end -->
 
+<!-- release-doc:upgrade-target:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 docker create --name eaglerx-upgrade-template --platform linux/amd64 \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 sudo mkdir /data/eagler-1.12-next
 sudo docker cp eaglerx-upgrade-template:/opt/eaglerX-1.8-server-image/. \
   /data/eagler-1.12-next/
 docker rm eaglerx-upgrade-template
 ```
+<!-- release-doc:upgrade-target:end -->
 
 テンプレートコンテナは未起動のままにします。[docker cp](https://docs.docker.com/reference/cli/docker/container/cp/) は停止中のコンテナからのコピーに対応します。コピー後、旧ディレクトリから永続データを移行します：
 
@@ -330,9 +343,11 @@ agent-browser doctor
 
 正式リリースには `vMAJOR.MINOR` または `vMAJOR.MINOR.PATCH` の Git タグを使用します。同一イメージで完全な検証を行った後、バージョン・コミット SHA のタグとビルド来歴の証明を付けて GHCR に公開します。最も高いバージョンの自動リリースが `latest` を更新し、手動再実行は指定バージョンと SHA タグだけを更新します。
 
+<!-- release-doc:release-command:start -->
 ```bash
-gh workflow run release.yml -f release_tag=v2.2.5
+gh workflow run release.yml -f release_tag=v2.2.7
 ```
+<!-- release-doc:release-command:end -->
 
 `build.sh` はローカルビルドをまとめ、`push` 引数はイメージを直接プッシュします。正式な配布は[完全な live gate の要件](../adr/0005-require-the-live-release-gate.md)と前述のタグワークフローに従います。
 

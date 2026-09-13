@@ -183,6 +183,98 @@ def check_static_release(evidence):
     })
 
 
+def check_release_docs(evidence, release_tag=None):
+    """Check current instructions by role, preserving explicitly historical text."""
+    def fail(path, line, message):
+        evidence.emit({"kind": "documentation", "status": "fail", "path": path,
+                       "line": line, "message": message})
+        print(f"{path}:{line}: {message}", file=sys.stderr)
+        raise GateFailure("documentation")
+
+    def read(path):
+        try:
+            return (ROOT / path).read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            fail(path, 1, "Restore the required current documentation file")
+
+    compatibility = read("docs/compatibility.md")
+    declarations = re.findall(r"^Verified Release Version: `(v[0-9]+\.[0-9]+(?:\.[0-9]+)?)`$",
+                              compatibility, re.M)
+    if len(declarations) != 1:
+        fail("docs/compatibility.md", 1, "Declare exactly one Verified Release Version")
+    expected = release_tag or declarations[0]
+    if not re.fullmatch(r"v[0-9]+\.[0-9]+(?:\.[0-9]+)?", expected):
+        fail("docs/compatibility.md", 1, "Use a release tag in vMAJOR.MINOR[.PATCH] format")
+    if declarations[0] != expected:
+        fail("docs/compatibility.md", 1, f"Align the verified release with tag {expected}")
+    version = expected[1:]
+    image = f"ghcr.io/yangchuansheng/eaglerx1.8server:{version}"
+    release_url = f"https://github.com/yangchuansheng/eaglerXserver/releases/tag/{expected}"
+    record_path = f"docs/verification/{expected}.md"
+    record = read(record_path)
+    if f"Release Version: `{expected}`" not in record:
+        fail(record_path, 1, f"Identify Release Version {expected} in the verification record")
+
+    readmes = ["README.md"] + [f"docs/readme/README.{locale}.md" for locale in (
+        "ar", "de", "es", "fr", "hi", "id", "ja", "ko", "pt-BR", "ru", "tr", "zh-CN", "zh-TW",
+    )]
+    # Each role specifies its required occurrences and version-bearing references.
+    readme_roles = {
+        "identity": (1, [f"`{expected}`", release_url, "compatibility.md", f"verification/{expected}.md"]),
+        "quick-start": (1, ["docker pull", "docker run", image, image]),
+        "upgrade-target": (1, ["docker pull", "docker create", image, image]),
+        "version-guidance": (2, [f"`{version}`"]),
+        "release-command": (1, [f"gh workflow run release.yml -f release_tag={expected}"]),
+    }
+    surfaces = {path: readme_roles for path in readmes}
+    surfaces.update({
+        "AGENTS.md": {"current-image": (1, [image]), "build-command": (1, [f"./build.sh {version}"])},
+        "docs/release-gate.md": {"live-example": (1, ["--live", image])},
+        "docs/compatibility.md": {},
+        record_path: {},
+    })
+    reference_pattern = re.compile(
+        r"ghcr\.io/yangchuansheng/eaglerx1\.8server:([^\s`@)]+)"
+        r"|release_tag=(v[^\s`]+)"
+        r"|\./build\.sh\s+([^\s`]+)"
+        r"|https://github\.com/yangchuansheng/eaglerXserver/releases/tag/(v[^\s`)]+)"
+        r"|verification/(v[0-9][^/\s)]*)\.md"
+    )
+    for path, roles in surfaces.items():
+        text = read(path)
+        # Blank exemptions instead of deleting them so diagnostics retain line numbers.
+        text = re.sub(r"<!-- release-doc:(historical|migration-source):start -->.*?"
+                      r"<!-- release-doc:\1:end -->",
+                      lambda match: "\n" * match.group().count("\n"), text, flags=re.S)
+        for role, (count, required) in roles.items():
+            start = f"<!-- release-doc:{role}:start -->"
+            end = f"<!-- release-doc:{role}:end -->"
+            blocks = list(re.finditer(re.escape(start) + r"(.*?)" + re.escape(end), text, re.S))
+            if len(blocks) != count or text.count(start) != count or text.count(end) != count:
+                fail(path, 1, f"Restore {count} complete {role} section(s)")
+            for block in blocks:
+                for value in set(required):
+                    if block.group(1).count(value) < required.count(value):
+                        fail(path, text[:block.start()].count("\n") + 1,
+                             f"Update {role} for {expected}; restore its required references")
+        for match in reference_pattern.finditer(text):
+            actual = next(group for group in match.groups() if group is not None)
+            if actual not in (version, expected):
+                fail(path, text[:match.start()].count("\n") + 1, f"Update current release reference to {expected}")
+        if path in ("docs/compatibility.md", record_path):
+            if release_url not in text:
+                fail(path, 1, f"Link the authoritative release {expected}")
+        if path == "docs/compatibility.md" and f"verification/{expected}.md" not in text:
+            fail(path, 1, "Link the current Release Verification Record")
+        for target in re.findall(r"\]\(([^)]+)\)", text):
+            if target.endswith(("compatibility.md", f"verification/{expected}.md")):
+                if not (ROOT / path).parent.joinpath(target).is_file():
+                    fail(path, 1, "Repair the compatibility or verification link destination")
+    evidence.emit({"kind": "documentation", "status": "pass", "release_tag": expected,
+                   "surfaces": list(surfaces), "record": record_path,
+                   "boundary": "offline version and link consistency; scenario outcomes retain their recorded scope"})
+
+
 def run_server_regression(evidence):
     run_command(
         [sys.executable, "-m", "unittest", "tests.test_regressions", "tests.test_plugin_inventory", "tests.test_release_gate"],
@@ -689,6 +781,8 @@ def parser():
     result.add_argument("--build", action="store_true", help="Build and inspect an image before the live gate")
     result.add_argument("--live", action="store_true", help="Run mounted Docker/Paper smoke for both versions")
     result.add_argument("--timeout", type=int, default=900, help="Docker build timeout in seconds")
+    result.add_argument("--docs-only", action="store_true", help="Run only offline documentation consistency checks")
+    result.add_argument("--release-tag", help="Expected release tag from release preparation; local default is the verified release")
     return result
 
 
@@ -696,10 +790,17 @@ def main(argv=None):
     args = parser().parse_args(argv)
     if args.live and not args.image and not args.build:
         parser().error("--live requires --image IMAGE or --build")
+    if args.docs_only and (args.live or args.build):
+        parser().error("--docs-only cannot be combined with --live or --build")
 
     evidence = Evidence(args.evidence_dir, args.live)
     live_exercised = False
     try:
+        check_release_docs(evidence, args.release_tag)
+        if args.docs_only:
+            evidence.finish("pass")
+            print(f"release-gate: DOCUMENTATION PASS ({evidence.run_dir})")
+            return 0
         run_command([sys.executable, "-m", "compileall", "-q", "script", "tests"], "syntax")
         evidence.emit({"kind": "syntax", "status": "pass", "scope": ["script", "tests"]})
         check_static_release(evidence)
