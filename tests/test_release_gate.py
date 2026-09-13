@@ -2,6 +2,7 @@ import importlib.util
 import http.server
 import io
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -37,10 +38,14 @@ class DocumentationGateTests(unittest.TestCase):
         self.tag = re.search(r"^Verified Release Version: `(v[^`]+)`$", declaration, re.M).group(1)
         self.version = self.tag[1:]
 
-    def run_gate(self, *args):
+    def run_gate(self, *args, release_environment=None):
+        env = dict(os.environ)
+        env.pop("EAGLERX_RELEASE_TAG", None)
+        if release_environment is not None:
+            env["EAGLERX_RELEASE_TAG"] = release_environment
         result = subprocess.run(
             ["bash", "script/release_gate.sh", "--docs-only", "--evidence-dir", "evidence", *args],
-            cwd=self.root, capture_output=True, text=True, timeout=15,
+            cwd=self.root, capture_output=True, text=True, timeout=15, env=env,
         )
         summaries = list((self.root / "evidence").glob("*/summary.json"))
         self.assertEqual(1, len(summaries), result.stderr)
@@ -116,6 +121,27 @@ class DocumentationGateTests(unittest.TestCase):
         result, _, _ = self.run_gate()
         self.assertEqual(1, result.returncode)
         self.assertIn("link destination", result.stderr)
+
+    def test_broken_evidence_link_with_a_fragment_fails(self):
+        path = self.root / "docs/compatibility.md"
+        path.write_text(path.read_text().replace(
+            f"verification/{self.tag}.md#automated-execution",
+            f"missing/verification/{self.tag}.md#automated-execution"))
+        result, _, _ = self.run_gate()
+        self.assertEqual(1, result.returncode)
+        self.assertIn("link destination", result.stderr)
+
+    def test_release_environment_provides_tag_context(self):
+        result, _, _ = self.run_gate(release_environment="v99.99.99")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("v99.99.99", result.stderr)
+
+    def test_stale_explicit_tag_in_gate_guidance_fails(self):
+        path = self.root / "docs/release-gate.md"
+        path.write_text(path.read_text().replace(f"--release-tag {self.tag}", "--release-tag v0.0.0"))
+        result, _, _ = self.run_gate()
+        self.assertEqual(1, result.returncode)
+        self.assertIn("docs/release-gate.md", result.stderr)
 
 
 class ReleaseGateTests(unittest.TestCase):

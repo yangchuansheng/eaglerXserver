@@ -55,11 +55,11 @@ jobs:
             "HOME=${HOME}" \
             "PATH=${PATH}" \
             "AGENT_BROWSER_ARGS=--no-sandbox" \
+            "EAGLERX_RELEASE_TAG=${{ steps.release.outputs.release_tag }}" \
             "GIT_CONFIG_COUNT=1" \
             "GIT_CONFIG_KEY_0=safe.directory" \
             "GIT_CONFIG_VALUE_0=${GITHUB_WORKSPACE}" \
             ./script/release_gate.sh \
-            --release-tag "${{ steps.release.outputs.release_tag }}" \
             --build --live \
             --timeout 1800 \
             --image "eaglerx-release:${{ steps.release.outputs.short_sha }}" \
@@ -124,6 +124,10 @@ jobs:
           RELEASE_COMMIT: ${{ steps.release.outputs.commit }}
           IMAGE_DIGEST: ${{ steps.push.outputs.digest }}
         run: |
+          if [ ! -f "docs/verification/${RELEASE_TAG}.md" ]; then
+            echo "Historical tag: retain this run's uploaded evidence and the existing release record." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           cat >> "$GITHUB_STEP_SUMMARY" <<EOF
           ## Compatibility and release evidence
 

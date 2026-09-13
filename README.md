@@ -114,8 +114,8 @@ Set `PUBLIC_GAME_URL` to the URL for that instance. To manage the second instanc
 
 The [compatibility reference](docs/compatibility.md#player-onboarding-and-identity)
 records the interaction between proxy authentication and LoginSecurity. The
-complete fresh-player and return-player sequence is **Unverified** for each
-documented configuration; follow the observed client prompts and retain a stable
+pinned Sealos configurations passed fresh-player and return-player checks on
+2026-09-13; the Docker gameplay sequence remains **Unverified**. Retain a stable
 profile name. The commands below describe the bundled LoginSecurity settings.
 
 1. Open the game URL, or use the quick-join link your server owner shares from the admin panel's Overview page. The Multiplayer screen already lists this server: the client derives the `ws://` or `wss://` address from the page URL, so custom ports and HTTPS game endpoints work without configuration. The quick-join link connects directly. To join a different server, add its `ws://HOST:5200/` address in Multiplayer.

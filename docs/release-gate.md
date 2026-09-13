@@ -101,8 +101,10 @@ It uses the existing Python standard library and evidence writer, offline.
 ```
 
 Local checks default to the Verified Release Version in
-[compatibility](compatibility.md). Tagged runs pass `--release-tag` from the
-existing release-preparation outputs, including manual reruns of older tags.
+[compatibility](compatibility.md). Tagged runs pass `EAGLERX_RELEASE_TAG` from
+the existing release-preparation outputs. The environment handoff preserves
+manual reruns of historical tags whose gate predates the documentation check.
+`--release-tag` provides the explicit local override.
 A conflict, missing expected section/file, or broken evidence link fails with a
 file and line. `--docs-only` writes evidence with `release_ready: false` and
 cannot be combined with `--build` or `--live`. The normal gate always includes

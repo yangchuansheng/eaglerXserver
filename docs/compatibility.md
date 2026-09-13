@@ -36,16 +36,16 @@ conversion each require their own integration evidence.
 ## Compatibility matrix
 
 All rows use the release, source, digest, and architecture declared above.
-Component identities and asset hashes are in the linked record. Runtime Java
-and the exact running Paper build were omitted from the retained automated
-output; those fields remain Unverified until read from the running image.
+Component identities and asset hashes are in the linked record. The Sealos run
+on 2026-09-13 observed OpenJDK 11.0.23+9, PaperSpigot 445 for 1.8.8, and Paper
+1620 for 1.12.2. The prior Docker output omitted these running-build fields.
 
 | Configuration | Game Version / Paper | Bundled client | Components | Scenario status and original date | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | Docker full runtime mount | 1.8 / 1.8.8 | EaglercraftX 1.8; source/asset identity | BungeeCord build 1889; EaglercraftXBungee 1.3.6; LoginSecurity 3.2.0; runtime Java Unverified | Runtime-verified: Paper readiness, protected admin API, plugin lifecycle and container replacement, 2026-09-09; gameplay/recovery Unverified | [Docker evidence](verification/v2.2.7.md#automated-execution) |
 | Docker full runtime mount | 1.12 / 1.12.2 | Eaglercraft 1.12 WASM-GC; source/asset identity | Same proxy/authentication components; runtime Java Unverified | Runtime-verified: same automated scenarios, 2026-09-09; gameplay/recovery Unverified | [Docker evidence](verification/v2.2.7.md#automated-execution) |
-| Pinned Sealos template | 1.8 / 1.8.8 | Same 1.8 assets | Same components; template refresh/init and HTTPS/WSS ingress | Source-confirmed configuration, reviewed 2026-09-13; prior runtime report has a template-revision discrepancy | [Sealos evidence limits](verification/v2.2.7.md#sealos-prior-report) |
-| Pinned Sealos template | 1.12 / 1.12.2 | Same 1.12 assets | Same components; template refresh/init and HTTPS/WSS ingress | Source-confirmed configuration, reviewed 2026-09-13; prior runtime report has a template-revision discrepancy | [Sealos evidence limits](verification/v2.2.7.md#sealos-prior-report) |
+| Pinned Sealos template | 1.8 / PaperSpigot 445, 1.8.8 | EaglercraftX 1.8-u7 | OpenJDK 11.0.23+9; same proxy/authentication components | Runtime-verified named gameplay, restart, fresh-PVC recovery, release-upgrade and rollback scenarios, 2026-09-13 | [Sealos execution](verification/v2.2.7-evidence/sealos/README.md) |
+| Pinned Sealos template | 1.12 / Paper 1620, 1.12.2 | Eaglercraft 1.12.2 (u1), WASM-GC | OpenJDK 11.0.23+9; same proxy/authentication components | Runtime-verified named registration, return-login, Paper-restart, fresh-PVC recovery, release-upgrade and rollback scenarios, 2026-09-13; remaining scenario results recorded separately | [Sealos execution](verification/v2.2.7-evidence/sealos/README.md) |
 
 The manifest in `bungee/bungee.jar` identifies BungeeCord build 1889, commit
 `7340f1a`, version `1.21-R0.1-SNAPSHOT`. Earlier Waterfall labels describe the
@@ -92,10 +92,12 @@ Quick Join Link; the initial client profile may contain a generated name.
 Both source trees configure LoginSecurity registration, `/register <password>`,
 `/login <password>`, a 6–32 character password, and a 30-second login window.
 The proxy also enables its onboard authentication system in
-`bungee/plugins/EaglercraftXBungee/authservice.yml`, including a pre-join password
-prompt and `/eagler` account setup. Their combined first-visit sequence requires
-real-client verification for each configuration. Record the screens and commands
-actually observed before publishing a definitive registration sequence.
+`bungee/plugins/EaglercraftXBungee/authservice.yml`, with support for a pre-join password
+prompt and `/eagler` account setup. In both pinned Sealos configurations tested
+on 2026-09-13, the bundled client entered Paper and displayed the LoginSecurity
+`/register` prompt directly. Return visits displayed `/login`. That run observed
+no separate proxy account-setup screen. Docker onboarding still needs a named
+real-client execution.
 
 Player Account credentials protect the player's identity. `RCON_PASSWORD`
 authenticates an administrator to the Management Plane. A return visit must
@@ -122,7 +124,7 @@ original PVC and rendered source configuration for rollback. The init container
 refreshes scripts/web assets on startup; changes to server/plugin binaries or
 data layouts require an explicit migration review.
 
-The exact planned release pair and all recovery/upgrade results are tracked in
+The exact recorded release pair and all recovery/upgrade results are tracked in
 the verification record. Complete gameplay, recovery, and rollback acceptance
 before claiming the selected deployment configuration is verified.
 

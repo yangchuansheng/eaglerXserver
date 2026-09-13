@@ -174,7 +174,7 @@ Dockerfile 用 `COPY .` 打包全部文件（含两个版本），运行时通�
 ### Compatibility and release evidence
 
 - Maintain [compatibility](docs/compatibility.md) and the current [Release Verification Record](docs/verification/v2.2.7.md) alongside current examples in every README.
-- Run `./script/release_gate.sh --docs-only` for documentation edits. Tagged gates pass `--release-tag` from release preparation and still require the full build/live gate.
+- Run `./script/release_gate.sh --docs-only` for documentation edits. Tagged gates receive `EAGLERX_RELEASE_TAG` from release preparation and still require the full build/live gate; the environment handoff preserves older-tag CLI compatibility.
 - Preserve `release-doc` role markers. Mark earlier image examples explicitly as `historical` or `migration-source`; keep original versions and dates in historical records.
 - Record Source-confirmed, Runtime-verified, and Unverified per scenario and configuration. Read runtime Java from the running image; retain build JDK fields as build metadata.
 - Follow the [manual evidence cadence](docs/release-gate.md#manual-evidence-cadence). Initial C03 gameplay/recovery/upgrade acceptance is complete only when both Game Versions and deployment layouts have their required execution evidence.

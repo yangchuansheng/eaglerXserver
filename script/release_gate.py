@@ -236,6 +236,7 @@ def check_release_docs(evidence, release_tag=None):
     reference_pattern = re.compile(
         r"ghcr\.io/yangchuansheng/eaglerx1\.8server:([^\s`@)]+)"
         r"|release_tag=(v[^\s`]+)"
+        r"|--release-tag[ =](v[^\s`]+)"
         r"|\./build\.sh\s+([^\s`]+)"
         r"|https://github\.com/yangchuansheng/eaglerXserver/releases/tag/(v[^\s`)]+)"
         r"|verification/(v[0-9][^/\s)]*)\.md"
@@ -267,6 +268,7 @@ def check_release_docs(evidence, release_tag=None):
         if path == "docs/compatibility.md" and f"verification/{expected}.md" not in text:
             fail(path, 1, "Link the current Release Verification Record")
         for target in re.findall(r"\]\(([^)]+)\)", text):
+            target = target.split("#", 1)[0]
             if target.endswith(("compatibility.md", f"verification/{expected}.md")):
                 if not (ROOT / path).parent.joinpath(target).is_file():
                     fail(path, 1, "Repair the compatibility or verification link destination")
@@ -782,7 +784,8 @@ def parser():
     result.add_argument("--live", action="store_true", help="Run mounted Docker/Paper smoke for both versions")
     result.add_argument("--timeout", type=int, default=900, help="Docker build timeout in seconds")
     result.add_argument("--docs-only", action="store_true", help="Run only offline documentation consistency checks")
-    result.add_argument("--release-tag", help="Expected release tag from release preparation; local default is the verified release")
+    result.add_argument("--release-tag", default=os.environ.get("EAGLERX_RELEASE_TAG"),
+                        help="Expected tag; defaults to EAGLERX_RELEASE_TAG or the verified release")
     return result
 
 
