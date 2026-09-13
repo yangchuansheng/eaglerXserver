@@ -6,14 +6,15 @@ The [maintained source repository](https://github.com/yangchuansheng/eaglerXserv
 owns the Release Image, Git tags, and runtime checks.
 [Release v2.2.7](https://github.com/yangchuansheng/eaglerXserver/releases/tag/v2.2.7)
 is the current documentation baseline. **Verified applies to the named scenarios
-below. The complete C03 gameplay and recovery baseline remains Unverified.**
+below. Remaining C03 acceptance checks were waived by the user on 2026-09-13;
+unexecuted scenarios retain their Unverified evidence status.**
 
 - Source commit: `fe33def8a9089412ab62d972d81bad97ab0bb145`.
 - Release Image: `ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7`.
 - Published digest: `sha256:56ad224a996030b7bfb2837702f065fe88685eda511d7a186812f22dc5cad047`.
 - Publication platform: Linux AMD64 (`linux/amd64`).
 - [Release Verification Record](verification/v2.2.7.md): dates, source identities,
-  durable automated evidence, scenario outcomes, and open acceptance work.
+  durable automated evidence, scenario outcomes, and the acceptance waiver.
 
 A **Release Version** identifies the entire image. A **Game Version** selects
 one world lineage: `MINECRAFT_VERSION=1.8` selects Paper 1.8.8;

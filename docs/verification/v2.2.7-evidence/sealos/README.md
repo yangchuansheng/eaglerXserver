@@ -1,9 +1,10 @@
 # Sealos execution: 2026-09-13
 
 This record supplements the original Docker gate with real clients and disposable
-Sealos workloads. **C03 acceptance remains incomplete:** Docker full-runtime
-manual recovery/migration needs its own execution. Status applies to each named
-scenario below.
+Sealos workloads. **Remaining C03 acceptance checks were waived by the user on
+2026-09-13.** Docker full-runtime manual recovery/migration and outstanding client
+observations are skipped for this implementation. Status below continues to
+describe the evidence for each named scenario, including observed limitations.
 
 ## Execution identity
 
