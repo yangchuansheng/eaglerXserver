@@ -10,6 +10,11 @@
 
 <!-- README-I18N:END -->
 
+<!-- release-doc:identity:start -->
+Release Version: `v2.2.7` · [Compatibility](../compatibility.md) · [Release](https://github.com/yangchuansheng/eaglerXserver/releases/tag/v2.2.7) · [Release Verification Record](../verification/v2.2.7.md).
+<!-- release-doc:identity:end -->
+
+
 [Быстрый запуск](#быстрый-запуск) · [Подключение к серверу](#подключение-к-серверу) · [Панель и плагины](#панель-управления-и-плагины) · [Копии и обновления](#резервное-копирование-обновление-и-откат) · [Устранение неполадок](#эксплуатация-и-устранение-неполадок) · [Переменные окружения](#переменные-окружения) · [API управления](#api-управления) · [Разработка и выпуск](#разработка-сборка-и-выпуск) · [Сообщить о проблеме](#сообщить-о-проблеме)
 
 ## Возможности
@@ -36,8 +41,9 @@
 
 Пример подключает `/data/eagler-1.12` на хосте к `/eaglerX-1.8-server` внутри контейнера и сохраняет **весь рабочий каталог**: миры, плагины, настройки и файлы фронтенда. Пустой каталог автоматически заполняется при первом использовании. Если существующий каталог неполон, запуск сохраняет его содержимое и завершается. Для переноса файлов существующей установки следуйте разделу [Резервное копирование, обновление и откат](#резервное-копирование-обновление-и-откат).
 
+<!-- release-doc:quick-start:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 
 docker run -d \
   --name eaglerx-1.12 \
@@ -49,8 +55,9 @@ docker run -d \
   -e MINECRAFT_VERSION=1.12 \
   -e 'RCON_PASSWORD=replace-with-a-strong-password' \
   -e 'PUBLIC_GAME_URL=http://YOUR_SERVER:5200' \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 ```
+<!-- release-doc:quick-start:end -->
 
 ### 3. Откройте панель и проверьте готовность
 
@@ -86,7 +93,9 @@ ssh -N -L 5201:127.0.0.1:5201 user@YOUR_SERVER
 
 ### Выбор 1.8 или запуск обеих версий
 
-`2.2.5` — версия выпуска образа. `MINECRAFT_VERSION=1.8` выбирает Paper 1.8.8, а `1.12` — Paper 1.12.2. Каждый контейнер одновременно запускает одну версию игры и использует собственный рабочий каталог.
+<!-- release-doc:version-guidance:start -->
+`2.2.7` — версия выпуска образа. `MINECRAFT_VERSION=1.8` выбирает Paper 1.8.8, а `1.12` — Paper 1.12.2. Каждый контейнер одновременно запускает одну версию игры и использует собственный рабочий каталог.
+<!-- release-doc:version-guidance:end -->
 
 Для запуска 1.8 измените следующие параметры команды быстрого запуска:
 
@@ -174,17 +183,21 @@ sudo tar -czf "/data/backups/eagler-1.12-$(date +%Y%m%d-%H%M%S).tar.gz" \
 
 **Шаг 1: Остановите сервер и создайте копию.** Сохраните прежний контейнер, рабочий каталог и версию образа.
 
-**Шаг 2: Подготовьте новый рабочий каталог.** Скопируйте полный шаблон из целевого образа. Пример использует `2.2.5`; выберите свободные имя контейнера-шаблона и каталог:
+<!-- release-doc:version-guidance:start -->
+**Шаг 2: Подготовьте новый рабочий каталог.** Скопируйте полный шаблон из целевого образа. Пример использует `2.2.7`; выберите свободные имя контейнера-шаблона и каталог:
+<!-- release-doc:version-guidance:end -->
 
+<!-- release-doc:upgrade-target:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 docker create --name eaglerx-upgrade-template --platform linux/amd64 \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 sudo mkdir /data/eagler-1.12-next
 sudo docker cp eaglerx-upgrade-template:/opt/eaglerX-1.8-server-image/. \
   /data/eagler-1.12-next/
 docker rm eaglerx-upgrade-template
 ```
+<!-- release-doc:upgrade-target:end -->
 
 Оставьте контейнер-шаблон незапущенным. [docker cp](https://docs.docker.com/reference/cli/docker/container/cp/) поддерживает копирование из остановленных контейнеров. После копирования шаблона перенесите постоянные данные из старого каталога:
 
@@ -330,9 +343,11 @@ agent-browser doctor
 
 Официальные выпуски используют Git-теги `vMAJOR.MINOR` или `vMAJOR.MINOR.PATCH`. Процесс полностью проверяет один образ и публикует его в GHCR с тегами версии и SHA коммита и подтверждением происхождения сборки. Автоматическая публикация наибольшей версии обновляет `latest`. Ручной повтор обновляет только указанную версию и SHA-теги.
 
+<!-- release-doc:release-command:start -->
 ```bash
-gh workflow run release.yml -f release_tag=v2.2.5
+gh workflow run release.yml -f release_tag=v2.2.7
 ```
+<!-- release-doc:release-command:end -->
 
 `build.sh` упрощает локальную сборку; аргумент `push` напрямую отправляет образ. Официальная публикация следует [требованию полной live-проверки](../adr/0005-require-the-live-release-gate.md) и описанному процессу тегов.
 

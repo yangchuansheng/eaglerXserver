@@ -10,6 +10,11 @@ Run a Minecraft server that players can join from their browser, with persistent
 
 <!-- README-I18N:END -->
 
+<!-- release-doc:identity:start -->
+Release Version: `v2.2.7` · [Compatibility](docs/compatibility.md) · [Release](https://github.com/yangchuansheng/eaglerXserver/releases/tag/v2.2.7) · [Release Verification Record](docs/verification/v2.2.7.md).
+<!-- release-doc:identity:end -->
+
+
 [Quick start](#quick-start) · [Joining the server](#joining-the-server) · [Admin panel and plugins](#admin-panel-and-plugins) · [Backups and upgrades](#backups-upgrades-and-rollbacks) · [Troubleshooting](#operations-and-troubleshooting) · [Environment variables](#environment-variables) · [Admin API](#admin-api) · [Development and releases](#development-builds-and-releases) · [Reporting issues](#reporting-issues)
 
 ## Features
@@ -36,8 +41,9 @@ Run the following commands on the server. Replace `YOUR_SERVER` with an IP addre
 
 This example mounts `/data/eagler-1.12` on the host at `/eaglerX-1.8-server` inside the container, persisting the **entire runtime directory**: worlds, plugins, configuration, and frontend files. An empty directory is initialized automatically on first use. If an existing directory is incomplete, startup preserves its contents and exits. For an existing deployment, follow [Backups, upgrades, and rollbacks](#backups-upgrades-and-rollbacks) to migrate the runtime files.
 
+<!-- release-doc:quick-start:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 
 docker run -d \
   --name eaglerx-1.12 \
@@ -49,8 +55,9 @@ docker run -d \
   -e MINECRAFT_VERSION=1.12 \
   -e 'RCON_PASSWORD=replace-with-a-strong-password' \
   -e 'PUBLIC_GAME_URL=http://YOUR_SERVER:5200' \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 ```
+<!-- release-doc:quick-start:end -->
 
 ### 3. Open the admin panel and check readiness
 
@@ -86,7 +93,9 @@ An HTTPS game endpoint requires DNS, a certificate, and HTTP and WebSocket forwa
 
 ### Choosing 1.8 or running both versions
 
-`2.2.5` is the image release version. `MINECRAFT_VERSION=1.8` selects Paper 1.8.8, and `1.12` selects Paper 1.12.2. Each container runs one game version at a time and uses its own runtime directory.
+<!-- release-doc:version-guidance:start -->
+`2.2.7` is the image release version. `MINECRAFT_VERSION=1.8` selects Paper 1.8.8, and `1.12` selects Paper 1.12.2. Each container runs one game version at a time and uses its own runtime directory.
+<!-- release-doc:version-guidance:end -->
 
 To run 1.8, adjust these parameters in the quick-start command:
 
@@ -103,8 +112,14 @@ Set `PUBLIC_GAME_URL` to the URL for that instance. To manage the second instanc
 
 ## Joining the server
 
+The [compatibility reference](docs/compatibility.md#player-onboarding-and-identity)
+records the interaction between proxy authentication and LoginSecurity. The
+pinned Sealos configurations passed fresh-player and return-player checks on
+2026-09-13; the Docker gameplay sequence remains **Unverified**. Retain a stable
+profile name. The commands below describe the bundled LoginSecurity settings.
+
 1. Open the game URL, or use the quick-join link your server owner shares from the admin panel's Overview page. The Multiplayer screen already lists this server: the client derives the `ws://` or `wss://` address from the page URL, so custom ports and HTTPS game endpoints work without configuration. The quick-join link connects directly. To join a different server, add its `ws://HOST:5200/` address in Multiplayer.
-2. On your first visit, follow the LoginSecurity prompt and enter `/register <password>`. Use `/login <password>` on later visits. Registration is required by default, passwords must contain at least 6 characters, and the login timeout is 30 seconds.
+2. Once the proxy admits the player to Paper, LoginSecurity provides `/register <password>` for registration and `/login <password>` for later visits. The source configuration requires registration, allows passwords of 6–32 characters, and sets a 30-second login timeout. The proxy also enables onboard authentication; record any pre-join account setup required by the selected bundled client.
 3. LoginSecurity manages player account passwords. The admin panel uses the server owner's `RCON_PASSWORD`.
 
 SimpleHomes provides `/sethome <name>`, `/home <name>`, and `/homes`. SimpleTpa provides `/tpa <player>`, `/tpaccept`, and `/tpdeny`. Permissions and behavior depend on the current plugin configuration.
@@ -153,6 +168,12 @@ To migrate existing worlds, stop the server and take a backup, then prepare the 
 
 ## Backups, upgrades, and rollbacks
 
+These procedures preserve the selected Game Version. The
+[Release Verification Record](docs/verification/v2.2.7.md#initial-baseline-procedure)
+tracks the planned source/target pair and pending gameplay, restore and rollback
+acceptance. For the PVC layout and init refresh behavior, follow the separate
+[Sealos procedure](docs/compatibility.md#recovery-and-release-upgrades).
+
 ### Stop the server and back up
 
 These commands use the container and mount from the quick start. Backups contain worlds, player state, plugin data, configuration, authentication databases, and the admin password. Store them in a directory with restricted access.
@@ -174,17 +195,21 @@ When the entrypoint receives a stop signal, it gives Paper up to 30 seconds to e
 
 **Step 1: Stop the server and back up.** Keep the old container, runtime directory, and image version.
 
-**Step 2: Prepare a new runtime directory.** Copy the complete template from the target image. This example targets `2.2.5`; choose an unused template container name and directory:
+<!-- release-doc:version-guidance:start -->
+**Step 2: Prepare a new runtime directory.** Copy the complete template from the target image. This example targets `2.2.7`; choose an unused template container name and directory:
+<!-- release-doc:version-guidance:end -->
 
+<!-- release-doc:upgrade-target:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 docker create --name eaglerx-upgrade-template --platform linux/amd64 \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 sudo mkdir /data/eagler-1.12-next
 sudo docker cp eaglerx-upgrade-template:/opt/eaglerX-1.8-server-image/. \
   /data/eagler-1.12-next/
 docker rm eaglerx-upgrade-template
 ```
+<!-- release-doc:upgrade-target:end -->
 
 Leave the template container unstarted. [docker cp](https://docs.docker.com/reference/cli/docker/container/cp/) supports copying files from stopped containers. After copying the template, migrate persistent state from the old directory:
 
@@ -212,6 +237,20 @@ docker start eaglerx-1.12
 ```
 
 A rollback restores the state saved in the old directory. Preserve data created while the new container was running so it remains available for recovery. To restore a compressed backup, extract it into a new directory, mount the extracted `eagler-1.12` directory as the full runtime directory, and use the image version and launch options associated with that backup.
+
+For an independent restore, keep the source stopped and choose a fresh destination:
+
+```bash
+sudo mkdir /data/eagler-restore
+sudo tar -xzf /data/backups/CHOOSE-YOUR-BACKUP.tar.gz -C /data/eagler-restore
+```
+
+Start the quick-start command with container name `eaglerx-1.12-restored`, mount
+`/data/eagler-restore/eagler-1.12:/eaglerX-1.8-server`, and the backup's original
+image and launch options. Restore external symlink targets into independent data
+directories as well. Verify return login, player identity, known world blocks,
+inventory, homes, plugins and retained server configuration. Keep the World
+Recovery Copy outside the active runtime after validation.
 
 ## Operations and troubleshooting
 
@@ -330,9 +369,11 @@ The gate sets `release_ready` to `true` in `summary.json` only after the full `-
 
 Official releases use `vMAJOR.MINOR` or `vMAJOR.MINOR.PATCH` Git tags. The workflow runs the full gate against a single image, then publishes that image to GHCR with version and commit SHA tags and a build provenance attestation. Automatic releases of the highest version update `latest`. Manual reruns update only the specified version and SHA tags.
 
+<!-- release-doc:release-command:start -->
 ```bash
-gh workflow run release.yml -f release_tag=v2.2.5
+gh workflow run release.yml -f release_tag=v2.2.7
 ```
+<!-- release-doc:release-command:end -->
 
 `build.sh` wraps local builds; its `push` argument pushes the image directly. Official distribution follows the [full live gate requirement](docs/adr/0005-require-the-live-release-gate.md) and the tag workflow above.
 

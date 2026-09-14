@@ -2,7 +2,11 @@ import importlib.util
 import http.server
 import io
 import json
+import os
 from pathlib import Path
+import re
+import shutil
+import subprocess
 import tempfile
 import threading
 import time
@@ -17,6 +21,127 @@ GATE_PATH = ROOT / "script" / "release_gate.py"
 spec = importlib.util.spec_from_file_location("eaglerx_release_gate_tests", GATE_PATH)
 release_gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release_gate)
+
+
+class DocumentationGateTests(unittest.TestCase):
+    """Check documentation through the same entry point used by releases."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        shutil.copytree(ROOT / "docs", self.root / "docs")
+        shutil.copytree(ROOT / "script", self.root / "script")
+        for name in ("README.md", "AGENTS.md"):
+            shutil.copy2(ROOT / name, self.root / name)
+        declaration = (self.root / "docs/compatibility.md").read_text()
+        self.tag = re.search(r"^Verified Release Version: `(v[^`]+)`$", declaration, re.M).group(1)
+        self.version = self.tag[1:]
+
+    def run_gate(self, *args, release_environment=None):
+        env = dict(os.environ)
+        env.pop("EAGLERX_RELEASE_TAG", None)
+        if release_environment is not None:
+            env["EAGLERX_RELEASE_TAG"] = release_environment
+        result = subprocess.run(
+            ["bash", "script/release_gate.sh", "--docs-only", "--evidence-dir", "evidence", *args],
+            cwd=self.root, capture_output=True, text=True, timeout=15, env=env,
+        )
+        summaries = list((self.root / "evidence").glob("*/summary.json"))
+        self.assertEqual(1, len(summaries), result.stderr)
+        summary = json.loads(summaries[0].read_text())
+        rows = [json.loads(line) for line in summaries[0].with_name("evidence.jsonl").read_text().splitlines()]
+        return result, summary, rows
+
+    def test_current_documentation_passes_without_claiming_live_verification(self):
+        result, summary, rows = self.run_gate()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertFalse(summary["release_ready"])
+        self.assertTrue(any(row["kind"] == "documentation" and row["status"] == "pass" for row in rows))
+
+    def test_stale_translated_image_fails_with_an_actionable_location(self):
+        path = self.root / "docs/readme/README.zh-CN.md"
+        path.write_text(path.read_text().replace(f"eaglerx1.8server:{self.version}", "eaglerx1.8server:0.0.0", 1))
+        result, summary, rows = self.run_gate()
+        self.assertEqual(1, result.returncode)
+        self.assertEqual("fail", summary["status"])
+        issue = next(row for row in rows if row["kind"] == "documentation")
+        self.assertEqual("docs/readme/README.zh-CN.md", issue["path"])
+        self.assertGreater(issue["line"], 1)
+        self.assertIn(self.tag, result.stderr)
+
+    def test_missing_quick_start_fails_even_when_other_current_examples_remain(self):
+        path = self.root / "README.md"
+        text = path.read_text()
+        start = text.index("<!-- release-doc:quick-start:start -->")
+        end = text.index("<!-- release-doc:quick-start:end -->") + len("<!-- release-doc:quick-start:end -->")
+        path.write_text(text[:start] + text[end:])
+        result, _, _ = self.run_gate()
+        self.assertEqual(1, result.returncode)
+        self.assertIn("quick-start", result.stderr)
+
+    def test_tag_context_overrides_the_declared_local_release(self):
+        result, _, _ = self.run_gate("--release-tag", "v99.99.99")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("docs/compatibility.md", result.stderr)
+        self.assertIn("v99.99.99", result.stderr)
+
+    def test_current_tag_passes(self):
+        result, _, _ = self.run_gate("--release-tag", self.tag)
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_historical_and_migration_references_preserve_their_original_versions(self):
+        path = self.root / "README.md"
+        with path.open("a") as stream:
+            for role in ("historical", "migration-source"):
+                stream.write(f"\n<!-- release-doc:{role}:start -->\n"
+                             "`ghcr.io/yangchuansheng/eaglerx1.8server:2.2.4`\n"
+                             f"<!-- release-doc:{role}:end -->\n")
+            stream.write("\nGame Version: `1.8`; Paper `1.8.8`; Java `17.0.12`; LoginSecurity `3.2.0`.\n")
+        (self.root / "docs/verification/v2.2.4.md").write_text("Historical release `2.2.4`.\n")
+        result, _, _ = self.run_gate()
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_unmarked_old_image_guidance_fails(self):
+        path = self.root / "AGENTS.md"
+        path.write_text(path.read_text() + "\nUse `ghcr.io/yangchuansheng/eaglerx1.8server:2.2.4`.\n")
+        result, _, _ = self.run_gate()
+        self.assertEqual(1, result.returncode)
+        self.assertIn("AGENTS.md:", result.stderr)
+
+    def test_missing_verification_record_fails(self):
+        (self.root / f"docs/verification/{self.tag}.md").unlink()
+        result, _, _ = self.run_gate()
+        self.assertEqual(1, result.returncode)
+        self.assertIn(f"docs/verification/{self.tag}.md", result.stderr)
+
+    def test_broken_translated_evidence_link_fails(self):
+        path = self.root / "docs/readme/README.fr.md"
+        path.write_text(path.read_text().replace(f"../verification/{self.tag}.md", f"missing/verification/{self.tag}.md"))
+        result, _, _ = self.run_gate()
+        self.assertEqual(1, result.returncode)
+        self.assertIn("link destination", result.stderr)
+
+    def test_broken_evidence_link_with_a_fragment_fails(self):
+        path = self.root / "docs/compatibility.md"
+        path.write_text(path.read_text().replace(
+            f"verification/{self.tag}.md#automated-execution",
+            f"missing/verification/{self.tag}.md#automated-execution"))
+        result, _, _ = self.run_gate()
+        self.assertEqual(1, result.returncode)
+        self.assertIn("link destination", result.stderr)
+
+    def test_release_environment_provides_tag_context(self):
+        result, _, _ = self.run_gate(release_environment="v99.99.99")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("v99.99.99", result.stderr)
+
+    def test_stale_explicit_tag_in_gate_guidance_fails(self):
+        path = self.root / "docs/release-gate.md"
+        path.write_text(path.read_text().replace(f"--release-tag {self.tag}", "--release-tag v0.0.0"))
+        result, _, _ = self.run_gate()
+        self.assertEqual(1, result.returncode)
+        self.assertIn("docs/release-gate.md", result.stderr)
 
 
 class ReleaseGateTests(unittest.TestCase):

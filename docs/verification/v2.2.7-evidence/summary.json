@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "status": "pass",
+  "release_ready": true,
+  "started_at": "2026-09-09T13:50:38.099763Z",
+  "finished_at": "2026-09-09T13:57:48.325262Z",
+  "git_revision": "fe33def",
+  "live_requested": true,
+  "live_exercised": true,
+  "credentials_recorded": false,
+  "plugin_data_recorded": false,
+  "evidence_rows": 35
+}

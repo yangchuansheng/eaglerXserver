@@ -1,7 +1,7 @@
 # EaglercraftX 1.8 Server — AGENTS.md
 
 ## 版本体系
-- 项目名 `eaglerX-1.8-server` 的 `1.8` 是 EaglercraftX 客户端协议版本 + Docker 镜像版本号。
+- The `1.8` in `eaglerX-1.8-server` is a historical project/client label. Git tags identify the Release Version; `MINECRAFT_VERSION` selects the Game Version.
 - 实际服务端是 Paper 1.12.2。后来从 git 历史恢复了 1.8.8，现在支持双版本。
 - `MINECRAFT_VERSION` 环境变量选择版本：`1.8`（Paper 1.8.8）或 `1.12`（Paper 1.12.2）。该变量现在是**必填**，未传时容器直接报错退出。
 - Docker 产物是**单镜像双版本**：同一个镜像同时包含 1.8 / 1.12 两套 `server-*` 和 `web-*` 目录。
@@ -14,7 +14,7 @@
 | `server-1.12/` | Paper 1.12.2（server.jar 40MB Paperclip） |
 | `web-1.8/` | EaglercraftX 1.8 客户端（assets.epk, classes.js） |
 | `web-1.12/` | EaglercraftX 1.12 客户端（assets.epw, classes.js, bootstrap.js, admin.html） |
-| `bungee/` | Waterfall 代理 |
+| `bungee/` | BungeeCord proxy; see the versioned compatibility record for the bundled manifest identity |
 | `bungee/plugins/EaglercraftXBungee/` | WebSocket 入口 + HTTP 文件服务 |
 | `script/` | start_server.sh + http_server.py |
 
@@ -155,17 +155,30 @@ docker run -d -p 5200:5200 -p 127.0.0.1:5201:5201 \
 
 ### 构建与推送
 
+<!-- release-doc:build-command:start -->
 ```bash
-./build.sh 2.2.4        # 构建并打标签
-./build.sh 2.2.4 push   # 构建并推送
+./build.sh 2.2.7        # 构建并打标签
+./build.sh 2.2.7 push   # 构建并推送
 ```
+<!-- release-doc:build-command:end -->
 
 Dockerfile 用 `COPY .` 打包全部文件（含两个版本），运行时通过软链接选择。镜像约 1.47GB。
 
 ## 当前镜像
-`ghcr.io/yangchuansheng/eaglerx1.8server:2.2.4`
+<!-- release-doc:current-image:start -->
+`ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7`
+<!-- release-doc:current-image:end -->
 
 ## Agent skills
+
+### Compatibility and release evidence
+
+- Maintain [compatibility](docs/compatibility.md) and the current [Release Verification Record](docs/verification/v2.2.7.md) alongside current examples in every README.
+- Run `./script/release_gate.sh --docs-only` for documentation edits. Tagged gates receive `EAGLERX_RELEASE_TAG` from release preparation and still require the full build/live gate; the environment handoff preserves older-tag CLI compatibility.
+- Preserve `release-doc` role markers. Mark earlier image examples explicitly as `historical` or `migration-source`; keep original versions and dates in historical records.
+- Record Source-confirmed, Runtime-verified, and Unverified per scenario and configuration. Read runtime Java from the running image; retain build JDK fields as build metadata.
+- Follow the [manual evidence cadence](docs/release-gate.md#manual-evidence-cadence). Initial C03 gameplay/recovery/upgrade acceptance is complete only when both Game Versions and deployment layouts have their required execution evidence.
+- Publish concise sanitized results; keep credentials and private player state outside public records. Preserve prior execution identities when reviewing unaffected evidence for a later release.
 
 ### Issue tracker
 

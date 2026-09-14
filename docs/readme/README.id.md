@@ -10,6 +10,11 @@ Jalankan server Minecraft yang dapat diakses pemain melalui browser, dengan peny
 
 <!-- README-I18N:END -->
 
+<!-- release-doc:identity:start -->
+Release Version: `v2.2.7` · [Compatibility](../compatibility.md) · [Release](https://github.com/yangchuansheng/eaglerXserver/releases/tag/v2.2.7) · [Release Verification Record](../verification/v2.2.7.md).
+<!-- release-doc:identity:end -->
+
+
 [Mulai cepat](#mulai-cepat) · [Bergabung ke server](#bergabung-ke-server) · [Panel dan plugin](#panel-admin-dan-plugin) · [Cadangan dan pembaruan](#pencadangan-pembaruan-dan-rollback) · [Pemecahan masalah](#operasi-dan-pemecahan-masalah) · [Variabel lingkungan](#variabel-lingkungan) · [API admin](#api-admin) · [Pengembangan dan rilis](#pengembangan-build-dan-rilis) · [Melaporkan masalah](#melaporkan-masalah)
 
 ## Fitur
@@ -36,8 +41,9 @@ Jalankan perintah berikut di server. Ganti `YOUR_SERVER` dengan alamat IP atau d
 
 Contoh ini memasang `/data/eagler-1.12` pada host ke `/eaglerX-1.8-server` di dalam container dan menyimpan **seluruh direktori runtime** secara persisten: dunia, plugin, konfigurasi, dan file frontend. Direktori kosong diinisialisasi otomatis saat pertama digunakan. Jika direktori yang ada tidak lengkap, proses awal mempertahankan isinya lalu berhenti. Untuk deployment yang sudah ada, ikuti [Pencadangan, pembaruan, dan rollback](#pencadangan-pembaruan-dan-rollback) untuk memigrasikan file runtime.
 
+<!-- release-doc:quick-start:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 
 docker run -d \
   --name eaglerx-1.12 \
@@ -49,8 +55,9 @@ docker run -d \
   -e MINECRAFT_VERSION=1.12 \
   -e 'RCON_PASSWORD=replace-with-a-strong-password' \
   -e 'PUBLIC_GAME_URL=http://YOUR_SERVER:5200' \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 ```
+<!-- release-doc:quick-start:end -->
 
 ### 3. Buka panel dan periksa kesiapan
 
@@ -86,7 +93,9 @@ Akses game HTTPS memerlukan DNS, sertifikat, serta penerusan HTTP dan WebSocket 
 
 ### Memilih 1.8 atau menjalankan kedua versi
 
-`2.2.5` adalah versi rilis image. `MINECRAFT_VERSION=1.8` memilih Paper 1.8.8, sedangkan `1.12` memilih Paper 1.12.2. Setiap container menjalankan satu versi game dalam satu waktu dan memiliki direktori runtime sendiri.
+<!-- release-doc:version-guidance:start -->
+`2.2.7` adalah versi rilis image. `MINECRAFT_VERSION=1.8` memilih Paper 1.8.8, sedangkan `1.12` memilih Paper 1.12.2. Setiap container menjalankan satu versi game dalam satu waktu dan memiliki direktori runtime sendiri.
+<!-- release-doc:version-guidance:end -->
 
 Untuk menjalankan 1.8, sesuaikan parameter berikut pada perintah mulai cepat:
 
@@ -174,17 +183,21 @@ Ketika menerima sinyal berhenti, entrypoint memberi Paper waktu maksimal 30 deti
 
 **Langkah 1: Hentikan dan cadangkan.** Simpan container lama, direktori runtime, dan versi imagenya.
 
-**Langkah 2: Siapkan direktori runtime baru.** Salin template lengkap dari image tujuan. Contoh ini memakai `2.2.5`; pilih nama container template dan direktori yang belum digunakan:
+<!-- release-doc:version-guidance:start -->
+**Langkah 2: Siapkan direktori runtime baru.** Salin template lengkap dari image tujuan. Contoh ini memakai `2.2.7`; pilih nama container template dan direktori yang belum digunakan:
+<!-- release-doc:version-guidance:end -->
 
+<!-- release-doc:upgrade-target:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 docker create --name eaglerx-upgrade-template --platform linux/amd64 \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 sudo mkdir /data/eagler-1.12-next
 sudo docker cp eaglerx-upgrade-template:/opt/eaglerX-1.8-server-image/. \
   /data/eagler-1.12-next/
 docker rm eaglerx-upgrade-template
 ```
+<!-- release-doc:upgrade-target:end -->
 
 Biarkan container template belum dijalankan. [docker cp](https://docs.docker.com/reference/cli/docker/container/cp/) mendukung penyalinan dari container yang berhenti. Setelah menyalin template, migrasikan status persisten dari direktori lama:
 
@@ -330,9 +343,11 @@ Pemeriksaan menetapkan `release_ready` menjadi `true` di `summary.json` hanya se
 
 Rilis resmi memakai tag Git `vMAJOR.MINOR` atau `vMAJOR.MINOR.PATCH`. Alur kerja memeriksa satu image secara lengkap lalu menerbitkannya ke GHCR dengan tag versi, SHA commit, serta atestasi asal build. Rilis otomatis untuk versi tertinggi memperbarui `latest`; pengulangan manual hanya memperbarui versi yang ditentukan dan tag SHA.
 
+<!-- release-doc:release-command:start -->
 ```bash
-gh workflow run release.yml -f release_tag=v2.2.5
+gh workflow run release.yml -f release_tag=v2.2.7
 ```
+<!-- release-doc:release-command:end -->
 
 `build.sh` membungkus build lokal; argumen `push` mengirim image secara langsung. Distribusi resmi mengikuti [persyaratan pemeriksaan live lengkap](../adr/0005-require-the-live-release-gate.md) dan alur tag di atas.
 

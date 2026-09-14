@@ -10,6 +10,11 @@
 
 <!-- README-I18N:END -->
 
+<!-- release-doc:identity:start -->
+Release Version: `v2.2.7` · [Compatibility](../compatibility.md) · [Release](https://github.com/yangchuansheng/eaglerXserver/releases/tag/v2.2.7) · [Release Verification Record](../verification/v2.2.7.md).
+<!-- release-doc:identity:end -->
+
+
 [快速启动](#快速启动) · [玩家加入](#玩家首次加入) · [管理与插件](#管理面与插件) · [备份与升级](#备份升级与回滚) · [运维排错](#常用运维与排错) · [环境变量](#环境变量) · [管理 API](#管理-api) · [开发与发布](#开发构建与发布) · [问题反馈](#问题反馈)
 
 ## 功能
@@ -36,8 +41,9 @@
 
 示例将宿主机的 `/data/eagler-1.12` 挂载为容器内的 `/eaglerX-1.8-server`，持久化**整个运行目录**，一起保存世界、插件、配置和前端文件。首次使用空目录会自动初始化；目录结构残缺时保留原数据并退出。已有实例请按 [备份、升级与回滚](#备份升级与回滚) 迁移运行文件。
 
+<!-- release-doc:quick-start:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 
 docker run -d \
   --name eaglerx-1.12 \
@@ -49,8 +55,9 @@ docker run -d \
   -e MINECRAFT_VERSION=1.12 \
   -e 'RCON_PASSWORD=replace-with-a-strong-password' \
   -e 'PUBLIC_GAME_URL=http://YOUR_SERVER:5200' \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 ```
+<!-- release-doc:quick-start:end -->
 
 ### 3. 打开管理面并确认就绪
 
@@ -86,7 +93,9 @@ HTTPS 游戏入口需要配置 DNS、证书，以及指向 **5200** 的 HTTP 和
 
 ### 选择 1.8 或同时运行两个版本
 
-`2.2.5` 是镜像发布版本；`MINECRAFT_VERSION=1.8` 选择 Paper 1.8.8，`1.12` 选择 Paper 1.12.2。每个容器一次运行一个游戏版本，并使用独立运行目录。
+<!-- release-doc:version-guidance:start -->
+`2.2.7` 是镜像发布版本；`MINECRAFT_VERSION=1.8` 选择 Paper 1.8.8，`1.12` 选择 Paper 1.12.2。每个容器一次运行一个游戏版本，并使用独立运行目录。
+<!-- release-doc:version-guidance:end -->
 
 在快速启动命令中调整以下参数即可运行 1.8：
 
@@ -174,17 +183,21 @@ sudo tar -czf "/data/backups/eagler-1.12-$(date +%Y%m%d-%H%M%S).tar.gz" \
 
 **第一步：停服备份。** 保留旧容器、旧运行目录和旧镜像版本。
 
-**第二步：准备新运行目录。** 从目标镜像复制完整模板。下面以 `2.2.5` 为目标；选择尚未使用的模板容器名和目录名：
+<!-- release-doc:version-guidance:start -->
+**第二步：准备新运行目录。** 从目标镜像复制完整模板。下面以 `2.2.7` 为目标；选择尚未使用的模板容器名和目录名：
+<!-- release-doc:version-guidance:end -->
 
+<!-- release-doc:upgrade-target:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 docker create --name eaglerx-upgrade-template --platform linux/amd64 \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 sudo mkdir /data/eagler-1.12-next
 sudo docker cp eaglerx-upgrade-template:/opt/eaglerX-1.8-server-image/. \
   /data/eagler-1.12-next/
 docker rm eaglerx-upgrade-template
 ```
+<!-- release-doc:upgrade-target:end -->
 
 模板容器保持未启动状态；[docker cp](https://docs.docker.com/reference/cli/docker/container/cp/) 支持从停止的容器复制文件。复制完成后，再迁移旧目录中的持久化状态：
 
@@ -330,9 +343,11 @@ agent-browser doctor
 
 正式发布使用 `vMAJOR.MINOR` 或 `vMAJOR.MINOR.PATCH` Git 标签：工作流对同一份镜像完成完整闸门后发布到 GHCR，并生成版本标签、提交 SHA 标签和构建来源证明。最高版本的自动发布更新 `latest`；手动重跑只更新指定版本与 SHA 标签。
 
+<!-- release-doc:release-command:start -->
 ```bash
-gh workflow run release.yml -f release_tag=v2.2.5
+gh workflow run release.yml -f release_tag=v2.2.7
 ```
+<!-- release-doc:release-command:end -->
 
 `build.sh` 提供本地构建封装，其 `push` 参数直接执行镜像推送。正式分发遵循 [完整 live gate 约定](../adr/0005-require-the-live-release-gate.md) 和上述标签工作流。
 

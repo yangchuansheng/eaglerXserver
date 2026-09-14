@@ -1,0 +1,807 @@
+{
+  "recorded_at": "2026-09-13T14:44:08.543156+00:00",
+  "operator": "Codex; both real browsers controlled by one agent",
+  "scope": "Disposable Sealos Linux AMD64 workloads; see README for exact image/template and overlays",
+  "api_observations": {
+    "runtime-18": [
+      {
+        "version": "1.8",
+        "observed_at": "2026-09-13T08:12:15.470815+00:00",
+        "status": {
+          "success": true,
+          "rcon_host": "127.0.0.1",
+          "rcon_port": 25575,
+          "bridge_port": 5201,
+          "minecraft_version": "1.8",
+          "native_seed_finder_ready": true,
+          "paper": {
+            "state": "ready",
+            "elapsed_seconds": null
+          }
+        }
+      },
+      {
+        "admin_login": "pass",
+        "result": {
+          "success": true,
+          "response": "This server is running CraftBukkit version git-PaperSpigot-445 (MC: 1.8.8) (Implementing API version 1.8.8-R0.1-SNAPSHOT)\nError obtaining version information\n",
+          "auth_kind": "token"
+        }
+      }
+    ],
+    "runtime-112": [
+      {
+        "version": "1.12",
+        "observed_at": "2026-09-13T08:10:34.157541+00:00",
+        "status": {
+          "success": true,
+          "rcon_host": "127.0.0.1",
+          "rcon_port": 25575,
+          "bridge_port": 5201,
+          "minecraft_version": "1.12",
+          "native_seed_finder_ready": true,
+          "paper": {
+            "state": "ready",
+            "elapsed_seconds": null
+          }
+        }
+      },
+      {
+        "admin_login": "pass",
+        "result": {
+          "success": true,
+          "response": "This server is running Paper version git-Paper-1620 (MC: 1.12.2) (Implementing API version 1.12.2-R0.1-SNAPSHOT)\nChecking version, please wait...\n",
+          "auth_kind": "token"
+        }
+      }
+    ],
+    "runtime-auth-18": [
+      {
+        "version": "1.8",
+        "observed_at": "2026-09-13T09:15:58.742216+00:00",
+        "status": {
+          "success": true,
+          "rcon_host": "127.0.0.1",
+          "rcon_port": 25575,
+          "bridge_port": 5201,
+          "minecraft_version": "1.8",
+          "native_seed_finder_ready": true,
+          "paper": {
+            "state": "ready",
+            "elapsed_seconds": null
+          }
+        }
+      },
+      {
+        "command": "version LoginSecurity",
+        "admin_login": "pass",
+        "result": {
+          "success": true,
+          "response": "\u00a7aLoginSecurity\u00a7f version \u00a7a3.2.0\nThe #1 Auth plugin\nAuthor: \u00a7alenis0012\n",
+          "auth_kind": "token"
+        }
+      }
+    ],
+    "two-player-18": [
+      {
+        "version": "1.8",
+        "observed_at": "2026-09-13T08:43:51.280816+00:00",
+        "status": {
+          "success": true,
+          "rcon_host": "127.0.0.1",
+          "rcon_port": 25575,
+          "bridge_port": 5201,
+          "minecraft_version": "1.8",
+          "native_seed_finder_ready": true,
+          "paper": {
+            "state": "ready",
+            "elapsed_seconds": null
+          }
+        }
+      },
+      {
+        "command": "list",
+        "admin_login": "pass",
+        "result": {
+          "success": true,
+          "response": "There are 2/20 players online:YeeishYeae812, YeeishVigg612",
+          "auth_kind": "token"
+        }
+      }
+    ],
+    "two-player-112": [
+      {
+        "version": "1.12",
+        "observed_at": "2026-09-13T09:06:06.295309+00:00",
+        "status": {
+          "success": true,
+          "rcon_host": "127.0.0.1",
+          "rcon_port": 25575,
+          "bridge_port": 5201,
+          "minecraft_version": "1.12",
+          "native_seed_finder_ready": true,
+          "paper": {
+            "state": "ready",
+            "elapsed_seconds": null
+          }
+        }
+      },
+      {
+        "command": "list",
+        "admin_login": "pass",
+        "result": {
+          "success": true,
+          "response": "There are 2/20 players online:C03Player112, YeeishVigg5258",
+          "auth_kind": "token"
+        }
+      }
+    ],
+    "restart-18": [
+      {
+        "version": "1.8",
+        "observed_at": "2026-09-13T08:35:20.864442+00:00",
+        "status": {
+          "success": true,
+          "rcon_host": "127.0.0.1",
+          "rcon_port": 25575,
+          "bridge_port": 5201,
+          "minecraft_version": "1.8",
+          "native_seed_finder_ready": true,
+          "paper": {
+            "state": "ready",
+            "elapsed_seconds": null
+          }
+        }
+      },
+      {
+        "admin_login": "pass",
+        "result": {
+          "success": true,
+          "message": "Paper is ready.",
+          "restart_in_progress": false
+        }
+      }
+    ],
+    "restart-112": [
+      {
+        "version": "1.12",
+        "observed_at": "2026-09-13T08:56:45.303211+00:00",
+        "status": {
+          "success": true,
+          "rcon_host": "127.0.0.1",
+          "rcon_port": 25575,
+          "bridge_port": 5201,
+          "minecraft_version": "1.12",
+          "native_seed_finder_ready": true,
+          "paper": {
+            "state": "ready",
+            "elapsed_seconds": null
+          }
+        }
+      },
+      {
+        "command": "tp C03Player112 100 65 178",
+        "admin_login": "pass",
+        "result": {
+          "success": true,
+          "response": "Teleported C03Player112 to 100.5, 65.0, 178.5",
+          "auth_kind": "token"
+        }
+      },
+      {
+        "command": "save-all",
+        "admin_login": "pass",
+        "result": {
+          "success": true,
+          "response": "Saving...Saved the world",
+          "auth_kind": "token"
+        }
+      },
+      {
+        "command": "controlled restart",
+        "admin_login": "pass",
+        "result": {
+          "success": true,
+          "message": "Paper is ready.",
+          "restart_in_progress": false
+        }
+      }
+    ],
+    "restored-block-18": [
+      {
+        "version": "1.8",
+        "observed_at": "2026-09-13T08:54:32.132701+00:00",
+        "status": {
+          "success": true,
+          "rcon_host": "127.0.0.1",
+          "rcon_port": 25575,
+          "bridge_port": 5201,
+          "minecraft_version": "1.8",
+          "native_seed_finder_ready": true,
+          "paper": {
+            "state": "ready",
+            "elapsed_seconds": null
+          }
+        }
+      },
+      {
+        "command": "testforblock -184 70 290 minecraft:gold_block",
+        "admin_login": "pass",
+        "result": {
+          "success": true,
+          "response": "Successfully found the block at -184,70,290.",
+          "auth_kind": "token"
+        }
+      }
+    ],
+    "restored-block-112": [
+      {
+        "version": "1.12",
+        "observed_at": "2026-09-13T09:35:09.560789+00:00",
+        "status": {
+          "success": true,
+          "rcon_host": "127.0.0.1",
+          "rcon_port": 25575,
+          "bridge_port": 5201,
+          "minecraft_version": "1.12",
+          "native_seed_finder_ready": true,
+          "paper": {
+            "state": "ready",
+            "elapsed_seconds": null
+          }
+        }
+      },
+      {
+        "command": "testforblock 100 64 180 minecraft:gold_block",
+        "admin_login": "pass",
+        "result": {
+          "success": true,
+          "response": "Successfully found the block at 100, 64, 180",
+          "auth_kind": "token"
+        }
+      }
+    ],
+    "upgraded-block-18": [
+      {
+        "version": "1.8",
+        "observed_at": "2026-09-13T09:11:56.829520+00:00",
+        "status": {
+          "success": true,
+          "rcon_host": "127.0.0.1",
+          "rcon_port": 25575,
+          "bridge_port": 5201,
+          "minecraft_version": "1.8",
+          "native_seed_finder_ready": true,
+          "paper": {
+            "state": "ready",
+            "elapsed_seconds": null
+          }
+        }
+      },
+      {
+        "command": "testforblock -184 70 290 minecraft:gold_block",
+        "admin_login": "pass",
+        "result": {
+          "success": true,
+          "response": "Successfully found the block at -184,70,290.",
+          "auth_kind": "token"
+        }
+      }
+    ],
+    "upgraded-block-112": [
+      {
+        "version": "1.12",
+        "observed_at": "2026-09-13T09:53:10.990019+00:00",
+        "status": {
+          "success": true,
+          "rcon_host": "127.0.0.1",
+          "rcon_port": 25575,
+          "bridge_port": 5201,
+          "minecraft_version": "1.12",
+          "native_seed_finder_ready": true,
+          "paper": {
+            "state": "ready",
+            "elapsed_seconds": null
+          }
+        }
+      },
+      {
+        "command": "testforblock 100 64 180 gold_block",
+        "admin_login": "pass",
+        "result": {
+          "success": true,
+          "response": "Successfully found the block at 100, 64, 180",
+          "auth_kind": "token"
+        }
+      }
+    ],
+    "rollback-block-112": [
+      {
+        "version": "1.12",
+        "observed_at": "2026-09-13T09:56:05.599607+00:00",
+        "status": {
+          "success": true,
+          "rcon_host": "127.0.0.1",
+          "rcon_port": 25575,
+          "bridge_port": 5201,
+          "minecraft_version": "1.12",
+          "native_seed_finder_ready": true,
+          "paper": {
+            "state": "ready",
+            "elapsed_seconds": null
+          }
+        }
+      },
+      {
+        "command": "testforblock 100 64 180 gold_block",
+        "admin_login": "pass",
+        "result": {
+          "success": true,
+          "response": "Successfully found the block at 100, 64, 180",
+          "auth_kind": "token"
+        }
+      }
+    ]
+  },
+  "state_snapshots": {
+    "state-upgraded-18": {
+      "game_version": "1.8",
+      "players": [
+        {
+          "name": "YeeishYeae812",
+          "uuid": "8e47504a-19a7-3d2b-811c-a31939180a69",
+          "inventory": [
+            {
+              "Slot": 0,
+              "id": "minecraft:diamond",
+              "Count": 3,
+              "Damage": 0
+            }
+          ],
+          "position": [
+            -183.5,
+            69.0,
+            287.5
+          ],
+          "game_mode": 1
+        }
+      ],
+      "configuration_hashes": {
+        "ops.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "whitelist.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "plugins/SimpleHomes/Homes.yml": "16bc49e1e4b663da3c00488416e9f3a8eed3a5cc1cdfff52a46aea71ff620299",
+        "plugins/SimpleHomes/config.yml": "bd6b30edb9e80304552ca536d2f2d3fc10acffa3e1cb28ec4abcc99b2b1efd2c",
+        "plugins/LoginSecurity/config.yml": "888da9736449b2caf5547d73dabeab27ef38aa8afa008a95acdec55c7007f3d8"
+      },
+      "homes": "YeeishYeae812:\n  c03:\n    world: world\n    X: -183.5\n    Y: 70.0\n    Z: 257.5\n"
+    },
+    "state-archive-18": {
+      "game_version": "1.8",
+      "players": [
+        {
+          "name": "YeeishYeae812",
+          "uuid": "8e47504a-19a7-3d2b-811c-a31939180a69",
+          "inventory": [
+            {
+              "Slot": 0,
+              "id": "minecraft:diamond",
+              "Count": 3,
+              "Damage": 0
+            }
+          ],
+          "position": [
+            -183.5,
+            69.0,
+            287.5
+          ],
+          "game_mode": 1
+        }
+      ],
+      "configuration_hashes": {
+        "ops.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "whitelist.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "plugins/SimpleHomes/Homes.yml": "16bc49e1e4b663da3c00488416e9f3a8eed3a5cc1cdfff52a46aea71ff620299",
+        "plugins/SimpleHomes/config.yml": "bd6b30edb9e80304552ca536d2f2d3fc10acffa3e1cb28ec4abcc99b2b1efd2c",
+        "plugins/LoginSecurity/config.yml": "888da9736449b2caf5547d73dabeab27ef38aa8afa008a95acdec55c7007f3d8"
+      },
+      "homes": "YeeishYeae812:\n  c03:\n    world: world\n    X: -183.5\n    Y: 70.0\n    Z: 257.5\n"
+    },
+    "state-archive-112": {
+      "game_version": "1.12",
+      "players": [
+        {
+          "name": "C03Player112",
+          "uuid": "a4e8af9c-2668-362c-9f5b-c9a9a6de02ae",
+          "inventory": [
+            {
+              "Slot": 0,
+              "id": "minecraft:diamond",
+              "Count": 3,
+              "Damage": 0
+            },
+            {
+              "Slot": 1,
+              "id": "minecraft:egg",
+              "Count": 1,
+              "Damage": 0
+            }
+          ],
+          "position": [
+            100.5,
+            61.0,
+            205.69999998807907
+          ],
+          "game_mode": 1
+        }
+      ],
+      "configuration_hashes": {
+        "ops.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "whitelist.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "plugins/SimpleHomes/Homes.yml": "6cd92734b537ccd4ac82c99dfe18e4dd7383af6c65b58c7cec4e16ee778e67f4",
+        "plugins/SimpleHomes/config.yml": "bd6b30edb9e80304552ca536d2f2d3fc10acffa3e1cb28ec4abcc99b2b1efd2c",
+        "plugins/LoginSecurity/config.yml": "888da9736449b2caf5547d73dabeab27ef38aa8afa008a95acdec55c7007f3d8"
+      },
+      "homes": "C03Player112:\n  c03:\n    world: world\n    X: 100.48465939215384\n    Y: 64.0\n    Z: 182.24374247395244\n"
+    },
+    "state-rollback-18": {
+      "game_version": "1.8",
+      "players": [
+        {
+          "name": "YeeishYeae812",
+          "uuid": "8e47504a-19a7-3d2b-811c-a31939180a69",
+          "inventory": [
+            {
+              "Slot": 0,
+              "id": "minecraft:diamond",
+              "Count": 3,
+              "Damage": 0
+            }
+          ],
+          "position": [
+            -183.5,
+            69.0,
+            287.5
+          ],
+          "game_mode": 1
+        }
+      ],
+      "configuration_hashes": {
+        "ops.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "whitelist.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "plugins/SimpleHomes/Homes.yml": "16bc49e1e4b663da3c00488416e9f3a8eed3a5cc1cdfff52a46aea71ff620299",
+        "plugins/SimpleHomes/config.yml": "bd6b30edb9e80304552ca536d2f2d3fc10acffa3e1cb28ec4abcc99b2b1efd2c",
+        "plugins/LoginSecurity/config.yml": "888da9736449b2caf5547d73dabeab27ef38aa8afa008a95acdec55c7007f3d8"
+      },
+      "homes": "YeeishYeae812:\n  c03:\n    world: world\n    X: -183.5\n    Y: 70.0\n    Z: 257.5\n"
+    },
+    "state-upgraded-112": {
+      "game_version": "1.12",
+      "players": [
+        {
+          "name": "C03Player112",
+          "uuid": "a4e8af9c-2668-362c-9f5b-c9a9a6de02ae",
+          "inventory": [
+            {
+              "Slot": 0,
+              "id": "minecraft:diamond",
+              "Count": 3,
+              "Damage": 0
+            },
+            {
+              "Slot": 1,
+              "id": "minecraft:egg",
+              "Count": 1,
+              "Damage": 0
+            }
+          ],
+          "position": [
+            100.62775485526963,
+            61.0,
+            205.69999998807907
+          ],
+          "game_mode": 1
+        }
+      ],
+      "configuration_hashes": {
+        "ops.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "whitelist.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "plugins/SimpleHomes/Homes.yml": "6cd92734b537ccd4ac82c99dfe18e4dd7383af6c65b58c7cec4e16ee778e67f4",
+        "plugins/SimpleHomes/config.yml": "bd6b30edb9e80304552ca536d2f2d3fc10acffa3e1cb28ec4abcc99b2b1efd2c",
+        "plugins/LoginSecurity/config.yml": "888da9736449b2caf5547d73dabeab27ef38aa8afa008a95acdec55c7007f3d8"
+      },
+      "homes": "C03Player112:\n  c03:\n    world: world\n    X: 100.48465939215384\n    Y: 64.0\n    Z: 182.24374247395244\n"
+    },
+    "state-restored-112": {
+      "game_version": "1.12",
+      "players": [
+        {
+          "name": "C03Player112",
+          "uuid": "a4e8af9c-2668-362c-9f5b-c9a9a6de02ae",
+          "inventory": [
+            {
+              "Slot": 0,
+              "id": "minecraft:diamond",
+              "Count": 3,
+              "Damage": 0
+            },
+            {
+              "Slot": 1,
+              "id": "minecraft:egg",
+              "Count": 1,
+              "Damage": 0
+            }
+          ],
+          "position": [
+            100.5,
+            61.0,
+            205.69999998807907
+          ],
+          "game_mode": 1
+        }
+      ],
+      "configuration_hashes": {
+        "ops.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "whitelist.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "plugins/SimpleHomes/Homes.yml": "6cd92734b537ccd4ac82c99dfe18e4dd7383af6c65b58c7cec4e16ee778e67f4",
+        "plugins/SimpleHomes/config.yml": "bd6b30edb9e80304552ca536d2f2d3fc10acffa3e1cb28ec4abcc99b2b1efd2c",
+        "plugins/LoginSecurity/config.yml": "888da9736449b2caf5547d73dabeab27ef38aa8afa008a95acdec55c7007f3d8"
+      },
+      "homes": "C03Player112:\n  c03:\n    world: world\n    X: 100.48465939215384\n    Y: 64.0\n    Z: 182.24374247395244\n"
+    },
+    "state-source-112": {
+      "game_version": "1.12",
+      "players": [
+        {
+          "name": "C03Player112",
+          "uuid": "a4e8af9c-2668-362c-9f5b-c9a9a6de02ae",
+          "inventory": [
+            {
+              "Slot": 0,
+              "id": "minecraft:diamond",
+              "Count": 3,
+              "Damage": 0
+            },
+            {
+              "Slot": 1,
+              "id": "minecraft:egg",
+              "Count": 1,
+              "Damage": 0
+            }
+          ],
+          "position": [
+            100.62775485526963,
+            61.0,
+            205.69999998807907
+          ],
+          "game_mode": 1
+        }
+      ],
+      "configuration_hashes": {
+        "ops.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "whitelist.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "plugins/SimpleHomes/Homes.yml": "6cd92734b537ccd4ac82c99dfe18e4dd7383af6c65b58c7cec4e16ee778e67f4",
+        "plugins/SimpleHomes/config.yml": "bd6b30edb9e80304552ca536d2f2d3fc10acffa3e1cb28ec4abcc99b2b1efd2c",
+        "plugins/LoginSecurity/config.yml": "888da9736449b2caf5547d73dabeab27ef38aa8afa008a95acdec55c7007f3d8"
+      },
+      "homes": "C03Player112:\n  c03:\n    world: world\n    X: 100.48465939215384\n    Y: 64.0\n    Z: 182.24374247395244\n"
+    },
+    "state-source-18": {
+      "game_version": "1.8",
+      "players": [
+        {
+          "name": "YeeishYeae812",
+          "uuid": "8e47504a-19a7-3d2b-811c-a31939180a69",
+          "inventory": [
+            {
+              "Slot": 0,
+              "id": "minecraft:diamond",
+              "Count": 3,
+              "Damage": 0
+            }
+          ],
+          "position": [
+            -183.5,
+            69.0,
+            287.5
+          ],
+          "game_mode": 1
+        }
+      ],
+      "configuration_hashes": {
+        "ops.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "whitelist.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "plugins/SimpleHomes/Homes.yml": "16bc49e1e4b663da3c00488416e9f3a8eed3a5cc1cdfff52a46aea71ff620299",
+        "plugins/SimpleHomes/config.yml": "bd6b30edb9e80304552ca536d2f2d3fc10acffa3e1cb28ec4abcc99b2b1efd2c",
+        "plugins/LoginSecurity/config.yml": "888da9736449b2caf5547d73dabeab27ef38aa8afa008a95acdec55c7007f3d8"
+      },
+      "homes": "YeeishYeae812:\n  c03:\n    world: world\n    X: -183.5\n    Y: 70.0\n    Z: 257.5\n"
+    },
+    "state-rollback-112": {
+      "game_version": "1.12",
+      "players": [
+        {
+          "name": "C03Player112",
+          "uuid": "a4e8af9c-2668-362c-9f5b-c9a9a6de02ae",
+          "inventory": [
+            {
+              "Slot": 0,
+              "id": "minecraft:diamond",
+              "Count": 3,
+              "Damage": 0
+            },
+            {
+              "Slot": 1,
+              "id": "minecraft:egg",
+              "Count": 1,
+              "Damage": 0
+            }
+          ],
+          "position": [
+            100.62775485526963,
+            61.0,
+            205.69999998807907
+          ],
+          "game_mode": 1
+        }
+      ],
+      "configuration_hashes": {
+        "ops.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "whitelist.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "plugins/SimpleHomes/Homes.yml": "6cd92734b537ccd4ac82c99dfe18e4dd7383af6c65b58c7cec4e16ee778e67f4",
+        "plugins/SimpleHomes/config.yml": "bd6b30edb9e80304552ca536d2f2d3fc10acffa3e1cb28ec4abcc99b2b1efd2c",
+        "plugins/LoginSecurity/config.yml": "888da9736449b2caf5547d73dabeab27ef38aa8afa008a95acdec55c7007f3d8"
+      },
+      "homes": "C03Player112:\n  c03:\n    world: world\n    X: 100.48465939215384\n    Y: 64.0\n    Z: 182.24374247395244\n"
+    }
+  },
+  "pod_image_ids": {
+    "image-rollback-18": "ghcr.io/yangchuansheng/eaglerx1.8server@sha256:4182f021393cbbded567297b98cffde1970090f10d912dc9116d051130e7b14c",
+    "image-upgraded-112": "ghcr.io/yangchuansheng/eaglerx1.8server@sha256:56ad224a996030b7bfb2837702f065fe88685eda511d7a186812f22dc5cad047",
+    "image-rollback-112": "ghcr.io/yangchuansheng/eaglerx1.8server@sha256:4182f021393cbbded567297b98cffde1970090f10d912dc9116d051130e7b14c"
+  },
+  "screenshots": {
+    "1.12-registration.png": {
+      "retained_at": "2026-09-13T08:54:03.039501+00:00",
+      "timestamp_scope": "Local evidence file retention time"
+    },
+    "1.8-fresh-pvc-restore.png": {
+      "retained_at": "2026-09-13T08:58:48.302235+00:00",
+      "timestamp_scope": "Local evidence file retention time"
+    },
+    "1.12-rollback-2.2.5.png": {
+      "retained_at": "2026-09-13T14:42:30.484565+00:00",
+      "timestamp_scope": "Local evidence file retention time"
+    },
+    "1.12-upgraded-2.2.7.png": {
+      "retained_at": "2026-09-13T09:53:51.302763+00:00",
+      "timestamp_scope": "Local evidence file retention time"
+    },
+    "1.8-upgrade-source-2.2.5.png": {
+      "retained_at": "2026-09-13T09:07:15.892451+00:00",
+      "timestamp_scope": "Local evidence file retention time"
+    },
+    "1.12-paper-restart.png": {
+      "retained_at": "2026-09-13T09:02:57.367852+00:00",
+      "timestamp_scope": "Local evidence file retention time"
+    },
+    "1.8-rollback-2.2.5.png": {
+      "retained_at": "2026-09-13T09:20:55.863761+00:00",
+      "timestamp_scope": "Local evidence file retention time"
+    },
+    "1.8-two-players.png": {
+      "retained_at": "2026-09-13T08:46:32.976019+00:00",
+      "timestamp_scope": "Local evidence file retention time"
+    },
+    "1.12-second-network-registration.png": {
+      "retained_at": "2026-09-13T09:06:36.384773+00:00",
+      "timestamp_scope": "Local evidence file retention time"
+    },
+    "1.12-return-login.png": {
+      "retained_at": "2026-09-13T08:56:44.147754+00:00",
+      "timestamp_scope": "Local evidence file retention time"
+    },
+    "1.12-rollback-client-crash.png": {
+      "retained_at": "2026-09-13T09:56:55.492201+00:00",
+      "timestamp_scope": "Local evidence file retention time"
+    },
+    "1.8-upgraded-2.2.7.png": {
+      "retained_at": "2026-09-13T09:13:26.610733+00:00",
+      "timestamp_scope": "Local evidence file retention time"
+    },
+    "1.12-upgrade-source-2.2.5.png": {
+      "retained_at": "2026-09-13T09:49:02.463144+00:00",
+      "timestamp_scope": "Local evidence file retention time"
+    },
+    "1.8-paper-restart.png": {
+      "retained_at": "2026-09-13T08:39:33.697876+00:00",
+      "timestamp_scope": "Local evidence file retention time"
+    },
+    "1.12-fresh-pvc-restore.png": {
+      "retained_at": "2026-09-13T09:35:08.703328+00:00",
+      "timestamp_scope": "Local evidence file retention time"
+    },
+    "1.8-second-network-login.png": {
+      "retained_at": "2026-09-13T08:44:17.054024+00:00",
+      "timestamp_scope": "Local evidence file retention time"
+    }
+  },
+  "state_comparisons": {
+    "2.2.5-source-18-versus-upgraded": {
+      "complete_selected_snapshot_equal": true,
+      "fields": [
+        "game_version",
+        "player name and UUID",
+        "inventory",
+        "position",
+        "game_mode",
+        "selected configuration hashes",
+        "homes"
+      ]
+    },
+    "2.2.5-source-18-versus-rollback": {
+      "complete_selected_snapshot_equal": true,
+      "fields": [
+        "game_version",
+        "player name and UUID",
+        "inventory",
+        "position",
+        "game_mode",
+        "selected configuration hashes",
+        "homes"
+      ]
+    },
+    "2.2.5-source-112-versus-upgraded": {
+      "complete_selected_snapshot_equal": true,
+      "fields": [
+        "game_version",
+        "player name and UUID",
+        "inventory",
+        "position",
+        "game_mode",
+        "selected configuration hashes",
+        "homes"
+      ]
+    },
+    "2.2.5-source-112-versus-rollback": {
+      "complete_selected_snapshot_equal": true,
+      "fields": [
+        "game_version",
+        "player name and UUID",
+        "inventory",
+        "position",
+        "game_mode",
+        "selected configuration hashes",
+        "homes"
+      ]
+    },
+    "1.12-original-archive-versus-fresh-PVC": {
+      "complete_selected_snapshot_equal": true
+    }
+  },
+  "archive_retention": {
+    "18.tar.gz": {
+      "off_cluster": true,
+      "bytes": 287526964,
+      "sha256_matches_source": true,
+      "access": "Private local file, mode 0600; digest retained privately"
+    },
+    "18-source-2.2.5.tar.gz": {
+      "off_cluster": true,
+      "bytes": 287605662,
+      "sha256_matches_source": true,
+      "access": "Private local file, mode 0600; digest retained privately"
+    },
+    "112.tar.gz": {
+      "off_cluster": true,
+      "bytes": 287625191,
+      "sha256_matches_source": true,
+      "access": "Private local file, mode 0600; digest retained privately"
+    },
+    "112-source-2.2.5.tar.gz": {
+      "off_cluster": true,
+      "bytes": 287662770,
+      "sha256_matches_source": true,
+      "access": "Private local file, mode 0600; digest retained privately"
+    }
+  }
+}

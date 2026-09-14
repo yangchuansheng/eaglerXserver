@@ -10,6 +10,11 @@ Oyuncuların tarayıcıdan katılabildiği, kalıcı depolama ve oyuncuları, d�
 
 <!-- README-I18N:END -->
 
+<!-- release-doc:identity:start -->
+Release Version: `v2.2.7` · [Compatibility](../compatibility.md) · [Release](https://github.com/yangchuansheng/eaglerXserver/releases/tag/v2.2.7) · [Release Verification Record](../verification/v2.2.7.md).
+<!-- release-doc:identity:end -->
+
+
 [Hızlı başlangıç](#hızlı-başlangıç) · [Sunucuya katılma](#sunucuya-katılma) · [Panel ve eklentiler](#yönetim-paneli-ve-eklentiler) · [Yedekleme ve yükseltme](#yedekleme-yükseltme-ve-geri-alma) · [Sorun giderme](#i̇şletim-ve-sorun-giderme) · [Ortam değişkenleri](#ortam-değişkenleri) · [Yönetim API’si](#yönetim-apisi) · [Geliştirme ve yayımlama](#geliştirme-derleme-ve-yayımlama) · [Sorun bildirme](#sorun-bildirme)
 
 ## Özellikler
@@ -36,8 +41,9 @@ Bu komutları sunucuda çalıştırın. `YOUR_SERVER` yerine oyuncuların erişe
 
 Bu örnek ana makinedeki `/data/eagler-1.12` dizinini konteyner içinde `/eaglerX-1.8-server` konumuna bağlar ve **çalışma dizininin tamamını** kalıcı tutar: dünyalar, eklentiler, yapılandırma ve ön yüz dosyaları. Boş dizin ilk kullanımda otomatik hazırlanır. Var olan dizin eksikse başlatma işlemi içeriği koruyarak sonlanır. Mevcut kurulumun çalışma dosyalarını taşımak için [Yedekleme, yükseltme ve geri alma](#yedekleme-yükseltme-ve-geri-alma) adımlarını izleyin.
 
+<!-- release-doc:quick-start:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 
 docker run -d \
   --name eaglerx-1.12 \
@@ -49,8 +55,9 @@ docker run -d \
   -e MINECRAFT_VERSION=1.12 \
   -e 'RCON_PASSWORD=replace-with-a-strong-password' \
   -e 'PUBLIC_GAME_URL=http://YOUR_SERVER:5200' \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 ```
+<!-- release-doc:quick-start:end -->
 
 ### 3. Paneli açın ve hazırlık durumunu kontrol edin
 
@@ -86,7 +93,9 @@ HTTPS oyun girişi için DNS, sertifika ve **5200** portuna HTTP ile WebSocket y
 
 ### 1.8 seçimi veya iki sürümü birlikte çalıştırma
 
-`2.2.5`, imajın yayın sürümüdür. `MINECRAFT_VERSION=1.8` Paper 1.8.8’i, `1.12` Paper 1.12.2’yi seçer. Her konteyner aynı anda tek bir oyun sürümü çalıştırır ve kendi çalışma dizinini kullanır.
+<!-- release-doc:version-guidance:start -->
+`2.2.7`, imajın yayın sürümüdür. `MINECRAFT_VERSION=1.8` Paper 1.8.8’i, `1.12` Paper 1.12.2’yi seçer. Her konteyner aynı anda tek bir oyun sürümü çalıştırır ve kendi çalışma dizinini kullanır.
+<!-- release-doc:version-guidance:end -->
 
 1.8 çalıştırmak için hızlı başlangıç komutunda şu parametreleri değiştirin:
 
@@ -174,17 +183,21 @@ Durma sinyali alındığında giriş noktası Paper’a en fazla 30 saniye, ard�
 
 **Adım 1: Durdurun ve yedekleyin.** Eski konteyneri, çalışma dizinini ve imaj sürümünü saklayın.
 
-**Adım 2: Yeni çalışma dizini hazırlayın.** Hedef imajdan tam şablonu kopyalayın. Bu örnek `2.2.5` kullanır; kullanılmayan bir şablon konteyner adı ve dizin seçin:
+<!-- release-doc:version-guidance:start -->
+**Adım 2: Yeni çalışma dizini hazırlayın.** Hedef imajdan tam şablonu kopyalayın. Bu örnek `2.2.7` kullanır; kullanılmayan bir şablon konteyner adı ve dizin seçin:
+<!-- release-doc:version-guidance:end -->
 
+<!-- release-doc:upgrade-target:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 docker create --name eaglerx-upgrade-template --platform linux/amd64 \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 sudo mkdir /data/eagler-1.12-next
 sudo docker cp eaglerx-upgrade-template:/opt/eaglerX-1.8-server-image/. \
   /data/eagler-1.12-next/
 docker rm eaglerx-upgrade-template
 ```
+<!-- release-doc:upgrade-target:end -->
 
 Şablon konteyneri başlatılmamış halde bırakın. [docker cp](https://docs.docker.com/reference/cli/docker/container/cp/) durmuş konteynerlerden dosya kopyalayabilir. Şablondan sonra eski dizindeki kalıcı durumu taşıyın:
 
@@ -330,9 +343,11 @@ Kontrol, tüm `--live` denetimleri geçince `summary.json` içindeki `release_re
 
 Resmî sürümler `vMAJOR.MINOR` veya `vMAJOR.MINOR.PATCH` Git etiketlerini kullanır. İş akışı aynı imajı tamamen doğrular, ardından sürüm ve commit SHA etiketleriyle ve derleme kaynağı doğrulamasıyla GHCR’a yayımlar. En yüksek sürümün otomatik yayını `latest` etiketini günceller. Elle tekrar çalıştırmalar yalnızca belirtilen sürümü ve SHA etiketlerini günceller.
 
+<!-- release-doc:release-command:start -->
 ```bash
-gh workflow run release.yml -f release_tag=v2.2.5
+gh workflow run release.yml -f release_tag=v2.2.7
 ```
+<!-- release-doc:release-command:end -->
 
 `build.sh` yerel derlemeleri sarmalar; `push` argümanı imajı doğrudan gönderir. Resmî dağıtım [tam live gate koşuluna](../adr/0005-require-the-live-release-gate.md) ve yukarıdaki etiket iş akışına uyar.
 

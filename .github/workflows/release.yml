@@ -55,6 +55,7 @@ jobs:
             "HOME=${HOME}" \
             "PATH=${PATH}" \
             "AGENT_BROWSER_ARGS=--no-sandbox" \
+            "EAGLERX_RELEASE_TAG=${{ steps.release.outputs.release_tag }}" \
             "GIT_CONFIG_COUNT=1" \
             "GIT_CONFIG_KEY_0=safe.directory" \
             "GIT_CONFIG_VALUE_0=${GITHUB_WORKSPACE}" \
@@ -116,3 +117,30 @@ jobs:
           path: artifacts/release-gate
           if-no-files-found: ignore
           retention-days: 30
+
+      - name: Summarize release compatibility and evidence
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.release_tag }}
+          RELEASE_COMMIT: ${{ steps.release.outputs.commit }}
+          IMAGE_DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          if [ ! -f "docs/verification/${RELEASE_TAG}.md" ]; then
+            echo "Historical tag: retain this run's uploaded evidence and the existing release record." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Compatibility and release evidence
+
+          Image: \`${IMAGE}@${IMAGE_DIGEST}\` (Linux AMD64).
+          Bundled Game Versions: 1.8 and 1.12.
+
+          [Compatibility](https://github.com/yangchuansheng/eaglerXserver/blob/${RELEASE_COMMIT}/docs/compatibility.md)
+          · [Release Verification Record](https://github.com/yangchuansheng/eaglerXserver/blob/${RELEASE_COMMIT}/docs/verification/${RELEASE_TAG}.md)
+
+          The record identifies manual scenario outcomes, change-impact review,
+          migration/rollback evidence, and original dates of reused results.
+          Preserve this run's sanitized evidence with the versioned record and
+          link that durable record from the GitHub Release before publication.
+
+          [Setup and Sealos deployment handoff](https://github.com/yangchuansheng/eaglerXserver/blob/${RELEASE_COMMIT}/docs/compatibility.md#configuration-and-access-boundaries)
+          EOF

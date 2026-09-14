@@ -2,6 +2,29 @@
 
 本上下文定义游戏访问与服务器管理相关的统一语言，帮助代码、配置和部署文档保持一致的安全边界。
 
+## Compatibility and recovery language
+
+**Game Version (游戏版本)**: The Minecraft world/protocol lineage selected by
+`MINECRAFT_VERSION`. Keep it stable during a Release Upgrade.
+
+**Verified Configuration (已验证配置)**: The exact Release Image digest, platform,
+selected Game Version, component identities, deployment configuration, and named
+scenario evidence. Verification applies to the recorded scope.
+
+**Release Verification Record (发布验证记录)**: Durable, version-specific evidence
+identifying artifacts, configurations, execution dates, scenario outcomes,
+limitations, and explicit reviews of reused prior results.
+
+**World Recovery Copy (世界恢复副本)**: A separately retained consistent copy of
+worlds, player/authentication state, plugin data, and relevant configuration,
+validated by restoration into a fresh destination.
+
+**Release Upgrade (发布升级)**: Moving between explicitly identified Release
+Versions while preserving the selected Game Version and original recovery data.
+
+See [compatibility](docs/compatibility.md) for evidence status definitions and
+[release guidance](docs/release-gate.md) for verification cadence.
+
 ## Language
 
 **权威仓库**:

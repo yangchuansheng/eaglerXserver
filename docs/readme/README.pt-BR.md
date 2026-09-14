@@ -10,6 +10,11 @@ Execute um servidor de Minecraft que os jogadores acessam pelo navegador, com ar
 
 <!-- README-I18N:END -->
 
+<!-- release-doc:identity:start -->
+Release Version: `v2.2.7` · [Compatibility](../compatibility.md) · [Release](https://github.com/yangchuansheng/eaglerXserver/releases/tag/v2.2.7) · [Release Verification Record](../verification/v2.2.7.md).
+<!-- release-doc:identity:end -->
+
+
 [Início rápido](#início-rápido) · [Entrar no servidor](#entrar-no-servidor) · [Painel e plugins](#painel-de-administração-e-plugins) · [Backups e atualizações](#backups-atualizações-e-reversão-de-versão) · [Solução de problemas](#operação-e-solução-de-problemas) · [Variáveis de ambiente](#variáveis-de-ambiente) · [API de administração](#api-de-administração) · [Desenvolvimento e publicação](#desenvolvimento-build-e-publicação) · [Relatar problemas](#relatar-problemas)
 
 ## Recursos
@@ -36,8 +41,9 @@ Execute estes comandos no servidor. Substitua `YOUR_SERVER` por um IP ou domíni
 
 Este exemplo monta `/data/eagler-1.12` do host em `/eaglerX-1.8-server` dentro do contêiner e mantém **todo o diretório de execução** persistente: mundos, plugins, configuração e arquivos do frontend. Um diretório vazio é inicializado automaticamente no primeiro uso. Se um diretório existente estiver incompleto, a inicialização preserva seu conteúdo e encerra. Para uma implantação existente, siga [Backups, atualizações e reversão de versão](#backups-atualizações-e-reversão-de-versão) para migrar os arquivos de execução.
 
+<!-- release-doc:quick-start:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 
 docker run -d \
   --name eaglerx-1.12 \
@@ -49,8 +55,9 @@ docker run -d \
   -e MINECRAFT_VERSION=1.12 \
   -e 'RCON_PASSWORD=replace-with-a-strong-password' \
   -e 'PUBLIC_GAME_URL=http://YOUR_SERVER:5200' \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 ```
+<!-- release-doc:quick-start:end -->
 
 ### 3. Abrir o painel e verificar a prontidão
 
@@ -86,7 +93,9 @@ Um acesso HTTPS ao jogo exige DNS, certificado e encaminhamento HTTP e WebSocket
 
 ### Escolher 1.8 ou executar as duas versões
 
-`2.2.5` é a versão de lançamento da imagem. `MINECRAFT_VERSION=1.8` seleciona Paper 1.8.8, e `1.12` seleciona Paper 1.12.2. Cada contêiner executa uma versão do jogo por vez e usa seu próprio diretório.
+<!-- release-doc:version-guidance:start -->
+`2.2.7` é a versão de lançamento da imagem. `MINECRAFT_VERSION=1.8` seleciona Paper 1.8.8, e `1.12` seleciona Paper 1.12.2. Cada contêiner executa uma versão do jogo por vez e usa seu próprio diretório.
+<!-- release-doc:version-guidance:end -->
 
 Para executar 1.8, ajuste estes parâmetros no comando de início rápido:
 
@@ -174,17 +183,21 @@ Ao receber um sinal de parada, o ponto de entrada dá até 30 segundos para o Pa
 
 **Etapa 1: Parar e fazer backup.** Preserve o contêiner, o diretório e a versão da imagem antigos.
 
-**Etapa 2: Preparar um novo diretório de execução.** Copie o modelo completo da imagem de destino. Este exemplo usa `2.2.5`; escolha um nome de contêiner de modelo e um diretório ainda livres:
+<!-- release-doc:version-guidance:start -->
+**Etapa 2: Preparar um novo diretório de execução.** Copie o modelo completo da imagem de destino. Este exemplo usa `2.2.7`; escolha um nome de contêiner de modelo e um diretório ainda livres:
+<!-- release-doc:version-guidance:end -->
 
+<!-- release-doc:upgrade-target:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 docker create --name eaglerx-upgrade-template --platform linux/amd64 \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 sudo mkdir /data/eagler-1.12-next
 sudo docker cp eaglerx-upgrade-template:/opt/eaglerX-1.8-server-image/. \
   /data/eagler-1.12-next/
 docker rm eaglerx-upgrade-template
 ```
+<!-- release-doc:upgrade-target:end -->
 
 Mantenha o contêiner de modelo sem iniciar. [docker cp](https://docs.docker.com/reference/cli/docker/container/cp/) permite copiar arquivos de contêineres parados. Depois de copiar o modelo, migre o estado persistente do diretório antigo:
 
@@ -330,9 +343,11 @@ A validação define `release_ready` como `true` em `summary.json` somente após
 
 Publicações oficiais usam as tags Git `vMAJOR.MINOR` ou `vMAJOR.MINOR.PATCH`. O fluxo valida uma única imagem por completo e a publica no GHCR com tags de versão e SHA do commit e uma atestação de procedência do build. Publicações automáticas da versão mais alta atualizam `latest`; execuções manuais atualizam apenas a versão indicada e as tags SHA.
 
+<!-- release-doc:release-command:start -->
 ```bash
-gh workflow run release.yml -f release_tag=v2.2.5
+gh workflow run release.yml -f release_tag=v2.2.7
 ```
+<!-- release-doc:release-command:end -->
 
 `build.sh` simplifica os builds locais; seu argumento `push` envia a imagem diretamente. A distribuição oficial segue o [requisito de validação live completa](../adr/0005-require-the-live-release-gate.md) e o fluxo de tags acima.
 

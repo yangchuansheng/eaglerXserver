@@ -10,6 +10,11 @@
 
 <!-- README-I18N:END -->
 
+<!-- release-doc:identity:start -->
+Release Version: `v2.2.7` · [Compatibility](../compatibility.md) · [Release](https://github.com/yangchuansheng/eaglerXserver/releases/tag/v2.2.7) · [Release Verification Record](../verification/v2.2.7.md).
+<!-- release-doc:identity:end -->
+
+
 [त्वरित शुरुआत](#त्वरित-शुरुआत) · [सर्वर से जुड़ना](#सर्वर-से-जुड़ना) · [पैनल और प्लगइन](#एडमिन-पैनल-और-प्लगइन) · [बैकअप और अपग्रेड](#बैकअप-अपग्रेड-और-रोलबैक) · [समस्या समाधान](#संचालन-और-समस्या-समाधान) · [एनवायरनमेंट वेरिएबल](#एनवायरनमेंट-वेरिएबल) · [एडमिन API](#एडमिन-api) · [डेवलपमेंट और रिलीज़](#डेवलपमेंट-बिल्ड-और-रिलीज़) · [समस्या की रिपोर्ट](#समस्या-की-रिपोर्ट)
 
 ## सुविधाएँ
@@ -36,8 +41,9 @@
 
 यह उदाहरण होस्ट की `/data/eagler-1.12` डायरेक्टरी को कंटेनर के अंदर `/eaglerX-1.8-server` पर माउंट करता है और **पूरी रनटाइम डायरेक्टरी** को स्थायी रखता है: दुनियाएँ, प्लगइन, कॉन्फ़िगरेशन और फ़्रंटएंड फ़ाइलें। खाली डायरेक्टरी पहली बार अपने आप तैयार होती है। मौजूदा डायरेक्टरी अधूरी होने पर स्टार्टअप उसकी सामग्री सुरक्षित रखकर बंद हो जाता है। मौजूदा डिप्लॉयमेंट की रनटाइम फ़ाइलें स्थानांतरित करने के लिए [बैकअप, अपग्रेड और रोलबैक](#बैकअप-अपग्रेड-और-रोलबैक) का पालन करें।
 
+<!-- release-doc:quick-start:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 
 docker run -d \
   --name eaglerx-1.12 \
@@ -49,8 +55,9 @@ docker run -d \
   -e MINECRAFT_VERSION=1.12 \
   -e 'RCON_PASSWORD=replace-with-a-strong-password' \
   -e 'PUBLIC_GAME_URL=http://YOUR_SERVER:5200' \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 ```
+<!-- release-doc:quick-start:end -->
 
 ### 3. एडमिन पैनल खोलें और तैयार स्थिति जाँचें
 
@@ -86,7 +93,9 @@ HTTPS गेम प्रवेश के लिए DNS, प्रमाणप�
 
 ### 1.8 चुनना या दोनों संस्करण चलाना
 
-`2.2.5` इमेज का रिलीज़ संस्करण है। `MINECRAFT_VERSION=1.8` से Paper 1.8.8 और `1.12` से Paper 1.12.2 चुना जाता है। हर कंटेनर एक समय में एक गेम संस्करण चलाता है और अलग रनटाइम डायरेक्टरी रखता है।
+<!-- release-doc:version-guidance:start -->
+`2.2.7` इमेज का रिलीज़ संस्करण है। `MINECRAFT_VERSION=1.8` से Paper 1.8.8 और `1.12` से Paper 1.12.2 चुना जाता है। हर कंटेनर एक समय में एक गेम संस्करण चलाता है और अलग रनटाइम डायरेक्टरी रखता है।
+<!-- release-doc:version-guidance:end -->
 
 1.8 चलाने के लिए त्वरित शुरुआत की कमांड में ये पैरामीटर बदलें:
 
@@ -174,17 +183,21 @@ sudo tar -czf "/data/backups/eagler-1.12-$(date +%Y%m%d-%H%M%S).tar.gz" \
 
 **चरण 1: रोकें और बैकअप लें।** पुराना कंटेनर, रनटाइम डायरेक्टरी और इमेज संस्करण सुरक्षित रखें।
 
-**चरण 2: नई रनटाइम डायरेक्टरी तैयार करें।** लक्षित इमेज से पूरा टेम्पलेट कॉपी करें। इस उदाहरण में `2.2.5` है; टेम्पलेट कंटेनर का ऐसा नाम और डायरेक्टरी चुनें जो अभी उपयोग में न हों:
+<!-- release-doc:version-guidance:start -->
+**चरण 2: नई रनटाइम डायरेक्टरी तैयार करें।** लक्षित इमेज से पूरा टेम्पलेट कॉपी करें। इस उदाहरण में `2.2.7` है; टेम्पलेट कंटेनर का ऐसा नाम और डायरेक्टरी चुनें जो अभी उपयोग में न हों:
+<!-- release-doc:version-guidance:end -->
 
+<!-- release-doc:upgrade-target:start -->
 ```bash
-docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+docker pull --platform linux/amd64 ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 docker create --name eaglerx-upgrade-template --platform linux/amd64 \
-  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.5
+  ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
 sudo mkdir /data/eagler-1.12-next
 sudo docker cp eaglerx-upgrade-template:/opt/eaglerX-1.8-server-image/. \
   /data/eagler-1.12-next/
 docker rm eaglerx-upgrade-template
 ```
+<!-- release-doc:upgrade-target:end -->
 
 टेम्पलेट कंटेनर को बिना शुरू किए रखें। [docker cp](https://docs.docker.com/reference/cli/docker/container/cp/) रुके कंटेनर से फ़ाइलें कॉपी कर सकता है। टेम्पलेट कॉपी होने पर पुरानी डायरेक्टरी की स्थायी स्थिति स्थानांतरित करें:
 
@@ -330,9 +343,11 @@ agent-browser doctor
 
 आधिकारिक रिलीज़ `vMAJOR.MINOR` या `vMAJOR.MINOR.PATCH` Git टैग इस्तेमाल करती हैं। वर्कफ़्लो एक ही इमेज की पूरी जाँच करके उसे संस्करण और कमिट SHA टैग तथा बिल्ड उत्पत्ति प्रमाणन के साथ GHCR पर प्रकाशित करता है। सबसे ऊँचे संस्करण की स्वचालित रिलीज़ `latest` अपडेट करती है। मैन्युअल दोहराव केवल तय संस्करण और SHA टैग अपडेट करता है।
 
+<!-- release-doc:release-command:start -->
 ```bash
-gh workflow run release.yml -f release_tag=v2.2.5
+gh workflow run release.yml -f release_tag=v2.2.7
 ```
+<!-- release-doc:release-command:end -->
 
 `build.sh` स्थानीय बिल्ड को एक साथ चलाता है; उसका `push` तर्क इमेज सीधे पुश करता है। आधिकारिक वितरण [पूरी live gate जाँच की शर्त](../adr/0005-require-the-live-release-gate.md) और ऊपर की टैग प्रक्रिया का पालन करता है।
 
