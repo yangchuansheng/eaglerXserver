@@ -17,6 +17,7 @@
 | `bungee/` | BungeeCord proxy; see the versioned compatibility record for the bundled manifest identity |
 | `bungee/plugins/EaglercraftXBungee/` | WebSocket 入口 + HTTP 文件服务 |
 | `script/` | start_server.sh + http_server.py |
+| `deploy/ubuntu-vps/` | 裸机 Ubuntu systemd 部署文件（units、Caddyfile、tmux 配置、环境模板、备份脚本） |
 
 运行时 `start_server.sh` 创建软链接 `web/ → web-${VERSION}/` 和 `server/ → server-${VERSION}/`。
 

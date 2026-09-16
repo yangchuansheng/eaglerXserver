@@ -91,6 +91,8 @@ Set `PUBLIC_GAME_URL` to **the HTTP(S) game URL players actually use**. The admi
 
 An HTTPS game endpoint requires DNS, a certificate, and HTTP and WebSocket forwarding to **5200**. Point the admin proxy at **5201**. `PUBLIC_GAME_URL` is used only to generate connection addresses; configure the proxy and certificate in your deployment.
 
+A recorded bare-metal deployment that runs the runtime under `systemd` with Caddy in front of it lives in [`deploy/ubuntu-vps/`](deploy/ubuntu-vps/README.md).
+
 ### Choosing 1.8 or running both versions
 
 <!-- release-doc:version-guidance:start -->

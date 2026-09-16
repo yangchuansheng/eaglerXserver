@@ -1,0 +1,9 @@
+[Unit]
+Description=Back up the Eaglercraft world
+
+[Service]
+Type=oneshot
+User=eaglercraft
+Group=eaglercraft
+EnvironmentFile=/etc/eaglercraft/eaglercraft.env
+ExecStart=/opt/eaglercraft/bin/backup.sh
