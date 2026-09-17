@@ -1,0 +1,6 @@
+play.example.com {
+	encode zstd gzip
+	reverse_proxy eaglercraft:5200 {
+		header_up X-Real-IP {remote_host}
+	}
+}

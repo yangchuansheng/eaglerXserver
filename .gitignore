@@ -8,3 +8,5 @@ data/
 .codegraph/
 .codex/
 artifacts/
+deploy/docker-compose/data/
+deploy/docker-compose/.env
