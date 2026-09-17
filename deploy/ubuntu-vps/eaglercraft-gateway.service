@@ -1,0 +1,18 @@
+[Unit]
+Description=Eaglercraft gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=eaglercraft
+Group=eaglercraft
+WorkingDirectory=/opt/eaglercraft/bungee
+EnvironmentFile=/etc/eaglercraft/eaglercraft.env
+ExecStart=/opt/eaglercraft/bungee/run.sh
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

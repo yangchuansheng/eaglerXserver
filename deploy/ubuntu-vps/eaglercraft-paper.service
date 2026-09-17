@@ -1,0 +1,22 @@
+[Unit]
+Description=Eaglercraft game server
+After=network-online.target eaglercraft-gateway.service
+Wants=network-online.target
+
+[Service]
+User=eaglercraft
+Group=eaglercraft
+WorkingDirectory=/opt/eaglercraft
+EnvironmentFile=/etc/eaglercraft/eaglercraft.env
+RuntimeDirectory=eaglercraft
+RuntimeDirectoryMode=0700
+ExecStart=/opt/eaglercraft/bin/paper-tmux.sh
+KillMode=mixed
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
