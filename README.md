@@ -59,6 +59,8 @@ docker run -d \
 ```
 <!-- release-doc:quick-start:end -->
 
+For the same stack as a maintained Docker Compose file with a persistent data directory, see [deploy/docker-compose/](deploy/docker-compose/).
+
 ### 3. Open the admin panel and check readiness
 
 | Entry point | Address | How to use it |

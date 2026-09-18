@@ -1,0 +1,14 @@
+name: eaglercraft
+
+services:
+  eaglercraft:
+    image: ghcr.io/yangchuansheng/eaglerx1.8server:2.2.7
+    # platform: linux/amd64
+    stop_grace_period: 45s
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - '5200:5200'
+      - '127.0.0.1:5201:5201'
+    volumes:
+      - ./data:/eaglerX-1.8-server
